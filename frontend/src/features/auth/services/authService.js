@@ -1,13 +1,9 @@
+import api, { getApiBaseUrl } from '../../../services/api'
+
 const SESSION_STORAGE_KEY = 'sts_admin_session'
 const REMEMBERED_EMAIL_KEY = 'sts_admin_remembered_email'
 
-function getApiBaseUrl() {
-  const configured = import.meta.env.VITE_API_BASE_URL
-  if (!configured || typeof configured !== 'string') {
-    return ''
-  }
-  return configured.replace(/\/+$/, '')
-}
+export { getApiBaseUrl }
 
 function safeStorageGet(storage, key) {
   try {
@@ -97,73 +93,64 @@ function isValidAuthPayload(data) {
 
 export async function loginAdmin({ email, password, rememberMe = false }) {
   const normalizedEmail = email.trim()
-  const endpoint = `${getApiBaseUrl()}/api/auth/login`
 
   let response
   try {
-    response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        email: normalizedEmail,
-        password,
-        rememberMe: Boolean(rememberMe),
-      }),
+    response = await api.post('/api/auth/login', {
+      email: normalizedEmail,
+      password,
+      rememberMe: Boolean(rememberMe),
     })
-  } catch {
-    throw new Error(
-      'Unable to reach the authentication server. Please check your connection and try again.',
-    )
-  }
-
-  const contentType = response.headers.get('content-type') || ''
-  let data = null
-
-  if (contentType.includes('application/json')) {
-    try {
-      data = await response.json()
-    } catch {
-      data = null
+  } catch (error) {
+    if (!error.response) {
+      throw new Error(
+        'Unable to reach the authentication server. Please check your connection and try again.',
+        { cause: error },
+      )
     }
-  }
 
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
+    const { status, data } = error.response
+
+    if (status === 401 || status === 403) {
       throw new Error(
         data?.message ||
           'Invalid email address or password. Please verify your credentials and try again.',
+        { cause: error },
       )
     }
 
-    if (response.status === 404) {
+    if (status === 404) {
       throw new Error(
         'Authentication endpoint (/api/auth/login) is not yet configured on the server.',
+        { cause: error },
       )
     }
 
-    if (response.status === 429) {
+    if (status === 429) {
       throw new Error(
         data?.message ||
           'Too many sign-in attempts. Please wait a moment before trying again.',
+        { cause: error },
       )
     }
 
-    if (response.status >= 500) {
+    if (status >= 500) {
       throw new Error(
         data?.message && data.message !== 'Something went wrong'
           ? data.message
           : 'Authentication service is currently unavailable. Please ensure the backend server is running and try again.',
+        { cause: error },
       )
     }
 
     throw new Error(
-      data?.message || 'Unable to complete sign-in. Please check your details and try again.',
+      data?.message ||
+        'Unable to complete sign-in. Please check your details and try again.',
+      { cause: error },
     )
   }
+
+  const data = response.data
 
   if (!isValidAuthPayload(data)) {
     throw new Error(

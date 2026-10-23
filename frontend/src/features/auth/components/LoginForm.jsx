@@ -18,7 +18,6 @@ export function LoginForm({ onLoginSuccess }) {
   return (
     <div className="auth-card">
       <header className="auth-card__header">
-        <span className="auth-card__eyebrow">Admin Portal</span>
         <h2 id="admin-login-heading" className="auth-card__heading">
           Welcome back
         </h2>
