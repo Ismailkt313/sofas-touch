@@ -1,0 +1,194 @@
+const SESSION_STORAGE_KEY = 'sts_admin_session'
+const REMEMBERED_EMAIL_KEY = 'sts_admin_remembered_email'
+
+function getApiBaseUrl() {
+  const configured = import.meta.env.VITE_API_BASE_URL
+  if (!configured || typeof configured !== 'string') {
+    return ''
+  }
+  return configured.replace(/\/+$/, '')
+}
+
+function safeStorageGet(storage, key) {
+  try {
+    return storage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function safeStorageSet(storage, key, value) {
+  try {
+    storage.setItem(key, value)
+  } catch {
+    // Ignore storage quota or privacy mode errors
+  }
+}
+
+function safeStorageRemove(storage, key) {
+  try {
+    storage.removeItem(key)
+  } catch {
+    // Ignore storage access errors
+  }
+}
+
+export function getRememberedEmail() {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+  return safeStorageGet(window.localStorage, REMEMBERED_EMAIL_KEY) || ''
+}
+
+export function persistRememberedEmail(email, rememberMe) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  if (rememberMe && email) {
+    safeStorageSet(window.localStorage, REMEMBERED_EMAIL_KEY, email.trim())
+  } else {
+    safeStorageRemove(window.localStorage, REMEMBERED_EMAIL_KEY)
+  }
+}
+
+export function getStoredSession() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const raw =
+    safeStorageGet(window.localStorage, SESSION_STORAGE_KEY) ||
+    safeStorageGet(window.sessionStorage, SESSION_STORAGE_KEY)
+
+  if (!raw) {
+    return null
+  }
+
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+export function clearStoredSession() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  safeStorageRemove(window.localStorage, SESSION_STORAGE_KEY)
+  safeStorageRemove(window.sessionStorage, SESSION_STORAGE_KEY)
+}
+
+function isValidAuthPayload(data) {
+  if (!data || typeof data !== 'object') {
+    return false
+  }
+
+  return Boolean(
+    data.token ||
+      data.accessToken ||
+      data.session ||
+      data.user ||
+      data.authenticated === true,
+  )
+}
+
+export async function loginAdmin({ email, password, rememberMe = false }) {
+  const normalizedEmail = email.trim()
+  const endpoint = `${getApiBaseUrl()}/api/auth/login`
+
+  let response
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        email: normalizedEmail,
+        password,
+        rememberMe: Boolean(rememberMe),
+      }),
+    })
+  } catch {
+    throw new Error(
+      'Unable to reach the authentication server. Please check your connection and try again.',
+    )
+  }
+
+  const contentType = response.headers.get('content-type') || ''
+  let data = null
+
+  if (contentType.includes('application/json')) {
+    try {
+      data = await response.json()
+    } catch {
+      data = null
+    }
+  }
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        data?.message ||
+          'Invalid email address or password. Please verify your credentials and try again.',
+      )
+    }
+
+    if (response.status === 404) {
+      throw new Error(
+        'Authentication endpoint (/api/auth/login) is not yet configured on the server.',
+      )
+    }
+
+    if (response.status === 429) {
+      throw new Error(
+        data?.message ||
+          'Too many sign-in attempts. Please wait a moment before trying again.',
+      )
+    }
+
+    if (response.status >= 500) {
+      throw new Error(
+        data?.message && data.message !== 'Something went wrong'
+          ? data.message
+          : 'Authentication service is currently unavailable. Please ensure the backend server is running and try again.',
+      )
+    }
+
+    throw new Error(
+      data?.message || 'Unable to complete sign-in. Please check your details and try again.',
+    )
+  }
+
+  if (!isValidAuthPayload(data)) {
+    throw new Error(
+      'Received an invalid authentication response from the server.',
+    )
+  }
+
+  const sessionPayload = {
+    token: data.token || data.accessToken || null,
+    user: data.user || { email: normalizedEmail },
+    authenticatedAt: new Date().toISOString(),
+  }
+
+  if (typeof window !== 'undefined') {
+    const serialized = JSON.stringify(sessionPayload)
+    if (rememberMe) {
+      safeStorageSet(window.localStorage, SESSION_STORAGE_KEY, serialized)
+      safeStorageRemove(window.sessionStorage, SESSION_STORAGE_KEY)
+    } else {
+      safeStorageSet(window.sessionStorage, SESSION_STORAGE_KEY, serialized)
+      safeStorageRemove(window.localStorage, SESSION_STORAGE_KEY)
+    }
+  }
+
+  persistRememberedEmail(normalizedEmail, rememberMe)
+
+  return sessionPayload
+}
