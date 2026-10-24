@@ -180,6 +180,34 @@ export async function loginAdmin({ email, password, rememberMe = false }) {
   return sessionPayload
 }
 
+export async function fetchCurrentUser() {
+  const stored = getStoredSession()
+  if (!stored?.token) {
+    return null
+  }
+
+  const response = await api.get('/api/auth/me')
+  const user = response.data?.user
+  if (!user || typeof user !== 'object') {
+    return null
+  }
+
+  if (typeof window !== 'undefined') {
+    const updatedSession = {
+      ...stored,
+      user,
+    }
+    const serialized = JSON.stringify(updatedSession)
+    if (safeStorageGet(window.localStorage, SESSION_STORAGE_KEY)) {
+      safeStorageSet(window.localStorage, SESSION_STORAGE_KEY, serialized)
+    } else if (safeStorageGet(window.sessionStorage, SESSION_STORAGE_KEY)) {
+      safeStorageSet(window.sessionStorage, SESSION_STORAGE_KEY, serialized)
+    }
+  }
+
+  return user
+}
+
 /**
  * Prepares sanitized public registration data and delegates to the backend integration
  * once a non-admin public registration API is defined.

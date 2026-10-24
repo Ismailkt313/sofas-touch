@@ -2,6 +2,7 @@ export { AdminLoginPage } from './pages/AdminLoginPage'
 export { SignupPage } from './pages/SignupPage'
 export {
   clearStoredSession,
+  fetchCurrentUser,
   getRememberedEmail,
   getStoredSession,
   loginAdmin,
