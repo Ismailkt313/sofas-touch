@@ -66,10 +66,9 @@ export class AuthRepository implements IAuthRepository {
         query.select('+password');
       }
       const doc = await query.lean().exec();
-      if (!doc) {
-        return null;
+      if (doc) {
+        return doc as unknown as IUser;
       }
-      return doc as unknown as IUser;
     }
 
     const user = this.memoryStore.get(normalized);
@@ -88,10 +87,9 @@ export class AuthRepository implements IAuthRepository {
   async findById(id: string): Promise<IUser | null> {
     if (this.isDbConnected()) {
       const doc = await this.userModel.findById(id).lean().exec();
-      if (!doc) {
-        return null;
+      if (doc) {
+        return doc as unknown as IUser;
       }
-      return doc as unknown as IUser;
     }
 
     for (const user of this.memoryStore.values()) {
@@ -113,6 +111,14 @@ export class AuthRepository implements IAuthRepository {
       });
       const saved = await doc.save();
       return saved.toObject() as unknown as IUser;
+    }
+
+    if (this.memoryStore.has(normalizedEmail)) {
+      const err: any = new Error(
+        `E11000 duplicate key error collection: users index: email_1 dup key: { email: "${normalizedEmail}" }`,
+      );
+      err.code = 11000;
+      throw err;
     }
 
     const newUser: IUser = {

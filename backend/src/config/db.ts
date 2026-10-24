@@ -2,6 +2,9 @@ import mongoose from 'mongoose';
 import { env } from './env';
 
 export async function connectDB(): Promise<void> {
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
   if (env.DATABASE_URL) {
     try {
       await mongoose.connect(env.DATABASE_URL);

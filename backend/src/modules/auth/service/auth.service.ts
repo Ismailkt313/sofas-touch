@@ -3,6 +3,7 @@ import { generateToken } from '../../../middleware/auth';
 import { env } from '../../../config/env';
 import { UserResponse } from '../../../types/auth';
 import { LoginDto } from '../dto/login.dto';
+import { SignupDto } from '../dto/signup.dto';
 import { IAuthRepository } from '../repository/auth.repository';
 
 export class InvalidCredentialsError extends Error {
@@ -19,8 +20,16 @@ export class InactiveAccountError extends Error {
   }
 }
 
+export class UserAlreadyExistsError extends Error {
+  constructor(message = 'An account with this email address already exists.') {
+    super(message);
+    this.name = 'UserAlreadyExistsError';
+  }
+}
+
 export interface IAuthService {
   login(dto: LoginDto): Promise<{ authenticated: boolean; token: string; user: UserResponse }>;
+  signup(dto: SignupDto): Promise<{ user: UserResponse }>;
   getCurrentUser(userId: string): Promise<UserResponse>;
   hashPassword(plainPassword: string): string;
 }
@@ -96,6 +105,60 @@ export class AuthService implements IAuthService {
       token,
       user: publicUser,
     };
+  }
+
+  async signup(dto: SignupDto): Promise<{ user: UserResponse }> {
+    const normalizedEmail = dto.email.toLowerCase().trim();
+
+    const existingUser = await this.authRepository.findByEmail(normalizedEmail);
+    if (existingUser) {
+      throw new UserAlreadyExistsError(
+        'An account with this email address already exists.',
+      );
+    }
+
+    const hashedPassword = this.hashPassword(dto.password);
+
+    try {
+      const createdUser = await this.authRepository.create({
+        name: dto.name.trim(),
+        email: normalizedEmail,
+        role: 'data_entry',
+        password: hashedPassword,
+        phone: dto.phone ? dto.phone.trim() : '',
+        image: '',
+        isActive: true,
+      });
+
+      const publicUser: UserResponse = {
+        id: String(createdUser._id),
+        name: createdUser.name,
+        email: createdUser.email,
+        role: 'data_entry',
+        phone: createdUser.phone || '',
+        image: createdUser.image || '',
+        isActive: createdUser.isActive,
+        createdAt: createdUser.createdAt,
+        updatedAt: createdUser.updatedAt,
+      };
+
+      return {
+        user: publicUser,
+      };
+    } catch (error: unknown) {
+      const err = error as { code?: number | string; name?: string };
+      if (
+        err &&
+        (err.code === 11000 ||
+          err.code === '11000' ||
+          (err.name === 'MongoServerError' && err.code === 11000))
+      ) {
+        throw new UserAlreadyExistsError(
+          'An account with this email address already exists.',
+        );
+      }
+      throw error;
+    }
   }
 
   async getCurrentUser(userId: string): Promise<UserResponse> {

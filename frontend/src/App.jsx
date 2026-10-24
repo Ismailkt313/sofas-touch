@@ -44,7 +44,12 @@ function App() {
   }, [])
 
   if (isSignupRoute) {
-    return <SignupPage onNavigateToLogin={() => navigate('/login')} />
+    return (
+      <SignupPage
+        onNavigateToLogin={() => navigate('/login')}
+        onSignupSuccess={() => navigate('/login')}
+      />
+    )
   }
 
   return <AdminLoginPage onNavigateToSignup={() => navigate('/signup')} />

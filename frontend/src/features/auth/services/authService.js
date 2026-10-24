@@ -132,7 +132,7 @@ export async function loginAdmin({ email, password, rememberMe = false }) {
           'Too many sign-in attempts. Please wait a moment before trying again.',
         { cause: error },
       )
-    }
+    } 
 
     if (status >= 500) {
       throw new Error(
@@ -181,25 +181,21 @@ export async function loginAdmin({ email, password, rememberMe = false }) {
 }
 
 /**
- * Prepares sanitized public registration data and delegates to the backend integration
- * once a non-admin public registration API is defined.
+ * Submits public registration data to the backend /api/auth/signup API endpoint.
  *
  * Security & API integration notes:
- * - Role selection is intentionally disallowed on the client; any role/admin properties
- *   are ignored and must be assigned strictly on the server as a standard non-admin user.
- * - Public signup must never create Admin accounts or establish an Admin session.
- * - The current Express backend (`backend/src/index.ts`) does not yet define a public
- *   registration endpoint, so no endpoint URL is invented here. Connect the verified
- *   backend registration route here once specified.
+ * - Role selection is disallowed on the client; the server strictly assigns 'data_entry'.
+ * - Public signup never creates Admin accounts or establishes an Admin session.
  */
 export async function registerAccount(
-  { fullName, email, phone, password },
+  { fullName, name, email, phone, password },
   { registerHandler } = {},
 ) {
   const sanitizedPayload = {
-    fullName: fullName.trim(),
-    email: email.trim(),
-    phone: phone.trim(),
+    name: (fullName || name || '').trim(),
+    fullName: (fullName || name || '').trim(),
+    email: (email || '').trim().toLowerCase(),
+    phone: (phone || '').trim(),
     password,
   }
 
@@ -207,11 +203,76 @@ export async function registerAccount(
     return registerHandler(sanitizedPayload)
   }
 
-  await new Promise((resolve) => {
-    setTimeout(resolve, 350)
-  })
+  let response
+  try {
+    response = await api.post('/api/auth/signup', {
+      name: sanitizedPayload.name,
+      fullName: sanitizedPayload.fullName,
+      email: sanitizedPayload.email,
+      phone: sanitizedPayload.phone,
+      password: sanitizedPayload.password,
+    })
+  } catch (error) {
+    if (!error.response) {
+      throw new Error(
+        'Unable to reach the authentication server. Please check your connection and try again.',
+        { cause: error },
+      )
+    }
 
-  throw new Error(
-    'Public account registration is not yet connected to a backend API. Please configure the registration service to enable account creation.',
-  )
+    const { status, data } = error.response
+
+    if (status === 400) {
+      const fieldError =
+        data?.errors && typeof data.errors === 'object'
+          ? Object.values(data.errors)[0]
+          : null
+      throw new Error(
+        fieldError ||
+          data?.message ||
+          'Please verify your registration details and try again.',
+        { cause: error },
+      )
+    }
+
+    if (status === 409) {
+      throw new Error(
+        data?.message ||
+          'An account with this email address already exists. Please sign in instead.',
+        { cause: error },
+      )
+    }
+
+    if (status === 429) {
+      throw new Error(
+        data?.message ||
+          'Too many registration attempts. Please wait 15 minutes before trying again.',
+        { cause: error },
+      )
+    }
+
+    if (status === 404) {
+      throw new Error(
+        'Registration endpoint (/api/auth/signup) is not available on the server.',
+        { cause: error },
+      )
+    }
+
+    if (status >= 500) {
+      throw new Error(
+        data?.message && data.message !== 'Something went wrong'
+          ? data.message
+          : 'Registration service is currently unavailable. Please try again shortly.',
+        { cause: error },
+      )
+    }
+
+    throw new Error(
+      data?.message ||
+        'Unable to create your account. Please check your details and try again.',
+      { cause: error },
+    )
+  }
+
+  return response.data
 }

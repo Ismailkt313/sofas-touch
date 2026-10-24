@@ -1,19 +1,57 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../../../types/auth';
 import { validateLoginDto } from '../dto/login.dto';
+import { validateSignupDto } from '../dto/signup.dto';
 import {
   IAuthService,
   InactiveAccountError,
   InvalidCredentialsError,
+  UserAlreadyExistsError,
 } from '../service/auth.service';
 
 export interface IAuthController {
   login(req: Request, res: Response, next: NextFunction): Promise<void>;
+  signup(req: Request, res: Response, next: NextFunction): Promise<void>;
   me(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
 }
 
 export class AuthController implements IAuthController {
   constructor(private authService: IAuthService) {}
+
+  signup = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const validation = validateSignupDto(req.body);
+      if (!validation.isValid || !validation.value) {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: 'Validation failed for registration details.',
+          errors: validation.errors,
+        });
+        return;
+      }
+
+      const result = await this.authService.signup(validation.value);
+
+      res.status(201).json({
+        message: 'Account created successfully.',
+        user: result.user,
+      });
+    } catch (error: unknown) {
+      if (error instanceof UserAlreadyExistsError) {
+        res.status(409).json({
+          error: 'Conflict',
+          message: error.message,
+        });
+        return;
+      }
+
+      next(error);
+    }
+  };
 
   login = async (
     req: Request,
