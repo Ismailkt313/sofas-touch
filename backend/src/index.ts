@@ -1,8 +1,8 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors, { CorsOptions } from 'cors';
 import { env } from './config/env';
+import { connectDB } from './config/db';
 import helmet from 'helmet';
-import mongoose from 'mongoose';
 import authRouter from './modules/auth';
 import adminRoutes from './routes/adminRoutes';
 import projectRoutes from './routes/projectRoutes';
@@ -12,12 +12,7 @@ const PORT = env.PORT;
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
-if (env.DATABASE_URL) {
-  mongoose
-    .connect(env.DATABASE_URL)
-    .then(() => console.log('Connected to MongoDB database.'))
-    .catch((err) => console.error('MongoDB connection error:', err));
-}
+connectDB();
 
 const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
