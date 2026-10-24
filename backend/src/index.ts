@@ -4,6 +4,7 @@ import { env } from './config/env';
 import { connectDB } from './config/db';
 import helmet from 'helmet';
 import authRouter from './modules/auth';
+import userRouter from './modules/users';
 import adminRoutes from './routes/adminRoutes';
 import projectRoutes from './routes/projectRoutes';
 
@@ -60,6 +61,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api/users', userRouter);
 app.use('/api/admin', adminRoutes);
 app.use('/api/projects', projectRoutes);
 
