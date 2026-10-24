@@ -179,3 +179,39 @@ export async function loginAdmin({ email, password, rememberMe = false }) {
 
   return sessionPayload
 }
+
+/**
+ * Prepares sanitized public registration data and delegates to the backend integration
+ * once a non-admin public registration API is defined.
+ *
+ * Security & API integration notes:
+ * - Role selection is intentionally disallowed on the client; any role/admin properties
+ *   are ignored and must be assigned strictly on the server as a standard non-admin user.
+ * - Public signup must never create Admin accounts or establish an Admin session.
+ * - The current Express backend (`backend/src/index.ts`) does not yet define a public
+ *   registration endpoint, so no endpoint URL is invented here. Connect the verified
+ *   backend registration route here once specified.
+ */
+export async function registerAccount(
+  { fullName, email, phone, password },
+  { registerHandler } = {},
+) {
+  const sanitizedPayload = {
+    fullName: fullName.trim(),
+    email: email.trim(),
+    phone: phone.trim(),
+    password,
+  }
+
+  if (typeof registerHandler === 'function') {
+    return registerHandler(sanitizedPayload)
+  }
+
+  await new Promise((resolve) => {
+    setTimeout(resolve, 350)
+  })
+
+  throw new Error(
+    'Public account registration is not yet connected to a backend API. Please configure the registration service to enable account creation.',
+  )
+}

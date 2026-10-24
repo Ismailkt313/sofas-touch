@@ -1,6 +1,8 @@
 import { useLoginForm } from '../hooks/useLoginForm'
+import { AuthAlert } from './AuthAlert'
+import { PasswordVisibilityToggle } from './PasswordVisibilityToggle'
 
-export function LoginForm({ onLoginSuccess }) {
+export function LoginForm({ onLoginSuccess, onNavigateToSignup }) {
   const {
     values,
     fieldErrors,
@@ -15,6 +17,20 @@ export function LoginForm({ onLoginSuccess }) {
     handleSubmit,
   } = useLoginForm({ onLoginSuccess })
 
+  const handleCreateAccountClick = (event) => {
+    if (
+      typeof onNavigateToSignup === 'function' &&
+      event.button === 0 &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey
+    ) {
+      event.preventDefault()
+      onNavigateToSignup()
+    }
+  }
+
   return (
     <div className="auth-card">
       <header className="auth-card__header">
@@ -26,31 +42,7 @@ export function LoginForm({ onLoginSuccess }) {
         </p>
       </header>
 
-      {authError ? (
-        <div className="auth-alert" role="alert" aria-live="assertive">
-          <svg
-            className="auth-alert__icon"
-            viewBox="0 0 20 20"
-            fill="none"
-            aria-hidden="true"
-          >
-            <circle
-              cx="10"
-              cy="10"
-              r="8.25"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            />
-            <path
-              d="M10 6.25V10.5M10 13.5H10.0075"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-            />
-          </svg>
-          <span className="auth-alert__text">{authError}</span>
-        </div>
-      ) : null}
+      <AuthAlert message={authError} />
 
       <form
         className="auth-form"
@@ -160,56 +152,11 @@ export function LoginForm({ onLoginSuccess }) {
               }
               required
             />
-            <button
-              type="button"
-              className="auth-field__toggle"
-              onClick={togglePasswordVisibility}
+            <PasswordVisibilityToggle
+              visible={showPassword}
+              onToggle={togglePasswordVisibility}
               disabled={isSubmitting}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              aria-pressed={showPassword}
-              title={showPassword ? 'Hide password' : 'Show password'}
-            >
-              {showPassword ? (
-                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                  <path
-                    d="M3 3L17 17"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M8.58 8.59C8.21 8.95 8 9.45 8 10C8 11.1 8.9 12 10 12C10.55 12 11.05 11.79 11.41 11.42"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M5.36 5.38C3.78 6.46 2.57 8.03 2 10C3.27 14.06 6.36 16 10 16C11.55 16 13.02 15.65 14.31 14.95M9.01 4.07C9.34 4.02 9.67 4 10 4C13.64 4 16.73 5.94 18 10C17.56 11.42 16.84 12.61 15.91 13.56"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                  <path
-                    d="M2 10C3.27 5.94 6.36 4 10 4C13.64 4 16.73 5.94 18 10C16.73 14.06 13.64 16 10 16C6.36 16 3.27 14.06 2 10Z"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle
-                    cx="10"
-                    cy="10"
-                    r="2.5"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                  />
-                </svg>
-              )}
-            </button>
+            />
           </div>
           {fieldErrors.password ? (
             <p
@@ -280,6 +227,19 @@ export function LoginForm({ onLoginSuccess }) {
           )}
         </button>
       </form>
+
+      {onNavigateToSignup ? (
+        <p className="auth-switch">
+          Don&apos;t have an account?{' '}
+          <a
+            href="/signup"
+            className="auth-switch__link"
+            onClick={handleCreateAccountClick}
+          >
+            Create account
+          </a>
+        </p>
+      ) : null}
     </div>
   )
 }
