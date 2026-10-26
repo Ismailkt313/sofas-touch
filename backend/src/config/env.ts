@@ -12,6 +12,17 @@ function parseCorsOrigins(raw: string | undefined): string[] {
     .filter(Boolean);
 }
 
+function parsePositiveNumber(raw: string | undefined, fallback: number): number {
+  if (!raw || typeof raw !== 'string') {
+    return fallback;
+  }
+  const parsed = Number(raw.trim());
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
 export const env = {
   PORT: parseInt(process.env.PORT || '5000', 10),
   NODE_ENV: process.env.NODE_ENV || 'development',
@@ -34,6 +45,19 @@ export const env = {
   },
 
   DATABASE_URL: process.env.DATABASE_URL || '',
+
+  PROJECT_COST_WARNING_THRESHOLD_PERCENT: parsePositiveNumber(
+    process.env.PROJECT_COST_WARNING_THRESHOLD_PERCENT,
+    80,
+  ),
+  PROJECT_COST_CRITICAL_THRESHOLD_PERCENT: parsePositiveNumber(
+    process.env.PROJECT_COST_CRITICAL_THRESHOLD_PERCENT,
+    100,
+  ),
+  PROJECT_INACTIVITY_THRESHOLD_DAYS: parsePositiveNumber(
+    process.env.PROJECT_INACTIVITY_THRESHOLD_DAYS,
+    14,
+  ),
 };
 
 if (env.NODE_ENV === 'production') {
