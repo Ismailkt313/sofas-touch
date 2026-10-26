@@ -12,6 +12,12 @@ export const ADMIN_NAV_ITEMS = [
     description: 'Manage user accounts, roles, and access.',
   },
   {
+    id: 'user-approvals',
+    label: 'User Approvals',
+    path: '/user-approvals',
+    description: 'Review and manage Data Entry account signup requests.',
+  },
+  {
     id: 'projects',
     label: 'Projects',
     path: '/projects',

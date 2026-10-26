@@ -29,6 +29,31 @@ export function BrandEmblemIcon({ className = '' }) {
   )
 }
 
+export function NotificationBellIcon({ className = '' }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 20 20"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M10 2.75C7.37665 2.75 5.25 4.87665 5.25 7.5V10.6C5.25 11.32 4.97 12.01 4.47 12.53L3.55 13.48C3.15 13.89 3.44 14.58 4.01 14.58H15.99C16.56 14.58 16.85 13.89 16.45 13.48L15.53 12.53C15.03 12.01 14.75 11.32 14.75 10.6V7.5C14.75 4.87665 12.6234 2.75 10 2.75Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.15 15.25C8.48 16.25 9.18 17 10 17C10.82 17 11.52 16.25 11.85 15.25"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 export function SidebarNavIcon({ id, className = '' }) {
   switch (id) {
     case 'dashboard':
@@ -47,6 +72,14 @@ export function SidebarNavIcon({ id, className = '' }) {
           <path d="M2.75 15.75C3.25 13.3 5.15 11.75 7.5 11.75C9.85 11.75 11.75 13.3 12.25 15.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           <path d="M12.75 4.35C13.95 4.7 14.85 5.8 14.85 7.1C14.85 8.4 13.95 9.5 12.75 9.85" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           <path d="M14.25 12.05C15.75 12.55 16.85 13.85 17.25 15.65" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      )
+    case 'user-approvals':
+      return (
+        <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <circle cx="7.5" cy="6.75" r="2.75" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M2.75 15.75C3.25 13.3 5.15 11.75 7.5 11.75C9.05 11.75 10.42 12.42 11.28 13.55" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <path d="M12.5 11.75L14.35 13.6L17.5 10.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
     case 'projects':

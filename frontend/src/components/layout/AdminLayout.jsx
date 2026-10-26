@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useApprovalsContext } from '../../features/approvals/context/ApprovalsContext'
 import { AdminSidebar } from './AdminSidebar'
+import { HeaderNotificationsMenu } from './HeaderNotificationsMenu'
 import { findNavItemByPath } from './navigationConfig'
 import { BrandEmblemIcon } from './SidebarIcons'
 import './admin-layout.css'
@@ -14,6 +16,7 @@ export function AdminLayout({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const menuButtonRef = useRef(null)
   const closeButtonRef = useRef(null)
+  const { pendingCount } = useApprovalsContext()
 
   const activeNavItem = findNavItemByPath(pathname)
   const sectionLabel = activeNavItem?.label || 'Admin'
@@ -84,6 +87,7 @@ export function AdminLayout({
         <AdminSidebar
           pathname={pathname}
           currentUser={currentUser}
+          pendingApprovalsCount={pendingCount}
           onNavigate={onNavigate}
           onLogout={onLogout}
           isDrawerOpen={isDrawerOpen}
@@ -132,6 +136,11 @@ export function AdminLayout({
             <span className="admin-topbar__brand-tag">
               Soft Touch Sofas &bull; Operations
             </span>
+            <HeaderNotificationsMenu
+              key={`${pathname}-${isDrawerOpen ? 'drawer' : 'main'}`}
+              pathname={pathname}
+              onNavigate={onNavigate}
+            />
           </div>
         </header>
 
