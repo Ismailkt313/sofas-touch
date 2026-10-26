@@ -5,6 +5,7 @@ import { SidebarProfile } from './SidebarProfile'
 export function AdminSidebar({
   pathname,
   currentUser,
+  pendingApprovalsCount = 0,
   onNavigate,
   onLogout,
   isDrawerOpen = false,
@@ -66,6 +67,13 @@ export function AdminSidebar({
         <ul className="admin-sidebar__list">
           {ADMIN_NAV_ITEMS.map((item) => {
             const active = isNavItemActive(pathname, item.path)
+            const showApprovalsBadge =
+              item.id === 'user-approvals' && pendingApprovalsCount > 0
+            const badgeText =
+              pendingApprovalsCount > 99
+                ? '99+'
+                : String(pendingApprovalsCount)
+
             return (
               <li key={item.id} className="admin-sidebar__item">
                 <a
@@ -81,6 +89,14 @@ export function AdminSidebar({
                     className="admin-sidebar__link-icon"
                   />
                   <span className="admin-sidebar__link-label">{item.label}</span>
+                  {showApprovalsBadge ? (
+                    <span
+                      className="admin-sidebar__badge"
+                      aria-label={`${pendingApprovalsCount} pending signup approval requests`}
+                    >
+                      {badgeText}
+                    </span>
+                  ) : null}
                 </a>
               </li>
             )

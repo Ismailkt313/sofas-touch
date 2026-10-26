@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { AdminLayout } from './components/layout/AdminLayout'
 import { AdminPlaceholderPage } from './components/layout/AdminPlaceholderPage'
 import { findNavItemByPath, isNavItemActive } from './components/layout/navigationConfig'
+import { ApprovalsProvider, UserApprovalsPage } from './features/approvals'
 import {
   AdminLoginPage,
   SignupPage,
@@ -76,10 +77,13 @@ function App() {
 
   const matchedAdminNav = findNavItemByPath(pathname)
   const isUsersRoute = isNavItemActive(pathname, '/users')
+  const isUserApprovalsRoute = isNavItemActive(pathname, '/user-approvals')
   const isSignupRoute = pathname === '/signup' || pathname === '/register'
 
   useEffect(() => {
-    if (isUsersRoute) {
+    if (isUserApprovalsRoute) {
+      document.title = 'Soft Touch Sofas — User Approvals'
+    } else if (isUsersRoute) {
       document.title = 'Soft Touch Sofas — User Management'
     } else if (matchedAdminNav) {
       document.title = `Soft Touch Sofas — ${matchedAdminNav.label}`
@@ -88,7 +92,7 @@ function App() {
     } else {
       document.title = 'Soft Touch Sofas — Admin Sign In'
     }
-  }, [isUsersRoute, matchedAdminNav, isSignupRoute])
+  }, [isUserApprovalsRoute, isUsersRoute, matchedAdminNav, isSignupRoute])
 
   const handleAuthenticated = useCallback(
     (sessionPayload) => {
@@ -113,23 +117,30 @@ function App() {
     )
   }
 
-  if (isUsersRoute || matchedAdminNav) {
+  if (isUserApprovalsRoute || isUsersRoute || matchedAdminNav) {
     return (
-      <AdminLayout
-        pathname={pathname}
-        currentUser={currentUser}
-        onNavigate={navigate}
-        onLogout={handleLogout}
-      >
-        {isUsersRoute ? (
-          <UserManagementPage
-            currentUser={currentUser}
-            onNavigate={navigate}
-          />
-        ) : (
-          <AdminPlaceholderPage pathname={pathname} onNavigate={navigate} />
-        )}
-      </AdminLayout>
+      <ApprovalsProvider currentUser={currentUser}>
+        <AdminLayout
+          pathname={pathname}
+          currentUser={currentUser}
+          onNavigate={navigate}
+          onLogout={handleLogout}
+        >
+          {isUserApprovalsRoute ? (
+            <UserApprovalsPage
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : isUsersRoute ? (
+            <UserManagementPage
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : (
+            <AdminPlaceholderPage pathname={pathname} onNavigate={navigate} />
+          )}
+        </AdminLayout>
+      </ApprovalsProvider>
     )
   }
 
