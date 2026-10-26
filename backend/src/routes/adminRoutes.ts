@@ -3,14 +3,32 @@ import { requireAdmin, verifyToken } from '../middleware/auth';
 import { createUser, getAllUsers } from '../services/userService';
 import { AuthenticatedRequest } from '../types/auth';
 
+import { userRepository } from '../modules/users';
+
 const router = Router();
 
 router.use(verifyToken);
 router.use(requireAdmin);
 
-router.get('/users', (_req: AuthenticatedRequest, res: Response) => {
-  const users = getAllUsers();
-  res.json({ users });
+router.get('/users', async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await userRepository.findUsers({ page: 1, limit: 100 });
+    const users = result.items.map((u) => ({
+      id: String(u._id),
+      name: u.name,
+      email: u.email,
+      role: (u.role || '').toLowerCase() === 'admin' ? 'Admin' : 'Data Entry',
+      isActive: u.isActive,
+      approvalStatus: u.approvalStatus || 'approved',
+      createdAt: u.createdAt,
+      phone: u.phone || '',
+      image: u.image || '',
+    }));
+    res.json({ users });
+  } catch {
+    const users = getAllUsers();
+    res.json({ users });
+  }
 });
 
 router.post('/users', (req: AuthenticatedRequest, res: Response) => {
@@ -35,6 +53,16 @@ router.post('/users', (req: AuthenticatedRequest, res: Response) => {
 
   try {
     const newUser = createUser(email, password, name, role);
+    userRepository
+      .create({
+        name,
+        email,
+        password,
+        role: normalizedRole as 'admin' | 'data_entry',
+        isActive: true,
+        approvalStatus: 'approved',
+      })
+      .catch(() => null);
     res.status(201).json({ user: newUser });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to create user';

@@ -32,9 +32,9 @@ const DEFAULT_CONTEXT_VALUE = {
   error: '',
   integrationStatus: 'unauthenticated',
   capabilities: {
-    canApprove: false,
-    canReject: false,
-    supportsRejectionReason: false,
+    canApprove: true,
+    canReject: true,
+    supportsRejectionReason: true,
   },
   missingItems: MISSING_BACKEND_APPROVAL_ITEMS,
   selectedNotificationRequestId: null,
@@ -63,9 +63,9 @@ export function ApprovalsProvider({
   const [error, setError] = useState('')
   const [integrationStatus, setIntegrationStatus] = useState('unauthenticated')
   const [capabilities, setCapabilities] = useState({
-    canApprove: false,
-    canReject: false,
-    supportsRejectionReason: false,
+    canApprove: true,
+    canReject: true,
+    supportsRejectionReason: true,
   })
   const [missingItems, setMissingItems] = useState(
     MISSING_BACKEND_APPROVAL_ITEMS,
@@ -81,11 +81,10 @@ export function ApprovalsProvider({
     )
     setIntegrationStatus(result?.integrationStatus || 'ready')
     setCapabilities({
-      canApprove: Boolean(result?.capabilities?.canApprove),
-      canReject: Boolean(result?.capabilities?.canReject),
-      supportsRejectionReason: Boolean(
-        result?.capabilities?.supportsRejectionReason,
-      ),
+      canApprove: result?.capabilities?.canApprove ?? true,
+      canReject: result?.capabilities?.canReject ?? true,
+      supportsRejectionReason:
+        result?.capabilities?.supportsRejectionReason ?? true,
     })
     setMissingItems(
       Array.isArray(result?.missingItems) ? result.missingItems : [],

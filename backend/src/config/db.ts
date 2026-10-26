@@ -10,12 +10,33 @@ export async function connectDB(): Promise<void> {
       await mongoose.connect(env.DATABASE_URL);
       console.log('Connected to MongoDB database.');
 
-      // Migration safeguard: ensure pre-existing Admin accounts have approvalStatus: 'approved'
+      // Migration safeguard: ensure pre-existing accounts have an approvalStatus
       if (mongoose.models.User) {
         await mongoose.models.User.updateMany(
-          { role: 'admin', approvalStatus: { $in: [null, undefined] } },
+          { role: { $in: ['admin', 'Admin'] }, approvalStatus: { $in: [null, undefined] } },
           { $set: { approvalStatus: 'approved', approvedAt: new Date() } },
         ).exec().catch(() => null);
+
+        await mongoose.models.User.updateMany(
+          { role: { $in: ['data_entry', 'Data Entry'] }, approvalStatus: { $in: [null, undefined] } },
+          { $set: { approvalStatus: 'approved', approvedAt: new Date() } },
+        ).exec().catch(() => null);
+
+        // If MongoDB has 0 users, populate from sharedUserMemoryStore
+        const count = await mongoose.models.User.countDocuments().exec().catch(() => 0);
+        if (count === 0) {
+          const { sharedUserMemoryStore, seedSharedUserMemoryStore } = await import(
+            '../modules/auth/models/user.model'
+          );
+          seedSharedUserMemoryStore();
+          const seedUsers = Array.from(sharedUserMemoryStore.values()).map(
+            (u) => ({
+              ...u,
+              _id: new mongoose.Types.ObjectId(),
+            }),
+          );
+          await mongoose.models.User.insertMany(seedUsers).catch(() => null);
+        }
       }
     } catch (err) {
       console.error('MongoDB connection error:', err);

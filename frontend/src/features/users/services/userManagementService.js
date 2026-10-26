@@ -138,10 +138,20 @@ export async function fetchManagedUsers({ allowDevFallback = true } = {}) {
   const hasToken = Boolean(session?.token)
 
   try {
-    const response = await api.get('/api/admin/users')
-    const rawUsers = Array.isArray(response.data?.users)
-      ? response.data.users
-      : []
+    let rawUsers = []
+    try {
+      const response = await api.get('/api/users', {
+        params: { limit: 100 },
+      })
+      if (Array.isArray(response.data?.users)) {
+        rawUsers = response.data.users
+      }
+    } catch {
+      const fallbackResponse = await api.get('/api/admin/users')
+      if (Array.isArray(fallbackResponse.data?.users)) {
+        rawUsers = fallbackResponse.data.users
+      }
+    }
 
     return {
       users: rawUsers.map(normalizeUserRecord),

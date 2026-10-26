@@ -130,8 +130,56 @@ export function seedSharedUserMemoryStore(): void {
     updatedAt: new Date(),
   };
 
+  const pendingApplicant1: IUser = {
+    _id: 'usr_pending_003',
+    name: 'Hamza Malik',
+    email: 'hamza.malik@example.com',
+    role: 'data_entry',
+    password: bcrypt.hashSync('PendingApplicant123!', salt),
+    isActive: true,
+    approvalStatus: 'pending',
+    image: '',
+    phone: '+44 7700 900142',
+    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+    updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+  };
+
+  const pendingApplicant2: IUser = {
+    _id: 'usr_pending_004',
+    name: 'Sara Khan',
+    email: 'sara.khan@example.com',
+    role: 'data_entry',
+    password: bcrypt.hashSync('PendingApplicant123!', salt),
+    isActive: true,
+    approvalStatus: 'pending',
+    image: '',
+    phone: '+44 7700 900583',
+    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+  };
+
+  const rejectedApplicant: IUser = {
+    _id: 'usr_rejected_005',
+    name: 'Zainab Ahmed',
+    email: 'zainab.ahmed@example.com',
+    role: 'data_entry',
+    password: bcrypt.hashSync('PendingApplicant123!', salt),
+    isActive: true,
+    approvalStatus: 'rejected',
+    rejectionReason: 'Incomplete contact information and showroom background.',
+    approvedBy: 'usr_admin_001',
+    approvedAt: new Date(Date.now() - 36 * 60 * 60 * 1000),
+    image: '',
+    phone: '+44 7700 900891',
+    createdAt: new Date(Date.now() - 72 * 60 * 60 * 1000),
+    updatedAt: new Date(Date.now() - 36 * 60 * 60 * 1000),
+  };
+
   sharedUserMemoryStore.set(adminUser.email, adminUser);
   sharedUserMemoryStore.set(dataEntryUser.email, dataEntryUser);
+  sharedUserMemoryStore.set(pendingApplicant1.email, pendingApplicant1);
+  sharedUserMemoryStore.set(pendingApplicant2.email, pendingApplicant2);
+  sharedUserMemoryStore.set(rejectedApplicant.email, rejectedApplicant);
 }
 
 seedSharedUserMemoryStore();

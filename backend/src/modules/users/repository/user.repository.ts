@@ -42,7 +42,14 @@ export class UserRepository implements IUserRepository {
       const mongoFilter: Record<string, unknown> = {};
 
       if (role) {
-        mongoFilter.role = role;
+        const canonicalRole = role.toLowerCase().replace(/\s+/g, '_');
+        mongoFilter.role = {
+          $in: [
+            canonicalRole,
+            canonicalRole === 'data_entry' ? 'Data Entry' : 'Admin',
+            canonicalRole === 'data_entry' ? 'data entry' : 'admin',
+          ],
+        };
       }
 
       if (status) {
@@ -135,7 +142,7 @@ export class UserRepository implements IUserRepository {
 
     if (this.isDbConnected()) {
       const mongoFilter: Record<string, unknown> = {
-        approvalStatus: 'pending',
+        approvalStatus: { $in: ['pending', 'Pending'] },
       };
 
       if (search) {
@@ -171,7 +178,7 @@ export class UserRepository implements IUserRepository {
     }
 
     let items = Array.from(this.memoryStore.values()).filter(
-      (u) => u.approvalStatus === 'pending',
+      (u) => (u.approvalStatus || '').toLowerCase() === 'pending',
     );
 
     if (search) {

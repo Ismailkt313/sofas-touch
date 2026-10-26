@@ -3,7 +3,7 @@ import { formatApprovalDate } from '../services/approvalService'
 import { ApprovalStatusBadge } from './ApprovalStatusBadge'
 
 export function ApprovalsTable({
-  requests,
+  requests = [],
   processingRequestId,
   onViewDetails,
   onRequestApprove,
@@ -27,18 +27,18 @@ export function ApprovalsTable({
           </tr>
         </thead>
         <tbody>
-          {requests.map((request) => {
+          {requests.map((request, index) => {
             const isPending = request.approvalStatus === 'pending'
             const isBusy = processingRequestId === request.id
 
             return (
-              <tr key={request.id || request.email}>
+              <tr key={request.id || request.email || `req-${index}`}>
                 <td>
                   <div className="approvals-cell-applicant">
                     <UserAvatar name={request.name} image={request.image} />
                     <div className="approvals-cell-applicant__meta">
                       <span className="approvals-cell-applicant__name">
-                        {request.name}
+                        {request.name || 'Unnamed Applicant'}
                       </span>
                       <span className="approvals-cell-applicant__sub-tablet">
                         {request.phone || 'No phone provided'}
@@ -47,7 +47,7 @@ export function ApprovalsTable({
                   </div>
                 </td>
                 <td>
-                  <span className="approvals-cell-email">{request.email}</span>
+                  <span className="approvals-cell-email">{request.email || '—'}</span>
                 </td>
                 <td className="approvals-table__col-phone">
                   <span className={request.phone ? '' : 'approvals-cell-muted'}>

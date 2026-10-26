@@ -3,7 +3,7 @@ import { UserAvatar } from '../../users/components/UserAvatar'
 
 export function ConfirmApprovalActionModal({
   target,
-  supportsRejectionReason = false,
+  supportsRejectionReason = true,
   isSubmitting = false,
   errorMessage = '',
   onConfirm,
@@ -44,12 +44,17 @@ export function ConfirmApprovalActionModal({
     return null
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
     if (isSubmitting) {
       return
     }
-    onConfirm?.(supportsRejectionReason && isReject ? reason.trim() : undefined)
+    const trimmedReason = reason.trim()
+    const confirmationPayload =
+      supportsRejectionReason && isReject
+        ? trimmedReason || undefined
+        : undefined
+    await onConfirm?.(confirmationPayload)
   }
 
   return (

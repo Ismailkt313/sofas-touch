@@ -53,7 +53,15 @@ export class UserController implements IUserController {
       }
 
       const result = await this.userService.listUsers(validation.value);
-      res.status(200).json(result);
+      res.status(200).json({
+        ...result,
+        approvalsSupported: true,
+        capabilities: {
+          canApprove: true,
+          canReject: true,
+          supportsRejectionReason: true,
+        },
+      });
     } catch (error: unknown) {
       next(error);
     }
@@ -79,7 +87,15 @@ export class UserController implements IUserController {
       }
 
       const result = await this.userService.listPendingApprovals(validation.value);
-      res.status(200).json(result);
+      res.status(200).json({
+        ...result,
+        approvalsSupported: true,
+        capabilities: {
+          canApprove: true,
+          canReject: true,
+          supportsRejectionReason: true,
+        },
+      });
     } catch (error: unknown) {
       next(error);
     }

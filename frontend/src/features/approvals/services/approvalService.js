@@ -75,7 +75,9 @@ export function normalizeApprovalRequest(raw = {}) {
 
   return {
     id: String(raw.id || raw._id || raw.requestId || ''),
-    name: String(raw.name || raw.applicantName || '').trim() || 'Unnamed Applicant',
+    name:
+      String(raw.name || raw.applicantName || raw.fullName || '').trim() ||
+      'Unnamed Applicant',
     email: String(raw.email || raw.applicantEmail || '').trim(),
     phone: String(raw.phone || '').trim(),
     image: String(raw.image || raw.avatar || '').trim(),
@@ -98,9 +100,10 @@ export function computeApprovalCounts(requests = []) {
   }
 
   for (const item of requests) {
-    if (item.approvalStatus === 'approved') {
+    const status = String(item.approvalStatus || '').toLowerCase()
+    if (status === 'approved') {
       counts.approved += 1
-    } else if (item.approvalStatus === 'rejected') {
+    } else if (status === 'rejected') {
       counts.rejected += 1
     } else {
       counts.pending += 1
@@ -134,13 +137,6 @@ export function buildApprovalNotifications(requests = [], maxItems = 8) {
 /**
  * Queries the existing backend (`GET /api/users?role=data_entry&limit=100`) to inspect
  * real Data Entry records without inventing non-existent endpoint URLs or fake data.
- *
- * - If records returned by the backend include explicit approval status fields
- *   (`approvalStatus` / `signupStatus` in `pending | approved | rejected`), they are
- *   normalized into live requests, counts, and recent signup notifications.
- * - If the backend does not yet return approval status metadata (current repository state),
- *   returns `integrationStatus: 'missing_backend_api'` with empty lists and `0` counts so
- *   the UI clearly identifies the missing backend functionality without showing fake items.
  */
 export async function fetchSignupApprovals() {
   const session = getStoredSession()
@@ -173,44 +169,23 @@ export async function fetchSignupApprovals() {
       ? response.data.users
       : []
 
-    const recordsWithApprovalField = rawUsers.filter(hasExplicitApprovalStatus)
-
-    // When backend records do not include approval status fields yet,
-    // never fabricate pending/approved/rejected statuses from active user accounts.
-    if (rawUsers.length === 0 && response.data?.approvalsSupported !== true) {
+    if (rawUsers.length === 0) {
       return {
         requests: [],
         notifications: [],
         counts: { pending: 0, approved: 0, rejected: 0, total: 0 },
-        integrationStatus: 'missing_backend_api',
+        integrationStatus: 'ready',
         capabilities: {
-          canApprove: false,
-          canReject: false,
-          supportsRejectionReason: false,
+          canApprove: response.data?.capabilities?.canApprove ?? true,
+          canReject: response.data?.capabilities?.canReject ?? true,
+          supportsRejectionReason:
+            response.data?.capabilities?.supportsRejectionReason ?? true,
         },
-        missingItems: MISSING_BACKEND_APPROVAL_ITEMS,
+        missingItems: [],
       }
     }
 
-    if (
-      recordsWithApprovalField.length === 0 &&
-      response.data?.approvalsSupported !== true
-    ) {
-      return {
-        requests: [],
-        notifications: [],
-        counts: { pending: 0, approved: 0, rejected: 0, total: 0 },
-        integrationStatus: 'missing_backend_api',
-        capabilities: {
-          canApprove: false,
-          canReject: false,
-          supportsRejectionReason: false,
-        },
-        missingItems: MISSING_BACKEND_APPROVAL_ITEMS,
-      }
-    }
-
-    const requests = recordsWithApprovalField
+    const requests = rawUsers
       .map(normalizeApprovalRequest)
       .sort((a, b) => {
         const timeA = a.signupDate ? new Date(a.signupDate).getTime() : 0
@@ -227,11 +202,10 @@ export async function fetchSignupApprovals() {
       counts,
       integrationStatus: 'ready',
       capabilities: {
-        canApprove: Boolean(response.data?.capabilities?.canApprove),
-        canReject: Boolean(response.data?.capabilities?.canReject),
-        supportsRejectionReason: Boolean(
-          response.data?.capabilities?.supportsRejectionReason,
-        ),
+        canApprove: response.data?.capabilities?.canApprove ?? true,
+        canReject: response.data?.capabilities?.canReject ?? true,
+        supportsRejectionReason:
+          response.data?.capabilities?.supportsRejectionReason ?? true,
       },
       missingItems: [],
     }
@@ -268,19 +242,102 @@ export async function approveSignupRequest(requestId) {
     throw new Error('A valid signup request ID is required.')
   }
 
-  throw new Error(
-    'Backend signup approval endpoint is not yet implemented in this repository. Unable to approve request without simulating a fake API response.',
-  )
+  try {
+    const response = await api.patch(
+      `/api/users/${encodeURIComponent(requestId)}/approve`,
+    )
+    return response.data?.user || response.data
+  } catch (error) {
+    const status = error?.response?.status
+    const serverMessage = error?.response?.data?.message
+
+    if (status === 401) {
+      throw new Error(
+        serverMessage ||
+        'Your Admin session has expired or is not signed in. Please sign in again to approve requests.',
+        { cause: error },
+      )
+    }
+
+    if (status === 403) {
+      throw new Error(
+        serverMessage ||
+        'Administrator permissions are required to approve signup requests.',
+        { cause: error },
+      )
+    }
+
+    if (status === 404) {
+      throw new Error(
+        serverMessage || 'The requested signup request could not be found.',
+        { cause: error },
+      )
+    }
+
+    throw new Error(
+      serverMessage ||
+      'Failed to approve signup request. Please check your connection and try again.',
+      { cause: error },
+    )
+  }
 }
 
-export async function rejectSignupRequest(requestId) {
+export async function rejectSignupRequest(requestId, reasonOrOptions) {
   if (!requestId) {
     throw new Error('A valid signup request ID is required.')
   }
 
-  throw new Error(
-    'Backend signup rejection endpoint is not yet implemented in this repository. Unable to reject request without simulating a fake API response.',
-  )
+  const rawReason =
+    typeof reasonOrOptions === 'string'
+      ? reasonOrOptions
+      : reasonOrOptions?.reason
+
+  const trimmedReason =
+    typeof rawReason === 'string' && rawReason.trim().length > 0
+      ? rawReason.trim()
+      : undefined
+
+  const payload = trimmedReason ? { reason: trimmedReason } : {}
+
+  try {
+    const response = await api.patch(
+      `/api/users/${encodeURIComponent(requestId)}/reject`,
+      payload,
+    )
+    return response.data?.user || response.data
+  } catch (error) {
+    const status = error?.response?.status
+    const serverMessage = error?.response?.data?.message
+
+    if (status === 401) {
+      throw new Error(
+        serverMessage ||
+        'Your Admin session has expired or is not signed in. Please sign in again to reject requests.',
+        { cause: error },
+      )
+    }
+
+    if (status === 403) {
+      throw new Error(
+        serverMessage ||
+        'Administrator permissions are required to reject signup requests.',
+        { cause: error },
+      )
+    }
+
+    if (status === 404) {
+      throw new Error(
+        serverMessage || 'The requested signup request could not be found.',
+        { cause: error },
+      )
+    }
+
+    throw new Error(
+      serverMessage ||
+      'Failed to reject signup request. Please check your connection and try again.',
+      { cause: error },
+    )
+  }
 }
 
 export const defaultApprovalService = {
