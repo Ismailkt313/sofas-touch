@@ -38,9 +38,8 @@ export function ApprovalFiltersBar({
               type="button"
               role="tab"
               aria-selected={isSelected}
-              className={`approvals-tabs__btn${
-                isSelected ? ' approvals-tabs__btn--active' : ''
-              }`}
+              className={`approvals-tabs__btn${isSelected ? ' approvals-tabs__btn--active' : ''
+                }`}
               onClick={() => onStatusFilterChange(tab.id)}
             >
               <span>{tab.label}</span>

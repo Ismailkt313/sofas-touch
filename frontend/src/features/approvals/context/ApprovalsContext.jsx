@@ -38,15 +38,15 @@ const DEFAULT_CONTEXT_VALUE = {
   },
   missingItems: MISSING_BACKEND_APPROVAL_ITEMS,
   selectedNotificationRequestId: null,
-  refreshApprovals: async () => {},
+  refreshApprovals: async () => { },
   approveRequest: async () => {
     throw new Error('ApprovalsProvider is not mounted.')
   },
   rejectRequest: async () => {
     throw new Error('ApprovalsProvider is not mounted.')
   },
-  focusApprovalRequest: () => {},
-  clearFocusedApprovalRequest: () => {},
+  focusApprovalRequest: () => { },
+  clearFocusedApprovalRequest: () => { },
 }
 
 const ApprovalsContext = createContext(DEFAULT_CONTEXT_VALUE)
@@ -183,9 +183,9 @@ export function ApprovalsProvider({
       const updated = await serviceAdapter.approveSignupRequest(requestId)
       const normalizedUpdated = updated
         ? normalizeApprovalRequest({
-            ...updated,
-            approvalStatus: updated.approvalStatus || 'approved',
-          })
+          ...updated,
+          approvalStatus: updated.approvalStatus || 'approved',
+        })
         : null
 
       setServerNotifications(null)
@@ -193,11 +193,11 @@ export function ApprovalsProvider({
         prev.map((item) =>
           item.id === requestId
             ? normalizedUpdated || {
-                ...item,
-                approvalStatus: 'approved',
-                approvalStatusLabel: 'Approved',
-                reviewedAt: new Date().toISOString(),
-              }
+              ...item,
+              approvalStatus: 'approved',
+              approvalStatusLabel: 'Approved',
+              reviewedAt: new Date().toISOString(),
+            }
             : item,
         ),
       )
@@ -216,9 +216,9 @@ export function ApprovalsProvider({
       )
       const normalizedUpdated = updated
         ? normalizeApprovalRequest({
-            ...updated,
-            approvalStatus: updated.approvalStatus || 'rejected',
-          })
+          ...updated,
+          approvalStatus: updated.approvalStatus || 'rejected',
+        })
         : null
 
       setServerNotifications(null)
@@ -226,14 +226,14 @@ export function ApprovalsProvider({
         prev.map((item) =>
           item.id === requestId
             ? normalizedUpdated || {
-                ...item,
-                approvalStatus: 'rejected',
-                approvalStatusLabel: 'Rejected',
-                rejectionReason: options?.reason
-                  ? String(options.reason).trim()
-                  : item.rejectionReason,
-                reviewedAt: new Date().toISOString(),
-              }
+              ...item,
+              approvalStatus: 'rejected',
+              approvalStatusLabel: 'Rejected',
+              rejectionReason: options?.reason
+                ? String(options.reason).trim()
+                : item.rejectionReason,
+              reviewedAt: new Date().toISOString(),
+            }
             : item,
         ),
       )

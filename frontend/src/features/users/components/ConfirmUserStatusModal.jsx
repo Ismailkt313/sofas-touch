@@ -114,9 +114,8 @@ export function ConfirmUserStatusModal({
           </button>
           <button
             type="button"
-            className={`admin-btn ${
-              isDeactivating ? 'admin-btn--danger' : 'admin-btn--primary'
-            }`}
+            className={`admin-btn ${isDeactivating ? 'admin-btn--danger' : 'admin-btn--primary'
+              }`}
             onClick={onConfirm}
           >
             {isDeactivating ? 'Deactivate Account' : 'Activate Account'}

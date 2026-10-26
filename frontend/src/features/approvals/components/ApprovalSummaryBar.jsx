@@ -26,9 +26,8 @@ export function ApprovalSummaryBar({
     >
       <button
         type="button"
-        className={`approvals-summary__card approvals-summary__card--pending${
-          activeStatus === 'pending' ? ' approvals-summary__card--selected' : ''
-        }`}
+        className={`approvals-summary__card approvals-summary__card--pending${activeStatus === 'pending' ? ' approvals-summary__card--selected' : ''
+          }`}
         onClick={() => onSelectStatus?.('pending')}
       >
         <div className="approvals-summary__top">
@@ -45,11 +44,10 @@ export function ApprovalSummaryBar({
 
       <button
         type="button"
-        className={`approvals-summary__card${
-          activeStatus === 'approved'
+        className={`approvals-summary__card${activeStatus === 'approved'
             ? ' approvals-summary__card--selected'
             : ''
-        }`}
+          }`}
         onClick={() => onSelectStatus?.('approved')}
       >
         <div className="approvals-summary__top">
@@ -63,11 +61,10 @@ export function ApprovalSummaryBar({
 
       <button
         type="button"
-        className={`approvals-summary__card${
-          activeStatus === 'rejected'
+        className={`approvals-summary__card${activeStatus === 'rejected'
             ? ' approvals-summary__card--selected'
             : ''
-        }`}
+          }`}
         onClick={() => onSelectStatus?.('rejected')}
       >
         <div className="approvals-summary__top">

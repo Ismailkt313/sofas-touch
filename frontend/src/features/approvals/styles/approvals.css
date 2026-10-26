@@ -1007,6 +1007,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .approvals-summary__card,
   .approvals-tabs__btn,
   .approvals-search__input,

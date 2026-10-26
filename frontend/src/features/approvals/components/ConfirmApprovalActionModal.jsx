@@ -170,9 +170,8 @@ export function ConfirmApprovalActionModal({
             <button
               ref={confirmButtonRef}
               type="submit"
-              className={`admin-btn ${
-                isReject ? 'admin-btn--danger' : 'admin-btn--primary'
-              }`}
+              className={`admin-btn ${isReject ? 'admin-btn--danger' : 'admin-btn--primary'
+                }`}
               disabled={isSubmitting}
             >
               {isSubmitting

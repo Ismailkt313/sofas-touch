@@ -61,9 +61,8 @@ export function SignupForm({ onSignupSuccess, onNavigateToLogin }) {
             Full Name
           </label>
           <div
-            className={`auth-field__control${
-              fieldErrors.fullName ? ' auth-field__control--error' : ''
-            }`}
+            className={`auth-field__control${fieldErrors.fullName ? ' auth-field__control--error' : ''
+              }`}
           >
             <span className="auth-field__icon" aria-hidden="true">
               <svg viewBox="0 0 20 20" fill="none">
@@ -117,9 +116,8 @@ export function SignupForm({ onSignupSuccess, onNavigateToLogin }) {
             Email Address
           </label>
           <div
-            className={`auth-field__control${
-              fieldErrors.email ? ' auth-field__control--error' : ''
-            }`}
+            className={`auth-field__control${fieldErrors.email ? ' auth-field__control--error' : ''
+              }`}
           >
             <span className="auth-field__icon" aria-hidden="true">
               <svg viewBox="0 0 20 20" fill="none">
@@ -177,9 +175,8 @@ export function SignupForm({ onSignupSuccess, onNavigateToLogin }) {
             Phone Number
           </label>
           <div
-            className={`auth-field__control${
-              fieldErrors.phone ? ' auth-field__control--error' : ''
-            }`}
+            className={`auth-field__control${fieldErrors.phone ? ' auth-field__control--error' : ''
+              }`}
           >
             <span className="auth-field__icon" aria-hidden="true">
               <svg viewBox="0 0 20 20" fill="none">
@@ -228,9 +225,8 @@ export function SignupForm({ onSignupSuccess, onNavigateToLogin }) {
             Password
           </label>
           <div
-            className={`auth-field__control${
-              fieldErrors.password ? ' auth-field__control--error' : ''
-            }`}
+            className={`auth-field__control${fieldErrors.password ? ' auth-field__control--error' : ''
+              }`}
           >
             <span className="auth-field__icon" aria-hidden="true">
               <svg viewBox="0 0 20 20" fill="none">
@@ -296,9 +292,8 @@ export function SignupForm({ onSignupSuccess, onNavigateToLogin }) {
             Confirm Password
           </label>
           <div
-            className={`auth-field__control${
-              fieldErrors.confirmPassword ? ' auth-field__control--error' : ''
-            }`}
+            className={`auth-field__control${fieldErrors.confirmPassword ? ' auth-field__control--error' : ''
+              }`}
           >
             <span className="auth-field__icon" aria-hidden="true">
               <svg viewBox="0 0 20 20" fill="none">

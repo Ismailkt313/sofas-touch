@@ -185,9 +185,8 @@ export function SidebarProfile({
             <span className="sidebar-profile__role">{displayRole}</span>
           </span>
           <svg
-            className={`sidebar-profile__chevron${
-              menuOpen ? ' sidebar-profile__chevron--open' : ''
-            }`}
+            className={`sidebar-profile__chevron${menuOpen ? ' sidebar-profile__chevron--open' : ''
+              }`}
             viewBox="0 0 20 20"
             fill="none"
             aria-hidden="true"

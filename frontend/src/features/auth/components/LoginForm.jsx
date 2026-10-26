@@ -55,9 +55,8 @@ export function LoginForm({ onLoginSuccess, onNavigateToSignup }) {
             Email address
           </label>
           <div
-            className={`auth-field__control${
-              fieldErrors.email ? ' auth-field__control--error' : ''
-            }`}
+            className={`auth-field__control${fieldErrors.email ? ' auth-field__control--error' : ''
+              }`}
           >
             <span className="auth-field__icon" aria-hidden="true">
               <svg viewBox="0 0 20 20" fill="none">
@@ -111,9 +110,8 @@ export function LoginForm({ onLoginSuccess, onNavigateToSignup }) {
             Password
           </label>
           <div
-            className={`auth-field__control${
-              fieldErrors.password ? ' auth-field__control--error' : ''
-            }`}
+            className={`auth-field__control${fieldErrors.password ? ' auth-field__control--error' : ''
+              }`}
           >
             <span className="auth-field__icon" aria-hidden="true">
               <svg viewBox="0 0 20 20" fill="none">

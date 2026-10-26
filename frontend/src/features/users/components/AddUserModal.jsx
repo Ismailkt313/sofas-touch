@@ -178,9 +178,8 @@ export function AddUserModal({ isOpen, onClose, onSubmit }) {
                 id="add-user-name"
                 name="name"
                 type="text"
-                className={`users-form-field__input${
-                  errors.name ? ' users-form-field__input--error' : ''
-                }`}
+                className={`users-form-field__input${errors.name ? ' users-form-field__input--error' : ''
+                  }`}
                 placeholder="Enter full name"
                 value={values.name}
                 onChange={handleChange}
@@ -205,9 +204,8 @@ export function AddUserModal({ isOpen, onClose, onSubmit }) {
                 name="email"
                 type="email"
                 inputMode="email"
-                className={`users-form-field__input${
-                  errors.email ? ' users-form-field__input--error' : ''
-                }`}
+                className={`users-form-field__input${errors.email ? ' users-form-field__input--error' : ''
+                  }`}
                 placeholder="staff@softtouchsofas.com"
                 value={values.email}
                 onChange={handleChange}
@@ -250,9 +248,8 @@ export function AddUserModal({ isOpen, onClose, onSubmit }) {
                 Initial Password
               </label>
               <div
-                className={`users-password-wrap${
-                  errors.password ? ' users-password-wrap--error' : ''
-                }`}
+                className={`users-password-wrap${errors.password ? ' users-password-wrap--error' : ''
+                  }`}
               >
                 <input
                   id="add-user-password"

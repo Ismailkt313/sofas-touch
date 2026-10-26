@@ -79,9 +79,8 @@ export function AdminLayout({
 
       <aside
         id="admin-navigation-drawer"
-        className={`admin-sidebar${
-          isDrawerOpen ? ' admin-sidebar--open' : ''
-        }`}
+        className={`admin-sidebar${isDrawerOpen ? ' admin-sidebar--open' : ''
+          }`}
         aria-label="Sidebar"
       >
         <AdminSidebar

@@ -9,9 +9,8 @@ export function UserAvatar({ name, image, size = 'md', isAdmin = false }) {
 
   return (
     <span
-      className={`user-avatar user-avatar--${size}${
-        isAdmin ? ' user-avatar--admin' : ''
-      }`}
+      className={`user-avatar user-avatar--${size}${isAdmin ? ' user-avatar--admin' : ''
+        }`}
       aria-hidden="true"
     >
       {showImage ? (

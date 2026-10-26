@@ -78,9 +78,8 @@ export function AdminSidebar({
               <li key={item.id} className="admin-sidebar__item">
                 <a
                   href={item.path}
-                  className={`admin-sidebar__link${
-                    active ? ' admin-sidebar__link--active' : ''
-                  }`}
+                  className={`admin-sidebar__link${active ? ' admin-sidebar__link--active' : ''
+                    }`}
                   aria-current={active ? 'page' : undefined}
                   onClick={(event) => handleNavClick(event, item.path)}
                 >

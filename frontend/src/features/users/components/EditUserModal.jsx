@@ -191,9 +191,8 @@ export function EditUserModal({
                 id="edit-user-name"
                 name="name"
                 type="text"
-                className={`users-form-field__input${
-                  errors.name ? ' users-form-field__input--error' : ''
-                }`}
+                className={`users-form-field__input${errors.name ? ' users-form-field__input--error' : ''
+                  }`}
                 value={values.name}
                 onChange={handleChange}
                 disabled={isSaving}
@@ -215,9 +214,8 @@ export function EditUserModal({
                 id="edit-user-email"
                 name="email"
                 type="email"
-                className={`users-form-field__input${
-                  errors.email ? ' users-form-field__input--error' : ''
-                }`}
+                className={`users-form-field__input${errors.email ? ' users-form-field__input--error' : ''
+                  }`}
                 value={values.email}
                 onChange={handleChange}
                 disabled={isSaving}
@@ -239,9 +237,8 @@ export function EditUserModal({
                 id="edit-user-phone"
                 name="phone"
                 type="tel"
-                className={`users-form-field__input${
-                  errors.phone ? ' users-form-field__input--error' : ''
-                }`}
+                className={`users-form-field__input${errors.phone ? ' users-form-field__input--error' : ''
+                  }`}
                 placeholder="+91 98765 43210"
                 value={values.phone}
                 onChange={handleChange}

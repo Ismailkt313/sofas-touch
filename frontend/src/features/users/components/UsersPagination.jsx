@@ -42,9 +42,8 @@ export function UsersPagination({
               <button
                 key={page}
                 type="button"
-                className={`users-pagination__page${
-                  isCurrent ? ' users-pagination__page--active' : ''
-                }`}
+                className={`users-pagination__page${isCurrent ? ' users-pagination__page--active' : ''
+                  }`}
                 onClick={() => onPageChange(page)}
                 aria-current={isCurrent ? 'page' : undefined}
                 aria-label={`Page ${page}`}

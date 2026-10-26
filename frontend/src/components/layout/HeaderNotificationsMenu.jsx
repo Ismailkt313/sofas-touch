@@ -145,9 +145,8 @@ export function HeaderNotificationsMenu({
       <button
         ref={triggerRef}
         type="button"
-        className={`header-notifications__trigger${
-          isOpen ? ' header-notifications__trigger--active' : ''
-        }`}
+        className={`header-notifications__trigger${isOpen ? ' header-notifications__trigger--active' : ''
+          }`}
         onClick={handleToggle}
         aria-label={triggerLabel}
         aria-expanded={isOpen}

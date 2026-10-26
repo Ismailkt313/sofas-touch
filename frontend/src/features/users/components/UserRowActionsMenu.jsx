@@ -201,113 +201,111 @@ export function UserRowActionsMenu({
   const menuElement =
     open && typeof document !== 'undefined'
       ? createPortal(
-          <div
-            ref={menuRef}
-            className={`user-actions__menu${
-              openUpward ? ' user-actions__menu--up' : ''
+        <div
+          ref={menuRef}
+          className={`user-actions__menu${openUpward ? ' user-actions__menu--up' : ''
             }`}
-            style={{
-              top: `${menuCoords.top}px`,
-              left: `${menuCoords.left}px`,
-              ...(menuCoords.maxHeight
-                ? {
-                    maxHeight: `${menuCoords.maxHeight}px`,
-                    overflowY: 'auto',
-                  }
-                : {}),
-            }}
-            role="menu"
-            aria-label={`Manage ${user.name}`}
-          >
-            <button
-              type="button"
-              role="menuitem"
-              className="user-actions__item"
-              onClick={() => {
-                setOpen(false)
-                onView(user)
-              }}
-            >
-              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <path
-                  d="M2.25 10C3.45 6.3 6.35 4.25 10 4.25C13.65 4.25 16.55 6.3 17.75 10C16.55 13.7 13.65 15.75 10 15.75C6.35 15.75 3.45 13.7 2.25 10Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                />
-                <circle cx="10" cy="10" r="2.25" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-              <span>View details</span>
-            </button>
-
-            <button
-              type="button"
-              role="menuitem"
-              className="user-actions__item"
-              onClick={() => {
-                setOpen(false)
-                onEdit(user)
-              }}
-            >
-              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <path
-                  d="M12.9 4.35L15.65 7.1M4 16L4.65 12.8L13.55 3.9C14.1 3.35 14.98 3.35 15.53 3.9L16.1 4.47C16.65 5.02 16.65 5.9 16.1 6.45L7.2 15.35L4 16Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <span>Edit user</span>
-            </button>
-
-            <div className="user-actions__divider" role="separator" />
-
-            <button
-              type="button"
-              role="menuitem"
-              className={`user-actions__item ${
-                user.isActive
-                  ? 'user-actions__item--danger'
-                  : 'user-actions__item--success'
-              }`}
-              disabled={disableDeactivate}
-              title={
-                disableDeactivate
-                  ? 'You cannot deactivate your own account'
-                  : undefined
+          style={{
+            top: `${menuCoords.top}px`,
+            left: `${menuCoords.left}px`,
+            ...(menuCoords.maxHeight
+              ? {
+                maxHeight: `${menuCoords.maxHeight}px`,
+                overflowY: 'auto',
               }
-              onClick={() => {
-                if (disableDeactivate) {
-                  return
-                }
-                setOpen(false)
-                onToggleStatus(user)
-              }}
-            >
-              {user.isActive ? (
-                <>
-                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <circle cx="10" cy="10" r="7.25" stroke="currentColor" strokeWidth="1.5" />
-                    <path d="M5.1 5.1L14.9 14.9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                  <span>
-                    {disableDeactivate ? 'Deactivate (own account)' : 'Deactivate'}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <circle cx="10" cy="10" r="7.25" stroke="currentColor" strokeWidth="1.5" />
-                    <path d="M6.8 10.2L9.05 12.45L13.4 7.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  <span>Activate</span>
-                </>
-              )}
-            </button>
-          </div>,
-          document.body,
-        )
+              : {}),
+          }}
+          role="menu"
+          aria-label={`Manage ${user.name}`}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="user-actions__item"
+            onClick={() => {
+              setOpen(false)
+              onView(user)
+            }}
+          >
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path
+                d="M2.25 10C3.45 6.3 6.35 4.25 10 4.25C13.65 4.25 16.55 6.3 17.75 10C16.55 13.7 13.65 15.75 10 15.75C6.35 15.75 3.45 13.7 2.25 10Z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              <circle cx="10" cy="10" r="2.25" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            <span>View details</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            className="user-actions__item"
+            onClick={() => {
+              setOpen(false)
+              onEdit(user)
+            }}
+          >
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path
+                d="M12.9 4.35L15.65 7.1M4 16L4.65 12.8L13.55 3.9C14.1 3.35 14.98 3.35 15.53 3.9L16.1 4.47C16.65 5.02 16.65 5.9 16.1 6.45L7.2 15.35L4 16Z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span>Edit user</span>
+          </button>
+
+          <div className="user-actions__divider" role="separator" />
+
+          <button
+            type="button"
+            role="menuitem"
+            className={`user-actions__item ${user.isActive
+                ? 'user-actions__item--danger'
+                : 'user-actions__item--success'
+              }`}
+            disabled={disableDeactivate}
+            title={
+              disableDeactivate
+                ? 'You cannot deactivate your own account'
+                : undefined
+            }
+            onClick={() => {
+              if (disableDeactivate) {
+                return
+              }
+              setOpen(false)
+              onToggleStatus(user)
+            }}
+          >
+            {user.isActive ? (
+              <>
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <circle cx="10" cy="10" r="7.25" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M5.1 5.1L14.9 14.9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <span>
+                  {disableDeactivate ? 'Deactivate (own account)' : 'Deactivate'}
+                </span>
+              </>
+            ) : (
+              <>
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <circle cx="10" cy="10" r="7.25" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M6.8 10.2L9.05 12.45L13.4 7.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span>Activate</span>
+              </>
+            )}
+          </button>
+        </div>,
+        document.body,
+      )
       : null
 
   return (

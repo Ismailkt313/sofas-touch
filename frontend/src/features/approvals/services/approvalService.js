@@ -242,7 +242,7 @@ export async function fetchSignupApprovals() {
     if (status === 401) {
       throw new Error(
         serverMessage ||
-          'Your Admin session has expired or is not signed in. Please sign in again to view signup approvals.',
+        'Your Admin session has expired or is not signed in. Please sign in again to view signup approvals.',
         { cause: error },
       )
     }
@@ -250,14 +250,14 @@ export async function fetchSignupApprovals() {
     if (status === 403) {
       throw new Error(
         serverMessage ||
-          'Administrator permissions are required to review signup approval requests.',
+        'Administrator permissions are required to review signup approval requests.',
         { cause: error },
       )
     }
 
     throw new Error(
       serverMessage ||
-        'Unable to load signup approval data from the server. Please check your connection and try again.',
+      'Unable to load signup approval data from the server. Please check your connection and try again.',
       { cause: error },
     )
   }
