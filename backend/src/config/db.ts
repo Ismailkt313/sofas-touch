@@ -9,6 +9,14 @@ export async function connectDB(): Promise<void> {
     try {
       await mongoose.connect(env.DATABASE_URL);
       console.log('Connected to MongoDB database.');
+
+      // Migration safeguard: ensure pre-existing Admin accounts have approvalStatus: 'approved'
+      if (mongoose.models.User) {
+        await mongoose.models.User.updateMany(
+          { role: 'admin', approvalStatus: { $in: [null, undefined] } },
+          { $set: { approvalStatus: 'approved', approvedAt: new Date() } },
+        ).exec().catch(() => null);
+      }
     } catch (err) {
       console.error('MongoDB connection error:', err);
     }

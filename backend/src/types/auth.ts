@@ -1,6 +1,7 @@
 import { Request } from 'express';
 
 export type UserRole = 'admin' | 'data_entry' | 'Admin' | 'Data Entry';
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface UserResponse {
   id: string;
@@ -10,6 +11,10 @@ export interface UserResponse {
   phone?: string;
   image?: string;
   isActive: boolean;
+  approvalStatus: ApprovalStatus;
+  approvedBy?: string;
+  approvedAt?: string | Date;
+  rejectionReason?: string;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }
@@ -20,6 +25,11 @@ export interface User {
   name: string;
   role: UserRole;
   passwordHash: string;
+  isActive?: boolean;
+  approvalStatus?: ApprovalStatus;
+  approvedBy?: string;
+  approvedAt?: string | Date;
+  rejectionReason?: string;
   createdAt: string;
 }
 
@@ -30,6 +40,7 @@ export interface AuthTokenPayload {
   email: string;
   role: 'admin' | 'data_entry';
   name: string;
+  approvalStatus?: ApprovalStatus;
   iat?: number;
   exp?: number;
 }

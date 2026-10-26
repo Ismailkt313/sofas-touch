@@ -15,6 +15,7 @@
   --admin-sidebar-border: rgba(223, 211, 195, 0.14);
   --admin-sidebar-text: #efe7dc;
   --admin-sidebar-muted: #b6a695;
+  --admin-sidebar-width: 264px;
 
   color-scheme: light;
   display: flex;
@@ -27,10 +28,12 @@
 
 /* Persistent Desktop Sidebar */
 .admin-sidebar {
-  width: 264px;
-  flex-shrink: 0;
-  position: sticky;
+  width: var(--admin-sidebar-width, 264px);
+  position: fixed;
   top: 0;
+  left: 0;
+  bottom: 0;
+  height: 100vh;
   height: 100svh;
   background-color: var(--admin-sidebar-bg);
   border-right: 1px solid var(--admin-sidebar-border);
@@ -431,6 +434,8 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  margin-left: var(--admin-sidebar-width, 264px);
+  width: calc(100% - var(--admin-sidebar-width, 264px));
 }
 
 .admin-topbar {
@@ -1264,6 +1269,11 @@
 }
 
 @media (max-width: 1023px) {
+  .admin-workspace {
+    margin-left: 0;
+    width: 100%;
+  }
+
   .admin-drawer-overlay {
     display: block;
     position: fixed;

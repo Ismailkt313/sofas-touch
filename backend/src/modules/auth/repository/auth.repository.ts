@@ -1,7 +1,5 @@
 import mongoose, { Model } from 'mongoose';
-import bcrypt from 'bcryptjs';
-import { env } from '../../../config/env';
-import { IUser, UserModel } from '../models/user.model';
+import { IUser, UserModel, sharedUserMemoryStore } from '../models/user.model';
 
 export interface IAuthRepository {
   findByEmail(email: string, includePassword?: boolean): Promise<IUser | null>;
@@ -11,44 +9,9 @@ export interface IAuthRepository {
 }
 
 export class AuthRepository implements IAuthRepository {
-  private memoryStore: Map<string, IUser> = new Map();
+  private memoryStore: Map<string, IUser> = sharedUserMemoryStore;
 
-  constructor(private userModel: Model<IUser> = UserModel) {
-    this.seedMemoryStore();
-  }
-
-  private seedMemoryStore(): void {
-    const salt = bcrypt.genSaltSync(10);
-
-    const adminUser: IUser = {
-      _id: 'usr_admin_001',
-      name: env.DEFAULT_ADMIN.name,
-      email: env.DEFAULT_ADMIN.email.toLowerCase().trim(),
-      role: 'admin',
-      password: bcrypt.hashSync(env.DEFAULT_ADMIN.password, salt),
-      isActive: true,
-      image: '',
-      phone: '+44 20 7946 0912',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const dataEntryUser: IUser = {
-      _id: 'usr_data_entry_002',
-      name: env.DEFAULT_DATA_ENTRY.name,
-      email: env.DEFAULT_DATA_ENTRY.email.toLowerCase().trim(),
-      role: 'data_entry',
-      password: bcrypt.hashSync(env.DEFAULT_DATA_ENTRY.password, salt),
-      isActive: true,
-      image: '',
-      phone: '+44 20 7946 0913',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    this.memoryStore.set(adminUser.email, adminUser);
-    this.memoryStore.set(dataEntryUser.email, dataEntryUser);
-  }
+  constructor(private userModel: Model<IUser> = UserModel) {}
 
   private isDbConnected(): boolean {
     return mongoose.connection.readyState === 1;
@@ -93,7 +56,7 @@ export class AuthRepository implements IAuthRepository {
     }
 
     for (const user of this.memoryStore.values()) {
-      if (user._id === id) {
+      if (String(user._id) === id) {
         const { password: _p, ...withoutPassword } = user;
         return withoutPassword as IUser;
       }
@@ -103,20 +66,22 @@ export class AuthRepository implements IAuthRepository {
 
   async create(userData: Partial<IUser>): Promise<IUser> {
     const normalizedEmail = (userData.email || '').toLowerCase().trim();
+    const approvalStatus = userData.approvalStatus || 'pending';
 
     if (this.isDbConnected()) {
       const doc = new this.userModel({
         ...userData,
         email: normalizedEmail,
+        approvalStatus,
       });
       const saved = await doc.save();
       return saved.toObject() as unknown as IUser;
     }
 
     if (this.memoryStore.has(normalizedEmail)) {
-      const err: any = new Error(
+      const err = new Error(
         `E11000 duplicate key error collection: users index: email_1 dup key: { email: "${normalizedEmail}" }`,
-      );
+      ) as Error & { code: number };
       err.code = 11000;
       throw err;
     }
@@ -128,6 +93,10 @@ export class AuthRepository implements IAuthRepository {
       role: userData.role || 'data_entry',
       password: userData.password,
       isActive: userData.isActive !== undefined ? userData.isActive : true,
+      approvalStatus,
+      approvedBy: userData.approvedBy,
+      approvedAt: userData.approvedAt,
+      rejectionReason: userData.rejectionReason,
       image: userData.image || '',
       phone: userData.phone || '',
       createdAt: new Date(),

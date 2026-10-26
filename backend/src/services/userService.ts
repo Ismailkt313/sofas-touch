@@ -16,6 +16,9 @@ function initSeedAccounts(): void {
     name: env.DEFAULT_ADMIN.name,
     role: 'Admin',
     passwordHash: hashPassword(env.DEFAULT_ADMIN.password),
+    isActive: true,
+    approvalStatus: 'approved',
+    approvedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
   };
 
@@ -25,6 +28,9 @@ function initSeedAccounts(): void {
     name: env.DEFAULT_DATA_ENTRY.name,
     role: 'Data Entry',
     passwordHash: hashPassword(env.DEFAULT_DATA_ENTRY.password),
+    isActive: true,
+    approvalStatus: 'approved',
+    approvedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
   };
 
@@ -93,6 +99,9 @@ export function createUser(
     name,
     role,
     passwordHash: hashPassword(plainPassword),
+    isActive: true,
+    approvalStatus: 'approved',
+    approvedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
   };
 

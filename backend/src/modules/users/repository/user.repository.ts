@@ -1,8 +1,7 @@
 import mongoose, { Model } from 'mongoose';
-import bcrypt from 'bcryptjs';
-import { env } from '../../../config/env';
-import { IUser, UserModel } from '../../auth/models/user.model';
+import { IUser, UserModel, sharedUserMemoryStore } from '../../auth/models/user.model';
 import { ListUsersDto } from '../dto/list-users.dto';
+import { ListPendingApprovalsDto } from '../dto/list-pending-approvals.dto';
 
 export interface PaginatedResult<T> {
   items: T[];
@@ -14,53 +13,23 @@ export interface PaginatedResult<T> {
 
 export interface IUserRepository {
   findUsers(filters: ListUsersDto): Promise<PaginatedResult<IUser>>;
+  findPendingApprovals(
+    filters: ListPendingApprovalsDto,
+  ): Promise<PaginatedResult<IUser>>;
   findById(id: string): Promise<IUser | null>;
   findByEmail(email: string, includePassword?: boolean): Promise<IUser | null>;
   create(userData: Partial<IUser>): Promise<IUser>;
   update(id: string, updateData: Partial<IUser>): Promise<IUser | null>;
   updateStatus(id: string, isActive: boolean): Promise<IUser | null>;
+  approveUser(id: string, adminId: string): Promise<IUser | null>;
+  rejectUser(id: string, adminId: string, reason?: string): Promise<IUser | null>;
   count(): Promise<number>;
 }
 
 export class UserRepository implements IUserRepository {
-  private memoryStore: Map<string, IUser> = new Map();
+  private memoryStore: Map<string, IUser> = sharedUserMemoryStore;
 
-  constructor(private userModel: Model<IUser> = UserModel) {
-    this.seedMemoryStore();
-  }
-
-  private seedMemoryStore(): void {
-    const salt = bcrypt.genSaltSync(10);
-
-    const adminUser: IUser = {
-      _id: 'usr_admin_001',
-      name: env.DEFAULT_ADMIN.name,
-      email: env.DEFAULT_ADMIN.email.toLowerCase().trim(),
-      role: 'admin',
-      password: bcrypt.hashSync(env.DEFAULT_ADMIN.password, salt),
-      isActive: true,
-      image: '',
-      phone: '+44 20 7946 0912',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const dataEntryUser: IUser = {
-      _id: 'usr_data_entry_002',
-      name: env.DEFAULT_DATA_ENTRY.name,
-      email: env.DEFAULT_DATA_ENTRY.email.toLowerCase().trim(),
-      role: 'data_entry',
-      password: bcrypt.hashSync(env.DEFAULT_DATA_ENTRY.password, salt),
-      isActive: true,
-      image: '',
-      phone: '+44 20 7946 0913',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    this.memoryStore.set(adminUser.email, adminUser);
-    this.memoryStore.set(dataEntryUser.email, dataEntryUser);
-  }
+  constructor(private userModel: Model<IUser> = UserModel) {}
 
   private isDbConnected(): boolean {
     return mongoose.connection.readyState === 1;
@@ -103,84 +72,149 @@ export class UserRepository implements IUserRepository {
           .exec(),
       ]);
 
-      // If database contains users, return paginated results
-      if (total > 0 || !this.memoryStore.size) {
-        const totalPages = Math.ceil(total / limit) || 1;
-        return {
-          items: docs as unknown as IUser[],
-          total,
-          page,
-          limit,
-          totalPages,
-        };
-      }
+      return {
+        items: docs as unknown as IUser[],
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      };
     }
 
-    // In-memory fallback
-    let list = Array.from(this.memoryStore.values());
+    let items = Array.from(this.memoryStore.values());
 
     if (role) {
-      list = list.filter((u) => u.role === role);
-    }
-
-    if (status) {
-      const targetActive = status === 'active';
-      list = list.filter((u) => u.isActive === targetActive);
-    }
-
-    if (search) {
-      const q = search.toLowerCase();
-      list = list.filter(
+      items = items.filter(
         (u) =>
-          (u.name && u.name.toLowerCase().includes(q)) ||
-          (u.email && u.email.toLowerCase().includes(q)) ||
-          (u.phone && u.phone.toLowerCase().includes(q)),
+          u.role.toLowerCase().replace(/\s+/g, '_') ===
+          role.toLowerCase().replace(/\s+/g, '_'),
       );
     }
 
-    list.sort((a, b) => {
-      const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return tB - tA;
-    });
+    if (status) {
+      const activeBool = status === 'active';
+      items = items.filter((u) => u.isActive === activeBool);
+    }
 
-    const total = list.length;
-    const totalPages = Math.ceil(total / limit) || 1;
+    if (search) {
+      const s = search.toLowerCase();
+      items = items.filter(
+        (u) =>
+          u.name.toLowerCase().includes(s) ||
+          u.email.toLowerCase().includes(s) ||
+          (u.phone && u.phone.toLowerCase().includes(s)),
+      );
+    }
+
+    items.sort(
+      (a, b) =>
+        new Date(b.createdAt || 0).getTime() -
+        new Date(a.createdAt || 0).getTime(),
+    );
+
+    const total = items.length;
     const skip = (page - 1) * limit;
-    const items = list.slice(skip, skip + limit).map((u) => {
-      const { password: _p, ...withoutPassword } = u;
-      return withoutPassword as IUser;
+    const pagedItems = items.slice(skip, skip + limit).map((user) => {
+      const { password: _p, ...safe } = user;
+      return safe as IUser;
     });
 
     return {
-      items,
+      items: pagedItems,
       total,
       page,
       limit,
-      totalPages,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
+  }
+
+  async findPendingApprovals(
+    filters: ListPendingApprovalsDto,
+  ): Promise<PaginatedResult<IUser>> {
+    const { page, limit, search } = filters;
+
+    if (this.isDbConnected()) {
+      const mongoFilter: Record<string, unknown> = {
+        approvalStatus: 'pending',
+      };
+
+      if (search) {
+        const escaped = search.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+        const searchRegex = new RegExp(escaped, 'i');
+        mongoFilter.$or = [
+          { name: searchRegex },
+          { email: searchRegex },
+          { phone: searchRegex },
+        ];
+      }
+
+      const skip = (page - 1) * limit;
+
+      const [total, docs] = await Promise.all([
+        this.userModel.countDocuments(mongoFilter).exec(),
+        this.userModel
+          .find(mongoFilter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean()
+          .exec(),
+      ]);
+
+      return {
+        items: docs as unknown as IUser[],
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      };
+    }
+
+    let items = Array.from(this.memoryStore.values()).filter(
+      (u) => u.approvalStatus === 'pending',
+    );
+
+    if (search) {
+      const s = search.toLowerCase();
+      items = items.filter(
+        (u) =>
+          u.name.toLowerCase().includes(s) ||
+          u.email.toLowerCase().includes(s) ||
+          (u.phone && u.phone.toLowerCase().includes(s)),
+      );
+    }
+
+    items.sort(
+      (a, b) =>
+        new Date(b.createdAt || 0).getTime() -
+        new Date(a.createdAt || 0).getTime(),
+    );
+
+    const total = items.length;
+    const skip = (page - 1) * limit;
+    const pagedItems = items.slice(skip, skip + limit).map((user) => {
+      const { password: _p, ...safe } = user;
+      return safe as IUser;
+    });
+
+    return {
+      items: pagedItems,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
     };
   }
 
   async findById(id: string): Promise<IUser | null> {
-    if (this.isDbConnected()) {
+    if (this.isDbConnected() && mongoose.isValidObjectId(id)) {
       try {
-        if (mongoose.isValidObjectId(id)) {
-          const doc = await this.userModel.findById(id).lean().exec();
-          if (doc) {
-            return doc as unknown as IUser;
-          }
-        } else {
-          const doc = await this.userModel
-            .findOne({ _id: id })
-            .lean()
-            .exec()
-            .catch(() => null);
-          if (doc) {
-            return doc as unknown as IUser;
-          }
+        const doc = await this.userModel.findById(id).lean().exec();
+        if (doc) {
+          return doc as unknown as IUser;
         }
       } catch {
-        // Ignore cast errors
+        // Fall back to memoryStore
       }
     }
 
@@ -190,7 +224,6 @@ export class UserRepository implements IUserRepository {
         return withoutPassword as IUser;
       }
     }
-
     return null;
   }
 
@@ -226,11 +259,13 @@ export class UserRepository implements IUserRepository {
 
   async create(userData: Partial<IUser>): Promise<IUser> {
     const normalizedEmail = (userData.email || '').toLowerCase().trim();
+    const approvalStatus = userData.approvalStatus || 'pending';
 
     if (this.isDbConnected()) {
       const doc = new this.userModel({
         ...userData,
         email: normalizedEmail,
+        approvalStatus,
       });
       const saved = await doc.save();
       return saved.toObject() as unknown as IUser;
@@ -251,6 +286,10 @@ export class UserRepository implements IUserRepository {
       role: userData.role || 'data_entry',
       password: userData.password,
       isActive: userData.isActive !== undefined ? userData.isActive : true,
+      approvalStatus,
+      approvedBy: userData.approvedBy,
+      approvedAt: userData.approvedAt,
+      rejectionReason: userData.rejectionReason,
       image: userData.image || '',
       phone: userData.phone || '',
       createdAt: new Date(),
@@ -269,27 +308,18 @@ export class UserRepository implements IUserRepository {
           updatedAt: new Date(),
         };
 
-        let updated: unknown = null;
-        if (mongoose.isValidObjectId(id)) {
-          updated = await this.userModel
-            .findByIdAndUpdate(
-              id,
-              { $set: updatePayload },
-              { returnDocument: 'after', runValidators: true },
-            )
-            .lean()
-            .exec();
-        } else {
-          updated = await this.userModel
-            .findOneAndUpdate(
-              { _id: id },
-              { $set: updatePayload },
-              { returnDocument: 'after', runValidators: true },
-            )
-            .lean()
-            .exec()
-            .catch(() => null);
-        }
+        const filter = mongoose.isValidObjectId(id)
+          ? { _id: new mongoose.Types.ObjectId(id) }
+          : { _id: id };
+
+        const updated = await this.userModel
+          .findOneAndUpdate(
+            filter,
+            { $set: updatePayload },
+            { returnDocument: 'after', runValidators: true },
+          )
+          .lean()
+          .exec();
 
         if (updated) {
           return updated as unknown as IUser;
@@ -345,6 +375,137 @@ export class UserRepository implements IUserRepository {
 
   async updateStatus(id: string, isActive: boolean): Promise<IUser | null> {
     return this.update(id, { isActive });
+  }
+
+  async approveUser(id: string, adminId: string): Promise<IUser | null> {
+    const approvedAt = new Date();
+
+    if (this.isDbConnected() && mongoose.isValidObjectId(id)) {
+      try {
+        const filter = {
+          _id: new mongoose.Types.ObjectId(id),
+          approvalStatus: 'pending',
+        };
+
+        const adminRef = mongoose.isValidObjectId(adminId)
+          ? new mongoose.Types.ObjectId(adminId)
+          : adminId;
+
+        const updated = await this.userModel
+          .findOneAndUpdate(
+            filter as any,
+            {
+              $set: {
+                approvalStatus: 'approved',
+                approvedBy: adminRef,
+                approvedAt,
+                rejectionReason: null,
+                updatedAt: approvedAt,
+              },
+            },
+            { returnDocument: 'after' },
+          )
+          .lean()
+          .exec();
+
+        if (updated) {
+          return updated as unknown as IUser;
+        }
+      } catch {
+        // Fall back to memoryStore
+      }
+    }
+
+    for (const [key, user] of this.memoryStore.entries()) {
+      if (String(user._id) === id) {
+        if (user.approvalStatus !== 'pending') {
+          return null;
+        }
+
+        const updatedUser: IUser = {
+          ...user,
+          approvalStatus: 'approved',
+          approvedBy: adminId,
+          approvedAt,
+          rejectionReason: undefined,
+          updatedAt: approvedAt,
+        };
+
+        this.memoryStore.set(key, updatedUser);
+        const { password: _p, ...safe } = updatedUser;
+        return safe as IUser;
+      }
+    }
+
+    return null;
+  }
+
+  async rejectUser(
+    id: string,
+    adminId: string,
+    reason?: string,
+  ): Promise<IUser | null> {
+    const rejectedAt = new Date();
+    const trimmedReason = reason && reason.trim() ? reason.trim() : null;
+
+    if (this.isDbConnected() && mongoose.isValidObjectId(id)) {
+      try {
+        const filter = {
+          _id: new mongoose.Types.ObjectId(id),
+          approvalStatus: 'pending',
+        };
+
+        const adminRef = mongoose.isValidObjectId(adminId)
+          ? new mongoose.Types.ObjectId(adminId)
+          : adminId;
+
+        const updated = await this.userModel
+          .findOneAndUpdate(
+            filter as any,
+            {
+              $set: {
+                approvalStatus: 'rejected',
+                approvedBy: adminRef,
+                approvedAt: rejectedAt,
+                rejectionReason: trimmedReason,
+                updatedAt: rejectedAt,
+              },
+            },
+            { returnDocument: 'after' },
+          )
+          .lean()
+          .exec();
+
+        if (updated) {
+          return updated as unknown as IUser;
+        }
+      } catch {
+        // Fall back to memoryStore
+      }
+    }
+
+    for (const [key, user] of this.memoryStore.entries()) {
+      if (String(user._id) === id) {
+        if (user.approvalStatus !== 'pending') {
+          return null;
+        }
+
+        const updatedUser: IUser = {
+          ...user,
+          approvalStatus: 'rejected',
+          approvedBy: adminId,
+          approvedAt: rejectedAt,
+          rejectionReason: trimmedReason || undefined,
+          updatedAt: rejectedAt,
+        };
+
+        this.memoryStore.set(key, updatedUser);
+        const { password: _p, ...safe } = updatedUser;
+        return safe as IUser;
+      }
+    }
+
+    return null;
   }
 
   async count(): Promise<number> {

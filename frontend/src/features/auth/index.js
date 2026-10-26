@@ -8,3 +8,4 @@ export {
   loginAdmin,
   registerAccount,
 } from './services/authService'
+export * from './utils/validation'

@@ -6,6 +6,8 @@ import {
   IAuthService,
   InactiveAccountError,
   InvalidCredentialsError,
+  PendingApprovalError,
+  RejectedAccountError,
   UserAlreadyExistsError,
 } from '../service/auth.service';
 
@@ -37,7 +39,8 @@ export class AuthController implements IAuthController {
       const result = await this.authService.signup(validation.value);
 
       res.status(201).json({
-        message: 'Account created successfully.',
+        message:
+          'Registration submitted successfully. Your account is pending administrator approval.',
         user: result.user,
       });
     } catch (error: unknown) {
@@ -85,6 +88,25 @@ export class AuthController implements IAuthController {
         res.status(403).json({
           error: 'Forbidden',
           message: error.message,
+          code: 'ACCOUNT_INACTIVE',
+        });
+        return;
+      }
+
+      if (error instanceof PendingApprovalError) {
+        res.status(403).json({
+          error: 'Forbidden',
+          message: error.message,
+          code: 'PENDING_APPROVAL',
+        });
+        return;
+      }
+
+      if (error instanceof RejectedAccountError) {
+        res.status(403).json({
+          error: 'Forbidden',
+          message: error.message,
+          code: 'ACCOUNT_REJECTED',
         });
         return;
       }
@@ -110,13 +132,37 @@ export class AuthController implements IAuthController {
       const user = await this.authService.getCurrentUser(req.user.id);
       res.status(200).json({ user });
     } catch (error: unknown) {
-      if (
-        error instanceof InvalidCredentialsError ||
-        error instanceof InactiveAccountError
-      ) {
+      if (error instanceof InvalidCredentialsError) {
         res.status(401).json({
           error: 'Unauthorized',
           message: error.message,
+        });
+        return;
+      }
+
+      if (error instanceof InactiveAccountError) {
+        res.status(403).json({
+          error: 'Forbidden',
+          message: error.message,
+          code: 'ACCOUNT_INACTIVE',
+        });
+        return;
+      }
+
+      if (error instanceof PendingApprovalError) {
+        res.status(403).json({
+          error: 'Forbidden',
+          message: error.message,
+          code: 'PENDING_APPROVAL',
+        });
+        return;
+      }
+
+      if (error instanceof RejectedAccountError) {
+        res.status(403).json({
+          error: 'Forbidden',
+          message: error.message,
+          code: 'ACCOUNT_REJECTED',
         });
         return;
       }

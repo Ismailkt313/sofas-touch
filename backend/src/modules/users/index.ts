@@ -8,10 +8,16 @@ import {
   UserNotFoundError,
   UserAlreadyExistsError,
   SelfDeactivationError,
+  SelfApprovalError,
   InvalidOperationError,
 } from './service/user.service';
 import { UserController, IUserController } from './controller/user.controller';
 import { ListUsersDto, validateListUsersDto } from './dto/list-users.dto';
+import {
+  ListPendingApprovalsDto,
+  validateListPendingApprovalsDto,
+} from './dto/list-pending-approvals.dto';
+import { RejectUserDto, validateRejectUserDto } from './dto/reject-user.dto';
 import { CreateUserDto, validateCreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, validateUpdateUserDto } from './dto/update-user.dto';
 import { UpdateStatusDto, validateUpdateStatusDto } from './dto/update-status.dto';
@@ -26,11 +32,15 @@ const userRouter = Router();
 userRouter.use(verifyToken);
 userRouter.use(requireAdmin);
 
+// Approval & Listing routes (defined before /:id)
+userRouter.get('/pending-approvals', userController.listPendingApprovals);
 userRouter.get('/', userController.list);
 userRouter.get('/:id', userController.getById);
 userRouter.post('/', userController.create);
-userRouter.patch('/:id', userController.update);
+userRouter.patch('/:id/approve', userController.approveUser);
+userRouter.patch('/:id/reject', userController.rejectUser);
 userRouter.patch('/:id/status', userController.updateStatus);
+userRouter.patch('/:id', userController.update);
 
 export {
   userRouter,
@@ -42,6 +52,10 @@ export {
   UserRepository,
   ListUsersDto,
   validateListUsersDto,
+  ListPendingApprovalsDto,
+  validateListPendingApprovalsDto,
+  RejectUserDto,
+  validateRejectUserDto,
   CreateUserDto,
   validateCreateUserDto,
   UpdateUserDto,
@@ -51,6 +65,7 @@ export {
   UserNotFoundError,
   UserAlreadyExistsError,
   SelfDeactivationError,
+  SelfApprovalError,
   InvalidOperationError,
 };
 

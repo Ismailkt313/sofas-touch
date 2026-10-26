@@ -14,9 +14,29 @@ export class InvalidCredentialsError extends Error {
 }
 
 export class InactiveAccountError extends Error {
-  constructor(message = 'Your account has been deactivated. Please contact an administrator.') {
+  constructor(
+    message = 'This account is currently inactive. Please contact an administrator to reactivate your access.',
+  ) {
     super(message);
     this.name = 'InactiveAccountError';
+  }
+}
+
+export class PendingApprovalError extends Error {
+  constructor(
+    message = 'Your account registration is currently pending Administrator approval. You will be able to access the system once an administrator has approved your account.',
+  ) {
+    super(message);
+    this.name = 'PendingApprovalError';
+  }
+}
+
+export class RejectedAccountError extends Error {
+  constructor(
+    message = 'Your account registration request has been declined. Please contact an administrator for assistance.',
+  ) {
+    super(message);
+    this.name = 'RejectedAccountError';
   }
 }
 
@@ -28,7 +48,9 @@ export class UserAlreadyExistsError extends Error {
 }
 
 export interface IAuthService {
-  login(dto: LoginDto): Promise<{ authenticated: boolean; token: string; user: UserResponse }>;
+  login(
+    dto: LoginDto,
+  ): Promise<{ authenticated: boolean; token: string; user: UserResponse }>;
   signup(dto: SignupDto): Promise<{ user: UserResponse }>;
   getCurrentUser(userId: string): Promise<UserResponse>;
   hashPassword(plainPassword: string): string;
@@ -50,11 +72,18 @@ export class AuthService implements IAuthService {
     const user = await this.authRepository.findByEmail(normalizedEmail, true);
 
     if (!user || !user.password) {
-      // Mitigate timing-based user enumeration
+      // Mitigate timing-based user enumeration attacks
       bcrypt.compareSync(
         dto.password,
         '$2a$10$abcdefghijklmnopqrstuuNOPQRSTUVWXYZ1234567890abcdefghi',
       );
+      throw new InvalidCredentialsError(
+        'Invalid email address or password. Please verify your credentials and try again.',
+      );
+    }
+
+    const isPasswordValid = bcrypt.compareSync(dto.password, user.password);
+    if (!isPasswordValid) {
       throw new InvalidCredentialsError(
         'Invalid email address or password. Please verify your credentials and try again.',
       );
@@ -66,16 +95,23 @@ export class AuthService implements IAuthService {
       );
     }
 
-    const isPasswordValid = bcrypt.compareSync(dto.password, user.password);
-    if (!isPasswordValid) {
-      throw new InvalidCredentialsError(
-        'Invalid email address or password. Please verify your credentials and try again.',
-      );
-    }
-
     const canonicalRole = (
       user.role.toLowerCase().replace(/\s+/g, '_') as 'admin' | 'data_entry'
     );
+
+    const approvalStatus =
+      user.approvalStatus || (canonicalRole === 'admin' ? 'approved' : 'pending');
+
+    if (canonicalRole !== 'admin' && approvalStatus !== 'approved') {
+      if (approvalStatus === 'rejected') {
+        throw new RejectedAccountError(
+          'Your account registration request has been declined. Please contact an administrator for assistance.',
+        );
+      }
+      throw new PendingApprovalError(
+        'Your account registration is currently pending Administrator approval. You will be able to access the system once an administrator has approved your account.',
+      );
+    }
 
     const expiresIn = dto.rememberMe ? '30d' : env.JWT_EXPIRES_IN;
     const token = generateToken(
@@ -84,6 +120,7 @@ export class AuthService implements IAuthService {
         email: user.email,
         role: canonicalRole,
         name: user.name,
+        approvalStatus,
       },
       expiresIn,
     );
@@ -96,6 +133,10 @@ export class AuthService implements IAuthService {
       phone: user.phone || '',
       image: user.image || '',
       isActive: user.isActive,
+      approvalStatus,
+      approvedBy: user.approvedBy ? String(user.approvedBy) : undefined,
+      approvedAt: user.approvedAt,
+      rejectionReason: user.rejectionReason,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -128,6 +169,7 @@ export class AuthService implements IAuthService {
         phone: dto.phone ? dto.phone.trim() : '',
         image: '',
         isActive: true,
+        approvalStatus: 'pending',
       });
 
       const publicUser: UserResponse = {
@@ -138,6 +180,7 @@ export class AuthService implements IAuthService {
         phone: createdUser.phone || '',
         image: createdUser.image || '',
         isActive: createdUser.isActive,
+        approvalStatus: 'pending',
         createdAt: createdUser.createdAt,
         updatedAt: createdUser.updatedAt,
       };
@@ -175,6 +218,20 @@ export class AuthService implements IAuthService {
       user.role.toLowerCase().replace(/\s+/g, '_') as 'admin' | 'data_entry'
     );
 
+    const approvalStatus =
+      user.approvalStatus || (canonicalRole === 'admin' ? 'approved' : 'pending');
+
+    if (canonicalRole !== 'admin' && approvalStatus !== 'approved') {
+      if (approvalStatus === 'rejected') {
+        throw new RejectedAccountError(
+          'Your account registration request has been declined.',
+        );
+      }
+      throw new PendingApprovalError(
+        'Your account is pending administrator approval.',
+      );
+    }
+
     return {
       id: String(user._id),
       name: user.name,
@@ -183,6 +240,10 @@ export class AuthService implements IAuthService {
       phone: user.phone || '',
       image: user.image || '',
       isActive: user.isActive,
+      approvalStatus,
+      approvedBy: user.approvedBy ? String(user.approvedBy) : undefined,
+      approvedAt: user.approvedAt,
+      rejectionReason: user.rejectionReason,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

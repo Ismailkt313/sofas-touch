@@ -11,6 +11,8 @@ import {
   IAuthService,
   InactiveAccountError,
   InvalidCredentialsError,
+  PendingApprovalError,
+  RejectedAccountError,
   UserAlreadyExistsError,
 } from './service/auth.service';
 
@@ -60,6 +62,8 @@ export {
   validateSignupDto,
   InvalidCredentialsError,
   InactiveAccountError,
+  PendingApprovalError,
+  RejectedAccountError,
   UserAlreadyExistsError,
 };
 

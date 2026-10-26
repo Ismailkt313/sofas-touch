@@ -84,10 +84,10 @@ function isValidAuthPayload(data) {
 
   return Boolean(
     data.token ||
-      data.accessToken ||
-      data.session ||
-      data.user ||
-      data.authenticated === true,
+    data.accessToken ||
+    data.session ||
+    data.user ||
+    data.authenticated === true,
   )
 }
 
@@ -114,7 +114,7 @@ export async function loginAdmin({ email, password, rememberMe = false }) {
     if (status === 401 || status === 403) {
       throw new Error(
         data?.message ||
-          'Invalid email address or password. Please verify your credentials and try again.',
+        'Invalid email address or password. Please verify your credentials and try again.',
         { cause: error },
       )
     }
@@ -129,10 +129,10 @@ export async function loginAdmin({ email, password, rememberMe = false }) {
     if (status === 429) {
       throw new Error(
         data?.message ||
-          'Too many sign-in attempts. Please wait a moment before trying again.',
+        'Too many sign-in attempts. Please wait a moment before trying again.',
         { cause: error },
       )
-    } 
+    }
 
     if (status >= 500) {
       throw new Error(
@@ -145,7 +145,7 @@ export async function loginAdmin({ email, password, rememberMe = false }) {
 
     throw new Error(
       data?.message ||
-        'Unable to complete sign-in. Please check your details and try again.',
+      'Unable to complete sign-in. Please check your details and try again.',
       { cause: error },
     )
   }
@@ -257,8 +257,8 @@ export async function registerAccount(
           : null
       throw new Error(
         fieldError ||
-          data?.message ||
-          'Please verify your registration details and try again.',
+        data?.message ||
+        'Please verify your registration details and try again.',
         { cause: error },
       )
     }
@@ -266,7 +266,7 @@ export async function registerAccount(
     if (status === 409) {
       throw new Error(
         data?.message ||
-          'An account with this email address already exists. Please sign in instead.',
+        'An account with this email address already exists. Please sign in instead.',
         { cause: error },
       )
     }
@@ -274,7 +274,7 @@ export async function registerAccount(
     if (status === 429) {
       throw new Error(
         data?.message ||
-          'Too many registration attempts. Please wait 15 minutes before trying again.',
+        'Too many registration attempts. Please wait 15 minutes before trying again.',
         { cause: error },
       )
     }
@@ -297,7 +297,7 @@ export async function registerAccount(
 
     throw new Error(
       data?.message ||
-        'Unable to create your account. Please check your details and try again.',
+      'Unable to create your account. Please check your details and try again.',
       { cause: error },
     )
   }

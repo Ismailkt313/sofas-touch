@@ -1,3 +1,6 @@
+/**
+ * Authentication and User Form Validation Utilities
+ */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 const PHONE_ALLOWED_PATTERN = /^[+]?[\d\s()-]+$/
 
