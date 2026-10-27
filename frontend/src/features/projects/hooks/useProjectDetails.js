@@ -8,6 +8,7 @@ import {
   isAdminUser,
   recalculateProjectFinancials,
   updateProject,
+  updateProjectStatus,
 } from '../services/projectService'
 
 export function useProjectDetails({ projectIdentifier, currentUser }) {
@@ -39,6 +40,7 @@ export function useProjectDetails({ projectIdentifier, currentUser }) {
   const [error, setError] = useState('')
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false)
   const [feedbackBanner, setFeedbackBanner] = useState(null)
   const [refreshTick, setRefreshTick] = useState(0)
   const reqSeqRef = useRef(0)
@@ -229,6 +231,29 @@ export function useProjectDetails({ projectIdentifier, currentUser }) {
     [project, projectIdentifier],
   )
 
+  const openStatusModal = useCallback(() => {
+    setIsStatusModalOpen(true)
+  }, [])
+
+  const closeStatusModal = useCallback(() => {
+    setIsStatusModalOpen(false)
+  }, [])
+
+  const handleStatusSubmit = useCallback(
+    async (targetIdentifier, nextStatus) => {
+      const updated = await updateProjectStatus(targetIdentifier, nextStatus)
+      setProject((prev) => (prev ? { ...prev, status: updated.status } : updated))
+      setIsStatusModalOpen(false)
+      setFeedbackBanner({
+        tone: 'success',
+        text: `Project ${updated.projectId || targetIdentifier} status was updated to "${updated.status}".`,
+      })
+      setRefreshTick((prev) => prev + 1)
+      return updated
+    },
+    [],
+  )
+
   const handleRecalculateFinancials = useCallback(async () => {
     if (!adminAccess || isRecalculating) {
       return
@@ -283,6 +308,11 @@ export function useProjectDetails({ projectIdentifier, currentUser }) {
     openEditModal,
     closeEditModal,
     handleEditSubmit,
+
+    isStatusModalOpen,
+    openStatusModal,
+    closeStatusModal,
+    handleStatusSubmit,
 
     feedbackBanner,
     clearFeedbackBanner,

@@ -8,20 +8,27 @@ const STATUS_DESCRIPTIONS = {
   Completed: 'Project delivered and settled. Clears open inactivity warnings.',
 }
 
+function normalizeStatus(val) {
+  if (!val) return 'In Progress'
+  const clean = String(val).toLowerCase().replace(/[\s_-]+/g, '')
+  if (clean === 'underreview') return 'Under Review'
+  if (clean === 'completed') return 'Completed'
+  return 'In Progress'
+}
+
 export function ProjectStatusModal({ project, isOpen, onClose, onSubmit }) {
-  const [selectedStatus, setSelectedStatus] = useState(
-    project?.status || 'In Progress',
-  )
+  const currentCanonicalStatus = normalizeStatus(project?.status)
+  const [selectedStatus, setSelectedStatus] = useState(currentCanonicalStatus)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const cancelBtnRef = useRef(null)
 
   useEffect(() => {
     if (project?.status) {
-      setSelectedStatus(project.status)
+      setSelectedStatus(normalizeStatus(project.status))
       setErrorMessage('')
     }
-  }, [project])
+  }, [project?.status, project?.projectId, project?.id])
 
   useEffect(() => {
     if (!isOpen) {
@@ -49,8 +56,8 @@ export function ProjectStatusModal({ project, isOpen, onClose, onSubmit }) {
     return null
   }
 
-  const isCurrentStatus = selectedStatus === project.status
-  const targetIdentifier = project.projectId || project.id
+  const isCurrentStatus = selectedStatus === currentCanonicalStatus
+  const targetIdentifier = String(project.projectId || project.id || '').trim()
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -95,7 +102,7 @@ export function ProjectStatusModal({ project, isOpen, onClose, onSubmit }) {
       >
         <div className="admin-modal__header project-status-modal__header">
           <div className="project-status-modal__header-info">
-            <span className="project-status-modal__eyebrow">Project Status</span>
+            <span className="project-status-modal__eyebrow">Project Lifecycle</span>
             <h2 id="project-status-modal-title" className="admin-modal__title">
               Edit Status
             </h2>
@@ -138,7 +145,7 @@ export function ProjectStatusModal({ project, isOpen, onClose, onSubmit }) {
 
             <div className="project-status-modal__current-row">
               <span className="project-status-modal__label">Current Status:</span>
-              <ProjectStatusBadge status={project.status} />
+              <ProjectStatusBadge status={currentCanonicalStatus} />
             </div>
 
             <fieldset className="project-status-modal__options-group">
@@ -146,14 +153,32 @@ export function ProjectStatusModal({ project, isOpen, onClose, onSubmit }) {
                 Select New Status
               </legend>
 
-              <div className="project-status-options-list">
+              <div
+                className="project-status-options-list"
+                role="radiogroup"
+                aria-label="Project Status Selection"
+              >
                 {PROJECT_STATUS_OPTIONS.map((statusOption) => {
                   const isSelected = selectedStatus === statusOption
-                  const isCurrent = project.status === statusOption
+                  const isCurrent = currentCanonicalStatus === statusOption
 
                   return (
-                    <label
+                    <div
                       key={statusOption}
+                      role="radio"
+                      aria-checked={isSelected}
+                      tabIndex={0}
+                      onClick={() => {
+                        if (!isSubmitting) {
+                          setSelectedStatus(statusOption)
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if ((event.key === ' ' || event.key === 'Enter') && !isSubmitting) {
+                          event.preventDefault()
+                          setSelectedStatus(statusOption)
+                        }
+                      }}
                       className={`project-status-option${
                         isSelected ? ' project-status-option--selected' : ''
                       }${isCurrent ? ' project-status-option--current' : ''}`}
@@ -165,7 +190,9 @@ export function ProjectStatusModal({ project, isOpen, onClose, onSubmit }) {
                         checked={isSelected}
                         onChange={() => setSelectedStatus(statusOption)}
                         disabled={isSubmitting}
+                        tabIndex={-1}
                         className="project-status-option__radio"
+                        aria-hidden="true"
                       />
 
                       <div className="project-status-option__content">
@@ -174,6 +201,11 @@ export function ProjectStatusModal({ project, isOpen, onClose, onSubmit }) {
                           {isCurrent ? (
                             <span className="project-status-option__current-tag">
                               Current
+                            </span>
+                          ) : null}
+                          {isSelected && !isCurrent ? (
+                            <span className="project-status-option__new-tag">
+                              New Selection
                             </span>
                           ) : null}
                         </div>
@@ -188,13 +220,43 @@ export function ProjectStatusModal({ project, isOpen, onClose, onSubmit }) {
                       >
                         <div className="project-status-option__indicator-dot" />
                       </div>
-                    </label>
+                    </div>
                   )
                 })}
               </div>
             </fieldset>
 
-            {selectedStatus === 'Completed' && project.status !== 'Completed' ? (
+            {!isCurrentStatus ? (
+              <div className="project-status-modal__transition-preview">
+                <span className="project-status-modal__transition-label">
+                  Status will change:
+                </span>
+                <div className="project-status-modal__transition-badges">
+                  <ProjectStatusBadge status={currentCanonicalStatus} />
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="project-status-modal__transition-arrow"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M6 3L11 8L6 13"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <ProjectStatusBadge status={selectedStatus} />
+                </div>
+              </div>
+            ) : (
+              <p className="project-status-modal__hint">
+                Click a different status above to update this project.
+              </p>
+            )}
+
+            {selectedStatus === 'Completed' && currentCanonicalStatus !== 'Completed' ? (
               <div className="project-status-modal__note">
                 <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <circle
@@ -233,14 +295,21 @@ export function ProjectStatusModal({ project, isOpen, onClose, onSubmit }) {
               type="submit"
               className="admin-btn admin-btn--primary"
               disabled={isSubmitting || isCurrentStatus}
+              title={
+                isCurrentStatus
+                  ? 'Select a different status option to enable update'
+                  : `Save project status as ${selectedStatus}`
+              }
             >
               {isSubmitting ? (
                 <>
                   <span className="projects-btn-spinner" aria-hidden="true" />
                   <span>Saving...</span>
                 </>
+              ) : isCurrentStatus ? (
+                <span>No Changes</span>
               ) : (
-                <span>Update Status</span>
+                <span>Update to {selectedStatus}</span>
               )}
             </button>
           </div>

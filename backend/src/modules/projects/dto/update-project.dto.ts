@@ -4,6 +4,7 @@ import {
   ProjectCategory,
   ProjectStatus,
 } from '../models/project.model';
+import { normalizeStatusInput } from './update-status.dto';
 import { ValidationResult } from './create-project.dto';
 
 export interface UpdateProjectDto {
@@ -82,11 +83,9 @@ export function validateUpdateProjectDto(
   }
 
   if (raw.status !== undefined) {
-    if (
-      typeof raw.status === 'string' &&
-      (PROJECT_STATUSES as readonly string[]).includes(raw.status.trim())
-    ) {
-      updateValue.status = raw.status.trim() as ProjectStatus;
+    const normalized = normalizeStatusInput(raw.status);
+    if (normalized) {
+      updateValue.status = normalized;
     } else {
       errors.status = `Status must be one of: ${PROJECT_STATUSES.join(', ')}.`;
     }

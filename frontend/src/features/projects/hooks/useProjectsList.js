@@ -354,16 +354,57 @@ export function useProjectsList({ currentUser }) {
   const handleStatusSubmit = useCallback(
     async (projectIdentifier, nextStatus) => {
       const updated = await updateProjectStatus(projectIdentifier, nextStatus)
+      const targetCode = (updated.projectId || projectIdentifier || '').trim()
+      const targetId = updated.id || projectIdentifier
+
+      setProjects((prev) =>
+        prev.map((item) => {
+          const isMatch =
+            (targetCode && String(item.projectId).toUpperCase() === targetCode.toUpperCase()) ||
+            (targetId && String(item.id) === String(targetId))
+          if (!isMatch) {
+            return item
+          }
+          return {
+            ...item,
+            status: updated.status,
+          }
+        }),
+      )
+
+      setStatusCounts((prev) => {
+        const oldStatus = statusModalProject?.status
+        const newStatus = updated.status
+        if (!oldStatus || oldStatus === newStatus) {
+          return prev
+        }
+        const next = { ...prev }
+        if (oldStatus === 'In Progress' && next.inProgress > 0) next.inProgress -= 1
+        if (oldStatus === 'Under Review' && next.underReview > 0) next.underReview -= 1
+        if (oldStatus === 'Completed' && next.completed > 0) next.completed -= 1
+
+        if (newStatus === 'In Progress') next.inProgress += 1
+        if (newStatus === 'Under Review') next.underReview += 1
+        if (newStatus === 'Completed') next.completed += 1
+        return next
+      })
+
       setStatusModalProject(null)
+
+      const filterExcludes =
+        statusFilter !== 'all' && statusFilter !== updated.status
       setFeedbackBanner({
         tone: 'success',
-        text: `Project ${updated.projectId || projectIdentifier} status was updated to "${updated.status}".`,
-        projectId: updated.projectId || updated.id,
+        text: filterExcludes
+          ? `Project ${targetCode} status updated to "${updated.status}" (it was moved out of the "${statusFilter}" view).`
+          : `Project ${targetCode} status was updated to "${updated.status}".`,
+        projectId: targetCode || targetId,
       })
+
       setRefreshTick((prev) => prev + 1)
       return updated
     },
-    [],
+    [statusModalProject?.status, statusFilter],
   )
 
   const handleRunInactivityEvaluation = useCallback(async () => {

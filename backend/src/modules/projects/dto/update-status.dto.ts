@@ -5,6 +5,33 @@ export interface UpdateProjectStatusDto {
   status: ProjectStatus;
 }
 
+export function normalizeStatusInput(input: unknown): ProjectStatus | null {
+  if (typeof input !== 'string') {
+    return null;
+  }
+  const clean = input.trim();
+  if (!clean) {
+    return null;
+  }
+
+  if ((PROJECT_STATUSES as readonly string[]).includes(clean)) {
+    return clean as ProjectStatus;
+  }
+
+  const simplified = clean.toLowerCase().replace(/[\s_-]+/g, '');
+  if (simplified === 'inprogress') {
+    return 'In Progress';
+  }
+  if (simplified === 'underreview') {
+    return 'Under Review';
+  }
+  if (simplified === 'completed') {
+    return 'Completed';
+  }
+
+  return null;
+}
+
 export function validateUpdateProjectStatusDto(
   body: unknown,
 ): ValidationResult<UpdateProjectStatusDto> {
@@ -20,15 +47,15 @@ export function validateUpdateProjectStatusDto(
   const raw = body as Record<string, unknown>;
   const errors: Record<string, string> = {};
 
-  if (typeof raw.status !== 'string' || !raw.status.trim()) {
+  if (!raw.status || typeof raw.status !== 'string' || !raw.status.trim()) {
     errors.status = `Field 'status' is required and must be one of: ${PROJECT_STATUSES.join(', ')}.`;
   } else {
-    const trimmed = raw.status.trim();
-    if ((PROJECT_STATUSES as readonly string[]).includes(trimmed)) {
+    const normalized = normalizeStatusInput(raw.status);
+    if (normalized) {
       return {
         isValid: true,
         value: {
-          status: trimmed as ProjectStatus,
+          status: normalized,
         },
       };
     }

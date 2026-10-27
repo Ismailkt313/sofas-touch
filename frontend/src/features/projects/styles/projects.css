@@ -1824,12 +1824,21 @@
   border-style: solid;
 }
 
+.project-status-option:focus-visible {
+  outline: 2px solid var(--sts-walnut);
+  outline-offset: 2px;
+}
+
 .project-status-option__radio {
   position: absolute;
   opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .project-status-option__content {
@@ -1855,6 +1864,18 @@
   color: var(--sts-taupe);
   background-color: #ede4d8;
   padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+}
+
+.project-status-option__new-tag {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #1a5834;
+  background-color: #dcf2e3;
+  border: 1px solid #b7dfc3;
+  padding: 0.12rem 0.45rem;
   border-radius: 4px;
 }
 
@@ -1902,6 +1923,46 @@
   transform: scale(1);
 }
 
+.project-status-modal__transition-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.75rem 0.95rem;
+  border-radius: 10px;
+  background-color: #fbf8f4;
+  border: 1px solid #eadbc9;
+}
+
+.project-status-modal__transition-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sts-taupe);
+}
+
+.project-status-modal__transition-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.project-status-modal__transition-arrow {
+  width: 14px;
+  height: 14px;
+  color: var(--sts-taupe);
+  flex-shrink: 0;
+}
+
+.project-status-modal__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--sts-taupe);
+  text-align: center;
+  padding: 0.35rem 0;
+}
+
 .project-status-modal__note {
   display: flex;
   align-items: flex-start;
@@ -1920,6 +1981,29 @@
   height: 17px;
   flex-shrink: 0;
   margin-top: 1px;
+}
+
+.project-status-badge-trigger {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.project-status-badge-trigger:hover {
+  transform: translateY(-1px);
+  opacity: 0.85;
+}
+
+.project-status-badge-trigger:focus-visible {
+  outline: 2px solid var(--sts-walnut);
+  outline-offset: 2px;
 }
 
 .projects-btn-spinner {

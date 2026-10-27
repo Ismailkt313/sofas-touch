@@ -124,7 +124,14 @@ export function ProjectsTable({
                 </td>
 
                 <td>
-                  <ProjectStatusBadge status={project.status} />
+                  <button
+                    type="button"
+                    className="project-status-badge-trigger"
+                    onClick={() => onEditStatus?.(project)}
+                    title={`Edit status for ${project.projectId || project.name} (currently ${project.status})`}
+                  >
+                    <ProjectStatusBadge status={project.status} />
+                  </button>
                 </td>
 
                 <td className="projects-table__col-actions">

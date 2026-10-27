@@ -102,7 +102,7 @@ export class ProjectRepository implements IProjectRepository {
           .findOneAndUpdate(
             { _id: PROJECT_SEQUENCE_COUNTER_ID },
             updateQuery,
-            { upsert: true, new: true },
+            { upsert: true, returnDocument: 'after' },
           )
           .lean()
           .exec();
@@ -392,11 +392,25 @@ export class ProjectRepository implements IProjectRepository {
         }
       }
 
-      const byCode = await this.projectModel
+      let byCode = await this.projectModel
         .findOne({ projectId: normalizedUpper })
         .lean()
         .exec();
-      return (byCode as unknown as IProject) || null;
+      if (byCode) {
+        return byCode as unknown as IProject;
+      }
+
+      byCode = await this.projectModel
+        .findOne({
+          projectId: { $regex: new RegExp(`^${escapeRegex(trimmed)}$`, 'i') },
+        })
+        .lean()
+        .exec();
+      if (byCode) {
+        return byCode as unknown as IProject;
+      }
+
+      return null;
     }
 
     const direct = this.projectMemory.get(trimmed);
