@@ -17,7 +17,6 @@ export function validateListUsersDto(
 ): ValidationResult<ListUsersDto> {
   const errors: Record<string, string> = {};
 
-  // Page validation
   let page = 1;
   if (query.page !== undefined && query.page !== null && query.page !== '') {
     const parsedPage = Number(query.page);
@@ -28,7 +27,6 @@ export function validateListUsersDto(
     }
   }
 
-  // Limit validation (default 10, max 100)
   let limit = 10;
   if (query.limit !== undefined && query.limit !== null && query.limit !== '') {
     const parsedLimit = Number(query.limit);
@@ -41,7 +39,6 @@ export function validateListUsersDto(
     }
   }
 
-  // Search validation
   let search: string | undefined;
   if (
     query.search !== undefined &&
@@ -56,7 +53,6 @@ export function validateListUsersDto(
     }
   }
 
-  // Role filter validation
   let role: 'admin' | 'data_entry' | undefined;
   if (query.role !== undefined && query.role !== null && query.role !== '') {
     if (typeof query.role === 'string') {
@@ -73,7 +69,6 @@ export function validateListUsersDto(
     }
   }
 
-  // Status filter validation
   let status: 'active' | 'inactive' | undefined;
   if (query.status !== undefined && query.status !== null && query.status !== '') {
     if (typeof query.status === 'string') {

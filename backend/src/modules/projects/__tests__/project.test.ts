@@ -683,6 +683,63 @@ async function runTests(): Promise<void> {
     });
     assert.strictEqual(evalNewWindow.newlyTriggeredCount, 1);
     assert.strictEqual(evalNewWindow.activeWarningsCount, 1);
+
+    const beforeNoopProject = await svc.getProjectByIdOrCode(activePrj.projectId);
+    await svc.updateProject(activePrj.projectId, {
+      status: beforeNoopProject.status,
+    });
+    const afterNoopProject = await svc.getProjectByIdOrCode(activePrj.projectId);
+    assert.strictEqual(
+      new Date(afterNoopProject.lastActivityAt).getTime(),
+      new Date(beforeNoopProject.lastActivityAt).getTime(),
+    );
+    const activeWarningsAfterNoop = await svc.listActivityWarnings({
+      page: 1,
+      limit: 20,
+      status: 'active',
+      evaluate: false,
+      inactivityDays: 14,
+    });
+    assert.strictEqual(activeWarningsAfterNoop.total, 1);
+
+    const evalIncreasedThreshold = await svc.evaluateProjectInactivity({
+      inactivityDays: 30,
+      referenceDate: fortyDaysLater,
+    });
+    assert.strictEqual(evalIncreasedThreshold.newlyTriggeredCount, 0);
+    assert.strictEqual(evalIncreasedThreshold.activeWarningsCount, 0);
+
+    const dupAlert1 = await repo.createCostAlert({
+      projectRecordId: activePrj.id,
+      projectId: activePrj.projectId,
+      projectName: activePrj.name,
+      thresholdType: 'warning',
+      thresholdPercent: 80,
+      contractValue: 18000,
+      totalCost: 15000,
+      costPercentage: 83.33,
+      message: 'Initial active warning',
+      status: 'active',
+      triggeredAt: new Date(),
+      resolvedAt: null,
+      resolvedReason: null,
+    });
+    const dupAlert2 = await repo.createCostAlert({
+      projectRecordId: activePrj.id,
+      projectId: activePrj.projectId,
+      projectName: activePrj.name,
+      thresholdType: 'warning',
+      thresholdPercent: 80,
+      contractValue: 18000,
+      totalCost: 15500,
+      costPercentage: 86.11,
+      message: 'Duplicate active warning attempt',
+      status: 'active',
+      triggeredAt: new Date(),
+      resolvedAt: null,
+      resolvedReason: null,
+    });
+    assert.strictEqual(String(dupAlert1._id), String(dupAlert2._id));
   }
   console.log('✓ Project Activity Warnings passed.');
 

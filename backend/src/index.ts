@@ -14,7 +14,7 @@ const PORT = env.PORT;
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 connectDB();
-//
+
 const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
     if (!origin) {

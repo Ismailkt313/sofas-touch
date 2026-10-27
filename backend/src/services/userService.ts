@@ -65,7 +65,6 @@ export function validateUserCredentials(
 ): UserPublic | null {
   const user = findUserByEmail(email);
   if (!user) {
-    // Run dummy compare to mitigate timing-based user enumeration attacks
     bcrypt.compareSync(plainPassword, '$2a$10$abcdefghijklmnopqrstuuNOPQRSTUVWXYZ1234567890abcdefghi');
     return null;
   }

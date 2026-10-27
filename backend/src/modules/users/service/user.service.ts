@@ -275,7 +275,6 @@ export class UserService implements IUserService {
     }
 
     if (dto.role !== undefined) {
-      // Prevent an admin from self-demoting their account
       if (
         (String(existing._id) === currentAdminId ||
           existing.email.toLowerCase() === currentAdminId.toLowerCase()) &&
@@ -332,7 +331,6 @@ export class UserService implements IUserService {
       throw new UserNotFoundError();
     }
 
-    // Prevent Admin from accidentally deactivating their own account
     if (
       (String(existing._id) === currentAdminId ||
         existing.email.toLowerCase() === currentAdminId.toLowerCase()) &&
@@ -361,7 +359,6 @@ export class UserService implements IUserService {
 
     const cleanId = id.trim();
 
-    // Prevent self-approval
     if (cleanId === currentAdminId) {
       throw new SelfApprovalError('Administrators cannot approve their own account.');
     }
@@ -386,7 +383,6 @@ export class UserService implements IUserService {
 
     const approved = await this.userRepository.approveUser(cleanId, currentAdminId);
     if (!approved) {
-      // Concurrently updated by another admin
       const recheck = await this.userRepository.findById(cleanId);
       if (recheck && recheck.approvalStatus !== 'pending') {
         throw new InvalidOperationError(
@@ -410,7 +406,6 @@ export class UserService implements IUserService {
 
     const cleanId = id.trim();
 
-    // Prevent self-rejection
     if (cleanId === currentAdminId) {
       throw new SelfApprovalError('Administrators cannot reject their own account.');
     }
@@ -439,7 +434,6 @@ export class UserService implements IUserService {
       reason,
     );
     if (!rejected) {
-      // Concurrently updated by another admin
       const recheck = await this.userRepository.findById(cleanId);
       if (recheck && recheck.approvalStatus !== 'pending') {
         throw new InvalidOperationError(

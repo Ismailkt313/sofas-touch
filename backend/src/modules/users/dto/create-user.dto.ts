@@ -29,7 +29,6 @@ export function validateCreateUserDto(input: unknown): ValidationResult<CreateUs
 
   const raw = input as Record<string, unknown>;
 
-  // Name validation
   if (
     raw.name === undefined ||
     raw.name === null ||
@@ -46,7 +45,6 @@ export function validateCreateUserDto(input: unknown): ValidationResult<CreateUs
     }
   }
 
-  // Email validation
   if (
     raw.email === undefined ||
     raw.email === null ||
@@ -61,7 +59,6 @@ export function validateCreateUserDto(input: unknown): ValidationResult<CreateUs
     }
   }
 
-  // Password validation
   if (
     raw.password === undefined ||
     raw.password === null ||
@@ -79,7 +76,6 @@ export function validateCreateUserDto(input: unknown): ValidationResult<CreateUs
     }
   }
 
-  // Phone validation (optional)
   let sanitizedPhone = '';
   if (raw.phone !== undefined && raw.phone !== null && raw.phone !== '') {
     if (typeof raw.phone !== 'string') {
@@ -99,7 +95,6 @@ export function validateCreateUserDto(input: unknown): ValidationResult<CreateUs
     }
   }
 
-  // Role validation: strictly Data Entry Operator
   if (raw.role !== undefined && raw.role !== null && raw.role !== '') {
     if (typeof raw.role === 'string') {
       const normalizedRole = raw.role.trim().toLowerCase().replace(/\s+/g, '_');

@@ -15,7 +15,6 @@ export function validateListPendingApprovalsDto(
 ): ValidationResult<ListPendingApprovalsDto> {
   const errors: Record<string, string> = {};
 
-  // Page validation
   let page = 1;
   if (query.page !== undefined && query.page !== null && query.page !== '') {
     const parsedPage = Number(query.page);
@@ -26,7 +25,6 @@ export function validateListPendingApprovalsDto(
     }
   }
 
-  // Limit validation (default 10, max 100)
   let limit = 10;
   if (query.limit !== undefined && query.limit !== null && query.limit !== '') {
     const parsedLimit = Number(query.limit);
@@ -39,7 +37,6 @@ export function validateListPendingApprovalsDto(
     }
   }
 
-  // Search validation
   let search: string | undefined;
   if (
     query.search !== undefined &&

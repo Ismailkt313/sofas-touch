@@ -28,11 +28,9 @@ const userController: IUserController = new UserController(userService);
 
 const userRouter = Router();
 
-// Protect every endpoint with authentication and Admin-only authorization
 userRouter.use(verifyToken);
 userRouter.use(requireAdmin);
 
-// Approval & Listing routes (defined before /:id)
 userRouter.get('/pending-approvals', userController.listPendingApprovals);
 userRouter.get('/', userController.list);
 userRouter.get('/:id', userController.getById);
