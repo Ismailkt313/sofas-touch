@@ -3,15 +3,16 @@ import { ProjectRowActionsMenu } from './ProjectRowActionsMenu'
 import {
   ProjectCostThresholdBadge,
   ProjectInactivityBadge,
-  ProjectStatusBadge,
 } from './ProjectStatusBadge'
+import { ProjectStatusDropdown } from './ProjectStatusDropdown'
 
 export function ProjectsTable({
   projects,
   activeWarningByProjectCode,
+  updatingStatusKey,
   onViewDetails,
   onEdit,
-  onEditStatus,
+  onStatusChange,
 }) {
   return (
     <div className="projects-table-wrap">
@@ -34,6 +35,12 @@ export function ProjectsTable({
         <tbody>
           {projects.map((project) => {
             const targetKey = project.projectId || project.id
+            const isUpdatingStatus =
+              Boolean(updatingStatusKey) &&
+              (String(project.projectId || '').toUpperCase() ===
+                String(updatingStatusKey).toUpperCase() ||
+                String(project.id || '') === String(updatingStatusKey))
+
             const inactivityWarning = project.projectId
               ? activeWarningByProjectCode?.get(
                   project.projectId.toUpperCase(),
@@ -105,7 +112,9 @@ export function ProjectsTable({
                 <td>
                   <span
                     className={
-                      project.siteLocation ? 'projects-cell-location' : 'projects-cell-muted'
+                      project.siteLocation
+                        ? 'projects-cell-location'
+                        : 'projects-cell-muted'
                     }
                     title={
                       project.siteLocation
@@ -124,14 +133,11 @@ export function ProjectsTable({
                 </td>
 
                 <td>
-                  <button
-                    type="button"
-                    className="project-status-badge-trigger"
-                    onClick={() => onEditStatus?.(project)}
-                    title={`Edit status for ${project.projectId || project.name} (currently ${project.status})`}
-                  >
-                    <ProjectStatusBadge status={project.status} />
-                  </button>
+                  <ProjectStatusDropdown
+                    project={project}
+                    isUpdating={isUpdatingStatus}
+                    onStatusChange={onStatusChange}
+                  />
                 </td>
 
                 <td className="projects-table__col-actions">
@@ -139,7 +145,8 @@ export function ProjectsTable({
                     project={project}
                     onViewDetails={onViewDetails}
                     onEdit={onEdit}
-                    onEditStatus={onEditStatus}
+                    onStatusChange={onStatusChange}
+                    showQuickViewButton
                   />
                 </td>
               </tr>

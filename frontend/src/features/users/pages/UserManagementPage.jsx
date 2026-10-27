@@ -148,6 +148,7 @@ export function UserManagementPage({ currentUser, onNavigate }) {
             roleFilter={roleFilter}
             statusFilter={statusFilter}
             hasActiveFilters={hasActiveFilters}
+            totalFiltered={totalFiltered}
             onSearchChange={handleSearchChange}
             onRoleFilterChange={handleRoleFilterChange}
             onStatusFilterChange={handleStatusFilterChange}

@@ -32,6 +32,8 @@ export function UserApprovalsPage({ currentUser, onNavigate }) {
   const [processingRequestId, setProcessingRequestId] = useState(null)
   const [actionError, setActionError] = useState('')
   const [feedbackBanner, setFeedbackBanner] = useState(null)
+  const [isIntegrationBannerExpanded, setIsIntegrationBannerExpanded] =
+    useState(false)
 
   const activeViewingRequest = useMemo(() => {
     const targetId = viewingRequestId || selectedNotificationRequestId
@@ -183,7 +185,7 @@ export function UserApprovalsPage({ currentUser, onNavigate }) {
   return (
     <div className="approvals-page">
       <header className="approvals-header">
-        <div>
+        <div className="approvals-header__text">
           <h1 className="approvals-header__title">User Approvals</h1>
           <p className="approvals-header__subtitle">
             Review and manage Data Entry account signup requests.
@@ -269,31 +271,47 @@ export function UserApprovalsPage({ currentUser, onNavigate }) {
 
       {integrationStatus === 'missing_backend_api' && !isLoading && !error ? (
         <aside
-          className="approvals-integration-banner"
+          className={`approvals-integration-banner${
+            isIntegrationBannerExpanded
+              ? ' approvals-integration-banner--expanded'
+              : ''
+          }`}
           aria-label="Backend approval integration status"
         >
           <div className="approvals-integration-banner__header">
-            <span className="approvals-integration-banner__badge">
-              Backend API Pending
-            </span>
-            <strong className="approvals-integration-banner__title">
-              Signup approval &amp; notification endpoints are not yet
-              configured on the server
-            </strong>
+            <div className="approvals-integration-banner__header-main">
+              <span className="approvals-integration-banner__badge">
+                Backend API Pending
+              </span>
+              <strong className="approvals-integration-banner__title">
+                Signup approval &amp; notification endpoints are not yet
+                configured on the server
+              </strong>
+            </div>
+            <button
+              type="button"
+              className="approvals-integration-banner__toggle"
+              onClick={() => setIsIntegrationBannerExpanded((prev) => !prev)}
+              aria-expanded={isIntegrationBannerExpanded}
+            >
+              {isIntegrationBannerExpanded ? 'Hide' : 'Details'}
+            </button>
           </div>
-          <p className="approvals-integration-banner__desc">
-            No fake requests or simulated approvals are shown. Once the backend
-            exposes approval status fields and review endpoints, pending Data
-            Entry signups and header notifications will populate here
-            automatically.
-          </p>
-          {missingItems.length > 0 ? (
-            <ul className="approvals-integration-banner__list">
-              {missingItems.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          ) : null}
+          <div className="approvals-integration-banner__details">
+            <p className="approvals-integration-banner__desc">
+              No fake requests or simulated approvals are shown. Once the
+              backend exposes approval status fields and review endpoints,
+              pending Data Entry signups and header notifications will populate
+              here automatically.
+            </p>
+            {missingItems.length > 0 ? (
+              <ul className="approvals-integration-banner__list">
+                {missingItems.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         </aside>
       ) : null}
 
@@ -307,6 +325,7 @@ export function UserApprovalsPage({ currentUser, onNavigate }) {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           counts={counts}
+          filteredCount={filteredRequests.length}
           hasActiveFilters={hasActiveFilters}
           onResetFilters={resetFilters}
         />

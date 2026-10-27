@@ -1,9 +1,9 @@
 import { ProjectFormModal } from '../components/ProjectFormModal'
-import { ProjectStatusModal } from '../components/ProjectStatusModal'
 import {
   ProjectCostThresholdBadge,
   ProjectStatusBadge,
 } from '../components/ProjectStatusBadge'
+import { ProjectStatusDropdown } from '../components/ProjectStatusDropdown'
 import { useProjectDetails } from '../hooks/useProjectDetails'
 import {
   formatActivityTypeLabel,
@@ -40,9 +40,7 @@ export function ProjectDetailsPage({
     closeEditModal,
     handleEditSubmit,
 
-    isStatusModalOpen,
-    openStatusModal,
-    closeStatusModal,
+    isUpdatingStatus,
     handleStatusSubmit,
 
     feedbackBanner,
@@ -264,14 +262,11 @@ export function ProjectDetailsPage({
             <span className="project-code-pill project-code-pill--lg">
               {project.projectId}
             </span>
-            <button
-              type="button"
-              className="project-status-badge-trigger"
-              onClick={openStatusModal}
-              title={`Edit status for ${project.projectId} (currently ${project.status})`}
-            >
-              <ProjectStatusBadge status={project.status} />
-            </button>
+            <ProjectStatusDropdown
+              project={project}
+              isUpdating={isUpdatingStatus}
+              onStatusChange={handleStatusSubmit}
+            />
             <span className="project-category-pill">{project.category}</span>
             <ProjectCostThresholdBadge
               costThresholdState={authoritativeThresholdState}
@@ -302,14 +297,6 @@ export function ProjectDetailsPage({
               {isRecalculating ? 'Recalculating...' : 'Recalculate Summary'}
             </button>
           ) : null}
-
-          <button
-            type="button"
-            className="admin-btn admin-btn--secondary"
-            onClick={openStatusModal}
-          >
-            Edit Status
-          </button>
 
           <button
             type="button"
@@ -835,16 +822,6 @@ export function ProjectDetailsPage({
           isOpen
           onClose={closeEditModal}
           onSubmit={handleEditSubmit}
-        />
-      ) : null}
-
-      {isStatusModalOpen && project ? (
-        <ProjectStatusModal
-          key={`detail-status-${project.id || project.projectId}`}
-          project={project}
-          isOpen={isStatusModalOpen}
-          onClose={closeStatusModal}
-          onSubmit={handleStatusSubmit}
         />
       ) : null}
     </div>

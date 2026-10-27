@@ -14,6 +14,9 @@ export function UsersMobileList({
     <div className="users-mobile-list" role="list" aria-label="Users list">
       {users.map((user) => {
         const isSelf = isSelfUser(user)
+        const hasPhone = Boolean(user.phone && String(user.phone).trim())
+        const joinedLabel = formatJoinedDate(user.createdAt)
+
         return (
           <article
             key={user.id || user.email}
@@ -29,7 +32,13 @@ export function UsersMobileList({
                 />
                 <div className="user-mobile-card__titles">
                   <div className="user-mobile-card__name-row">
-                    <span className="user-mobile-card__name">{user.name}</span>
+                    <button
+                      type="button"
+                      className="user-mobile-card__name-btn"
+                      onClick={() => onView(user)}
+                    >
+                      {user.name}
+                    </button>
                     {isSelf ? (
                       <span className="user-self-pill">You</span>
                     ) : null}
@@ -47,24 +56,26 @@ export function UsersMobileList({
               />
             </div>
 
-            <div className="user-mobile-card__badges">
-              <RoleBadge roleKey={user.roleKey} roleLabel={user.roleLabel} />
-              <StatusBadge
-                isActive={user.isActive}
-                statusLabel={user.statusLabel}
-              />
-            </div>
+            <div className="user-mobile-card__footer">
+              <div className="user-mobile-card__badges">
+                <RoleBadge roleKey={user.roleKey} roleLabel={user.roleLabel} />
+                <StatusBadge
+                  isActive={user.isActive}
+                  statusLabel={user.statusLabel}
+                />
+              </div>
 
-            <dl className="user-mobile-card__meta">
-              <div className="user-mobile-card__meta-item">
-                <dt>Phone</dt>
-                <dd>{user.phone || '—'}</dd>
+              <div className="user-mobile-card__secondary">
+                {hasPhone ? (
+                  <span className="user-mobile-card__phone">{user.phone}</span>
+                ) : null}
+                {joinedLabel && joinedLabel !== '—' ? (
+                  <span className="user-mobile-card__joined">
+                    Joined {joinedLabel}
+                  </span>
+                ) : null}
               </div>
-              <div className="user-mobile-card__meta-item">
-                <dt>Joined</dt>
-                <dd>{formatJoinedDate(user.createdAt)}</dd>
-              </div>
-            </dl>
+            </div>
           </article>
         )
       })}
