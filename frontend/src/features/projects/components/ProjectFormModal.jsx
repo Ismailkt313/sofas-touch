@@ -1,20 +1,20 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { Dropdown } from '../../../components/common'
 import {
   PROJECT_CATEGORY_OPTIONS,
   PROJECT_STATUS_OPTIONS,
 } from '../services/projectService'
-import { Dropdown } from '../../../components/common'
 
-function buildInitialFormValues(project) {
-  if (!project) {
+const MAX_NAME_LENGTH = 200
+const MAX_DESCRIPTION_LENGTH = 2000
+
+function buildInitialFormValues(project, isEditMode) {
+  if (!isEditMode || !project) {
     return {
       name: '',
       clientName: '',
-      category: 'Modular Sofa',
-      status: 'In Progress',
-      siteLocation: '',
+      category: PROJECT_CATEGORY_OPTIONS[0],
       contractValue: '',
-      costAlertThresholdPercent: '80',
       description: '',
     }
   }
@@ -24,11 +24,10 @@ function buildInitialFormValues(project) {
     clientName: project.clientName || '',
     category: PROJECT_CATEGORY_OPTIONS.includes(project.category)
       ? project.category
-      : 'Modular Sofa',
+      : PROJECT_CATEGORY_OPTIONS[0],
     status: PROJECT_STATUS_OPTIONS.includes(project.status)
       ? project.status
-      : 'In Progress',
-    siteLocation: project.siteLocation || '',
+      : PROJECT_STATUS_OPTIONS[0],
     contractValue:
       project.contractValue !== undefined && project.contractValue !== null
         ? String(project.contractValue)
@@ -37,65 +36,67 @@ function buildInitialFormValues(project) {
       project.costAlertThresholdPercent !== undefined &&
       project.costAlertThresholdPercent !== null
         ? String(project.costAlertThresholdPercent)
-        : '80',
+        : '',
     description: project.description || '',
   }
 }
 
-function validateProjectFormValues(values) {
+function validateProjectFormValues(values, isEditMode) {
   const errors = {}
 
   const trimmedName = String(values.name || '').trim()
   if (!trimmedName) {
     errors.name = 'Project name is required.'
-  } else if (trimmedName.length > 200) {
-    errors.name = 'Project name cannot exceed 200 characters.'
+  } else if (trimmedName.length > MAX_NAME_LENGTH) {
+    errors.name = `Project name cannot exceed ${MAX_NAME_LENGTH} characters.`
   }
 
   const trimmedClient = String(values.clientName || '').trim()
   if (!trimmedClient) {
     errors.clientName = 'Client name is required.'
-  } else if (trimmedClient.length > 200) {
-    errors.clientName = 'Client name cannot exceed 200 characters.'
+  } else if (trimmedClient.length > MAX_NAME_LENGTH) {
+    errors.clientName = `Client name cannot exceed ${MAX_NAME_LENGTH} characters.`
   }
 
   if (!PROJECT_CATEGORY_OPTIONS.includes(values.category)) {
     errors.category = 'Please select a valid project category.'
   }
 
-  if (!PROJECT_STATUS_OPTIONS.includes(values.status)) {
+  if (isEditMode && !PROJECT_STATUS_OPTIONS.includes(values.status)) {
     errors.status = 'Please select a valid project status.'
   }
 
   const rawContract = String(values.contractValue ?? '').trim()
   if (rawContract === '') {
-    errors.contractValue = 'Fixed contract value is required (enter 0 or greater).'
+    errors.contractValue = 'Fixed contract value is required.'
   } else {
     const parsedContract = Number(rawContract)
     if (!Number.isFinite(parsedContract) || parsedContract < 0) {
       errors.contractValue =
-        'Contract value must be a valid number greater than or equal to 0.'
+        'Enter a valid amount greater than or equal to 0.'
     }
   }
 
-  const rawThreshold = String(values.costAlertThresholdPercent ?? '').trim()
-  if (rawThreshold !== '') {
-    const parsedThreshold = Number(rawThreshold)
-    if (
-      !Number.isFinite(parsedThreshold) ||
-      parsedThreshold <= 0 ||
-      parsedThreshold >= 100
-    ) {
-      errors.costAlertThresholdPercent =
-        'Cost warning threshold must be greater than 0 and less than 100.'
+  if (isEditMode) {
+    const rawThreshold = String(values.costAlertThresholdPercent ?? '').trim()
+    if (rawThreshold !== '') {
+      const parsedThreshold = Number(rawThreshold)
+      if (
+        !Number.isFinite(parsedThreshold) ||
+        parsedThreshold <= 0 ||
+        parsedThreshold >= 100
+      ) {
+        errors.costAlertThresholdPercent =
+          'Threshold must be greater than 0 and less than 100.'
+      }
     }
   }
 
   if (
     typeof values.description === 'string' &&
-    values.description.trim().length > 2000
+    values.description.trim().length > MAX_DESCRIPTION_LENGTH
   ) {
-    errors.description = 'Description cannot exceed 2000 characters.'
+    errors.description = `Notes cannot exceed ${MAX_DESCRIPTION_LENGTH} characters.`
   }
 
   return errors
@@ -109,15 +110,19 @@ export function ProjectFormModal({
   onSubmit,
 }) {
   const isEditMode = mode === 'edit' && Boolean(project)
-  const [values, setValues] = useState(() => buildInitialFormValues(project))
+  const [values, setValues] = useState(() =>
+    buildInitialFormValues(project, isEditMode),
+  )
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isAdditionalOpen, setIsAdditionalOpen] = useState(false)
 
   const submittingLockRef = useRef(false)
   const nameInputRef = useRef(null)
   const titleId = useId()
   const subtitleId = useId()
+  const additionalPanelId = useId()
 
   useEffect(() => {
     if (!isOpen) {
@@ -145,11 +150,10 @@ export function ProjectFormModal({
     return null
   }
 
-  const handleChange = (event) => {
-    const { name, value } = event.target
+  const updateFieldValue = (fieldName, nextValue) => {
     const nextValues = {
       ...values,
-      [name]: value,
+      [fieldName]: nextValue,
     }
     setValues(nextValues)
 
@@ -157,13 +161,18 @@ export function ProjectFormModal({
       setSubmitError('')
     }
 
-    if (errors[name]) {
-      const revalidated = validateProjectFormValues(nextValues)
+    if (errors[fieldName]) {
+      const revalidated = validateProjectFormValues(nextValues, isEditMode)
       setErrors((prev) => ({
         ...prev,
-        [name]: revalidated[name] || '',
+        [fieldName]: revalidated[fieldName] || '',
       }))
     }
+  }
+
+  const handleChange = (event) => {
+    const { name, value } = event.target
+    updateFieldValue(name, value)
   }
 
   const handleFormSubmit = async (event) => {
@@ -173,10 +182,16 @@ export function ProjectFormModal({
     }
 
     setSubmitError('')
-    const validationErrors = validateProjectFormValues(values)
+    const validationErrors = validateProjectFormValues(values, isEditMode)
     setErrors(validationErrors)
 
     if (Object.keys(validationErrors).length > 0) {
+      if (
+        validationErrors.description ||
+        validationErrors.costAlertThresholdPercent
+      ) {
+        setIsAdditionalOpen(true)
+      }
       return
     }
 
@@ -184,25 +199,26 @@ export function ProjectFormModal({
     setIsSubmitting(true)
 
     try {
-      const normalizedPayload = {
+      const payload = {
         name: values.name.trim(),
         clientName: values.clientName.trim(),
         category: values.category,
-        status: values.status,
-        siteLocation: values.siteLocation.trim(),
         contractValue: Number(String(values.contractValue).trim()),
-        costAlertThresholdPercent:
-          String(values.costAlertThresholdPercent).trim() !== ''
-            ? Number(String(values.costAlertThresholdPercent).trim())
-            : 80,
         description: values.description.trim(),
       }
 
       if (isEditMode) {
+        payload.status = values.status
+        const trimmedThreshold = String(
+          values.costAlertThresholdPercent ?? '',
+        ).trim()
+        if (trimmedThreshold !== '') {
+          payload.costAlertThresholdPercent = Number(trimmedThreshold)
+        }
         const targetId = project.projectId || project.id
-        await onSubmit(targetId, normalizedPayload)
+        await onSubmit(targetId, payload)
       } else {
-        await onSubmit(normalizedPayload)
+        await onSubmit(payload)
       }
     } catch (err) {
       if (err?.fieldErrors && typeof err.fieldErrors === 'object') {
@@ -210,6 +226,12 @@ export function ProjectFormModal({
           ...prev,
           ...err.fieldErrors,
         }))
+        if (
+          err.fieldErrors.description ||
+          err.fieldErrors.costAlertThresholdPercent
+        ) {
+          setIsAdditionalOpen(true)
+        }
       }
       setSubmitError(
         err instanceof Error
@@ -221,6 +243,12 @@ export function ProjectFormModal({
       setIsSubmitting(false)
     }
   }
+
+  const hasNotesValue = Boolean(values.description.trim())
+  const hasAdditionalError = Boolean(
+    errors.description || errors.costAlertThresholdPercent,
+  )
+  const descriptionLength = values.description.length
 
   return (
     <div
@@ -238,15 +266,15 @@ export function ProjectFormModal({
         aria-labelledby={titleId}
         aria-describedby={subtitleId}
       >
-        <div className="admin-modal__header">
-          <div>
+        <div className="admin-modal__header projects-form-modal__header">
+          <div className="projects-form-modal__heading">
             <h2 id={titleId} className="admin-modal__title">
               {isEditMode ? 'Edit Project' : 'Add New Project'}
             </h2>
             <p id={subtitleId} className="admin-modal__subtitle">
               {isEditMode
-                ? `Update manufacturing details, contract value, or status for ${project.projectId}.`
-                : 'Register a new client manufacturing project. The sequential Project ID is assigned automatically.'}
+                ? `Update core details or scope notes for ${project.projectId}.`
+                : 'Enter essential details to register a new manufacturing project.'}
             </p>
           </div>
 
@@ -268,7 +296,11 @@ export function ProjectFormModal({
           </button>
         </div>
 
-        <form onSubmit={handleFormSubmit} noValidate>
+        <form
+          className="projects-form-modal__form"
+          onSubmit={handleFormSubmit}
+          noValidate
+        >
           <div className="admin-modal__body projects-modal-body">
             {submitError ? (
               <div
@@ -279,24 +311,26 @@ export function ProjectFormModal({
               </div>
             ) : null}
 
-            <div className="projects-id-readonly">
-              <span className="projects-id-readonly__label">Project ID</span>
+            <div className="projects-id-info" aria-label="Project ID information">
+              <span className="projects-id-info__label">Project ID</span>
               {isEditMode ? (
-                <div className="projects-id-readonly__value-row">
+                <span className="projects-id-info__value">
                   <span className="project-code-pill">{project.projectId}</span>
-                  <span className="projects-id-readonly__hint">
-                    Immutable system identifier
-                  </span>
-                </div>
+                  <span className="projects-id-info__note">Immutable</span>
+                </span>
               ) : (
-                <span className="projects-id-readonly__auto">
-                  Generated automatically by server upon save (e.g. PRJ-0001)
+                <span className="projects-id-info__note">
+                  Auto-generated on save (e.g. PRJ-0001)
                 </span>
               )}
             </div>
 
             <div className="projects-form-grid">
-              <div className="projects-form-field projects-form-field--full">
+              <div
+                className={`projects-form-field${
+                  isEditMode ? ' projects-form-field--full' : ''
+                }`}
+              >
                 <label
                   htmlFor="project-form-name"
                   className="projects-form-field__label"
@@ -308,10 +342,11 @@ export function ProjectFormModal({
                   ref={nameInputRef}
                   name="name"
                   type="text"
+                  maxLength={MAX_NAME_LENGTH}
                   className={`projects-form-field__input${
                     errors.name ? ' projects-form-field__input--error' : ''
                   }`}
-                  placeholder="e.g. Belgravia Residence Modular Sectional"
+                  placeholder="e.g. Belgravia Modular Sectional"
                   value={values.name}
                   onChange={handleChange}
                   disabled={isSubmitting}
@@ -336,6 +371,7 @@ export function ProjectFormModal({
                   id="project-form-client"
                   name="clientName"
                   type="text"
+                  maxLength={MAX_NAME_LENGTH}
                   className={`projects-form-field__input${
                     errors.clientName
                       ? ' projects-form-field__input--error'
@@ -368,7 +404,7 @@ export function ProjectFormModal({
                   variant="form"
                   value={values.category}
                   options={PROJECT_CATEGORY_OPTIONS}
-                  onChange={(val) => setValues((prev) => ({ ...prev, category: val }))}
+                  onChange={(val) => updateFieldValue('category', val)}
                   disabled={isSubmitting}
                   error={Boolean(errors.category)}
                 />
@@ -412,121 +448,153 @@ export function ProjectFormModal({
                 ) : null}
               </div>
 
-              <div className="projects-form-field">
-                <label
-                  htmlFor="project-form-status"
-                  className="projects-form-field__label"
-                >
-                  Project Status
-                </label>
-                <Dropdown
-                  id="project-form-status"
-                  name="status"
-                  variant="form"
-                  value={values.status}
-                  options={PROJECT_STATUS_OPTIONS}
-                  onChange={(val) => setValues((prev) => ({ ...prev, status: val }))}
-                  disabled={isSubmitting}
-                  error={Boolean(errors.status)}
-                />
-                {errors.status ? (
-                  <p className="projects-form-field__error" role="alert">
-                    {errors.status}
-                  </p>
-                ) : null}
-              </div>
+              {isEditMode ? (
+                <div className="projects-form-field">
+                  <label
+                    htmlFor="project-form-status"
+                    className="projects-form-field__label"
+                  >
+                    Project Status
+                  </label>
+                  <Dropdown
+                    id="project-form-status"
+                    name="status"
+                    variant="form"
+                    value={values.status}
+                    options={PROJECT_STATUS_OPTIONS}
+                    onChange={(val) => updateFieldValue('status', val)}
+                    disabled={isSubmitting}
+                    error={Boolean(errors.status)}
+                  />
+                  {errors.status ? (
+                    <p className="projects-form-field__error" role="alert">
+                      {errors.status}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
 
-              <div className="projects-form-field">
-                <label
-                  htmlFor="project-form-site-location"
-                  className="projects-form-field__label"
+            <div className="projects-additional-section">
+              <button
+                type="button"
+                className={`projects-additional-toggle${
+                  isAdditionalOpen ? ' projects-additional-toggle--open' : ''
+                }${
+                  hasAdditionalError ? ' projects-additional-toggle--error' : ''
+                }`}
+                onClick={() => setIsAdditionalOpen((prev) => !prev)}
+                aria-expanded={isAdditionalOpen}
+                aria-controls={additionalPanelId}
+              >
+                <span className="projects-additional-toggle__left">
+                  <span className="projects-additional-toggle__title">
+                    Additional Details
+                  </span>
+                  <span className="projects-additional-toggle__meta">
+                    {hasNotesValue ? 'Notes added' : 'Optional'}
+                  </span>
+                </span>
+                <svg
+                  className="projects-additional-toggle__chevron"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden="true"
                 >
-                  Site Location
-                </label>
-                <input
-                  id="project-form-site-location"
-                  name="siteLocation"
-                  type="text"
-                  className="projects-form-field__input"
-                  placeholder="e.g. Kochi / Panampilly Nagar"
-                  value={values.siteLocation}
-                  onChange={handleChange}
-                  disabled={isSubmitting}
-                />
-                <p className="projects-form-field__hint">
-                  Note: Dedicated siteLocation and client contact fields are not
-                  yet persisted in the current backend Project schema.
-                </p>
-              </div>
+                  <path
+                    d="M4 6L8 10L12 6"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
 
-              <div className="projects-form-field">
-                <label
-                  htmlFor="project-form-threshold"
-                  className="projects-form-field__label"
+              {isAdditionalOpen ? (
+                <div
+                  id={additionalPanelId}
+                  className="projects-additional-panel"
                 >
-                  Cost Warning Threshold (%)
-                </label>
-                <input
-                  id="project-form-threshold"
-                  name="costAlertThresholdPercent"
-                  type="number"
-                  min="1"
-                  max="99"
-                  step="1"
-                  className={`projects-form-field__input${
-                    errors.costAlertThresholdPercent
-                      ? ' projects-form-field__input--error'
-                      : ''
-                  }`}
-                  placeholder="80"
-                  value={values.costAlertThresholdPercent}
-                  onChange={handleChange}
-                  disabled={isSubmitting}
-                  aria-invalid={Boolean(errors.costAlertThresholdPercent)}
-                />
-                {errors.costAlertThresholdPercent ? (
-                  <p className="projects-form-field__error" role="alert">
-                    {errors.costAlertThresholdPercent}
-                  </p>
-                ) : (
-                  <p className="projects-form-field__hint">
-                    Alerts trigger when recorded costs cross this % (default
-                    80%) and 100%.
-                  </p>
-                )}
-              </div>
+                  <div className="projects-form-field">
+                    <div className="projects-form-field__label-row">
+                      <label
+                        htmlFor="project-form-description"
+                        className="projects-form-field__label"
+                      >
+                        Project Notes / Scope Summary
+                      </label>
+                      <span className="projects-form-field__counter">
+                        {descriptionLength}/{MAX_DESCRIPTION_LENGTH}
+                      </span>
+                    </div>
+                    <textarea
+                      id="project-form-description"
+                      name="description"
+                      rows={3}
+                      maxLength={MAX_DESCRIPTION_LENGTH}
+                      className={`projects-form-field__textarea${
+                        errors.description
+                          ? ' projects-form-field__input--error'
+                          : ''
+                      }`}
+                      placeholder="Scope summary, upholstery specifications, delivery instructions, or site notes..."
+                      value={values.description}
+                      onChange={handleChange}
+                      disabled={isSubmitting}
+                      aria-invalid={Boolean(errors.description)}
+                    />
+                    {errors.description ? (
+                      <p className="projects-form-field__error" role="alert">
+                        {errors.description}
+                      </p>
+                    ) : null}
+                  </div>
 
-              <div className="projects-form-field projects-form-field--full">
-                <label
-                  htmlFor="project-form-description"
-                  className="projects-form-field__label"
-                >
-                  Project Notes / Scope Summary
-                </label>
-                <textarea
-                  id="project-form-description"
-                  name="description"
-                  rows={3}
-                  className={`projects-form-field__textarea${
-                    errors.description
-                      ? ' projects-form-field__input--error'
-                      : ''
-                  }`}
-                  placeholder="Optional upholstery specifications, room notes, or delivery instructions..."
-                  value={values.description}
-                  onChange={handleChange}
-                  disabled={isSubmitting}
-                />
-                {errors.description ? (
-                  <p className="projects-form-field__error" role="alert">
-                    {errors.description}
-                  </p>
-                ) : null}
-              </div>
+                  {isEditMode ? (
+                    <div className="projects-form-field">
+                      <label
+                        htmlFor="project-form-threshold"
+                        className="projects-form-field__label"
+                      >
+                        Cost Warning Threshold (%)
+                      </label>
+                      <input
+                        id="project-form-threshold"
+                        name="costAlertThresholdPercent"
+                        type="number"
+                        min="1"
+                        max="99"
+                        step="1"
+                        className={`projects-form-field__input${
+                          errors.costAlertThresholdPercent
+                            ? ' projects-form-field__input--error'
+                            : ''
+                        }`}
+                        placeholder="80"
+                        value={values.costAlertThresholdPercent}
+                        onChange={handleChange}
+                        disabled={isSubmitting}
+                        aria-invalid={Boolean(errors.costAlertThresholdPercent)}
+                      />
+                      {errors.costAlertThresholdPercent ? (
+                        <p className="projects-form-field__error" role="alert">
+                          {errors.costAlertThresholdPercent}
+                        </p>
+                      ) : (
+                        <p className="projects-form-field__hint">
+                          Per-project warning threshold override (critical alert
+                          remains at 100%).
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
 
-          <div className="admin-modal__footer">
+          <div className="admin-modal__footer projects-form-modal__footer">
             <button
               type="button"
               className="admin-btn admin-btn--secondary"

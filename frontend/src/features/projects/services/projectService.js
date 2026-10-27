@@ -380,11 +380,14 @@ function sanitizeProjectWritePayload(input = {}) {
   const payload = {
     name: String(input.name ?? '').trim(),
     clientName: String(input.clientName ?? '').trim(),
-    category: input.category || 'Modular Sofa',
-    status: input.status || 'In Progress',
+    category: input.category || PROJECT_CATEGORY_OPTIONS[0],
     description:
       typeof input.description === 'string' ? input.description.trim() : '',
     contractValue: Number(input.contractValue),
+  }
+
+  if (typeof input.status === 'string' && input.status.trim() !== '') {
+    payload.status = input.status.trim()
   }
 
   if (
@@ -393,13 +396,6 @@ function sanitizeProjectWritePayload(input = {}) {
     String(input.costAlertThresholdPercent).trim() !== ''
   ) {
     payload.costAlertThresholdPercent = Number(input.costAlertThresholdPercent)
-  }
-
-  if (
-    typeof input.siteLocation === 'string' &&
-    input.siteLocation.trim() !== ''
-  ) {
-    payload.siteLocation = input.siteLocation.trim()
   }
 
   return payload
