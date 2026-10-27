@@ -5,6 +5,12 @@ import {
   validateFullName,
   validateSignupPassword,
 } from '../../auth/utils/validation'
+import { Dropdown } from '../../../components/common'
+
+const ROLE_OPTIONS = [
+  { value: 'data_entry', label: 'Data Entry', description: 'Operational access' },
+  { value: 'admin', label: 'Admin', description: 'Full administrative access' },
+]
 
 export function AddUserModal({ isOpen, onClose, onSubmit }) {
   const [values, setValues] = useState({
@@ -225,17 +231,16 @@ export function AddUserModal({ isOpen, onClose, onSubmit }) {
               <label htmlFor="add-user-role" className="users-form-field__label">
                 Assigned Role
               </label>
-              <select
+              <Dropdown
                 id="add-user-role"
                 name="role"
-                className="users-form-field__select"
+                variant="form"
                 value={values.role}
-                onChange={handleChange}
+                options={ROLE_OPTIONS}
+                onChange={(val) => setValues((prev) => ({ ...prev, role: val }))}
                 disabled={isSubmitting}
-              >
-                <option value="data_entry">Data Entry — Operational access</option>
-                <option value="admin">Admin — Full administrative access</option>
-              </select>
+                error={Boolean(errors.role)}
+              />
               {errors.role ? (
                 <p className="users-form-field__error" role="alert">
                   {errors.role}

@@ -1,0 +1,213 @@
+/* Soft Touch Sofas - Premium Reusable Dropdown System */
+.sts-dropdown {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.sts-dropdown--filter {
+  width: auto;
+  min-width: 140px;
+}
+
+.sts-dropdown__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  background-color: #ffffff;
+  border: 1px solid #d8cbbd;
+  color: var(--sts-charcoal);
+  font-family: var(--sts-font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 10px;
+  padding: 0 0.85rem;
+  height: 42px;
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  box-sizing: border-box;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+/* Variants */
+.sts-dropdown__trigger--filter {
+  height: 40px;
+  padding: 0 0.75rem;
+  font-size: 0.84375rem;
+  background-color: #ffffff;
+}
+
+.sts-dropdown__trigger--form {
+  height: 44px;
+  background-color: #fdfbf8;
+  border-color: #d5c7b7;
+  font-size: 0.9375rem;
+}
+
+.sts-dropdown__trigger:hover:not(:disabled) {
+  border-color: #bfa892;
+  background-color: #ffffff;
+}
+
+.sts-dropdown__trigger--open,
+.sts-dropdown__trigger:focus-visible {
+  outline: none;
+  border-color: var(--sts-walnut);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(74, 53, 37, 0.13);
+}
+
+.sts-dropdown__trigger--error {
+  border-color: var(--sts-error-accent, #c94a4a) !important;
+}
+
+.sts-dropdown__trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: #f7f5f2;
+}
+
+.sts-dropdown__value-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sts-dropdown__value-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sts-dropdown__trigger--placeholder .sts-dropdown__value-text {
+  color: #8c827a;
+}
+
+.sts-dropdown__chevron {
+  width: 16px;
+  height: 16px;
+  color: #7a6e65;
+  flex-shrink: 0;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sts-dropdown__trigger--open .sts-dropdown__chevron {
+  transform: rotate(180deg);
+  color: var(--sts-walnut);
+}
+
+/* Portal Menu Popover */
+.sts-dropdown__menu {
+  position: fixed;
+  z-index: 99999;
+  background: #ffffff;
+  border: 1px solid #d8caa8;
+  border-radius: 12px;
+  box-shadow:
+    0 12px 32px rgba(42, 37, 33, 0.16),
+    0 4px 12px rgba(42, 37, 33, 0.08);
+  padding: 6px;
+  box-sizing: border-box;
+  animation: stsDropdownPopIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@keyframes stsDropdownPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.sts-dropdown__options-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sts-dropdown__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  font-family: var(--sts-font-sans);
+  font-size: 0.875rem;
+  color: var(--sts-charcoal);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.sts-dropdown__option--highlighted,
+.sts-dropdown__option:hover:not(.sts-dropdown__option--disabled) {
+  background-color: #f7f3ec;
+  color: var(--sts-walnut);
+}
+
+.sts-dropdown__option--selected {
+  background-color: #f3ecdf;
+  color: var(--sts-walnut);
+  font-weight: 600;
+}
+
+.sts-dropdown__option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.sts-dropdown__option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sts-dropdown__option-desc {
+  font-size: 0.75rem;
+  color: #7a6e65;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.sts-dropdown__option-check {
+  width: 16px;
+  height: 16px;
+  color: var(--sts-walnut);
+  flex-shrink: 0;
+}
+
+.sts-dropdown__option--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sts-dropdown__empty {
+  padding: 1rem 0.75rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: #8c827a;
+}

@@ -4,6 +4,7 @@ import {
   MobileFilterButton,
   MobileFilterSheet,
 } from '../../../components/responsive'
+import { Dropdown } from '../../../components/common'
 
 const ROLE_OPTIONS = [
   { value: 'all', label: 'All Roles' },
@@ -163,36 +164,26 @@ export function UserFiltersBar({
             <label htmlFor="users-role-filter" className="users-filter-label">
               Role
             </label>
-            <select
+            <Dropdown
               id="users-role-filter"
-              className="users-select"
+              variant="filter"
               value={roleFilter}
-              onChange={(event) => onRoleFilterChange(event.target.value)}
-            >
-              {ROLE_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+              options={ROLE_OPTIONS}
+              onChange={(val) => onRoleFilterChange(val)}
+            />
           </div>
 
           <div className="users-filter-group">
             <label htmlFor="users-status-filter" className="users-filter-label">
               Status
             </label>
-            <select
+            <Dropdown
               id="users-status-filter"
-              className="users-select"
+              variant="filter"
               value={statusFilter}
-              onChange={(event) => onStatusFilterChange(event.target.value)}
-            >
-              {STATUS_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+              options={STATUS_OPTIONS}
+              onChange={(val) => onStatusFilterChange(val)}
+            />
           </div>
 
           <button

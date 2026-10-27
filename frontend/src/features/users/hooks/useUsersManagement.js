@@ -3,6 +3,8 @@ import {
   createManagedUser,
   fetchManagedUsers,
   normalizeUserRecord,
+  updateManagedUserStatus,
+  updateManagedUser,
 } from '../services/userManagementService'
 
 const DEFAULT_PAGE_SIZE = 5
@@ -27,6 +29,7 @@ export function useUsersManagement({ currentUser }) {
   const [editingUser, setEditingUser] = useState(null)
   const [statusActionTarget, setStatusActionTarget] = useState(null)
   const [statusActionError, setStatusActionError] = useState('')
+  const [isStatusSubmitting, setIsStatusSubmitting] = useState(false)
 
   const reloadUsers = useCallback(async ({ allowDevFallback = true } = {}) => {
     setIsLoading(true)
@@ -201,32 +204,30 @@ export function useUsersManagement({ currentUser }) {
       throw new Error('You cannot change the role of your own Admin account.')
     }
 
+    let updatedUser
     if (dataSource === 'api') {
-      throw new Error(
-        'User update endpoint (PATCH /api/admin/users/:id) is not yet implemented on the backend. Changes were not saved to the server.',
-      )
+      updatedUser = await updateManagedUser(editingUser.id, updatedFields)
+    } else {
+      updatedUser = normalizeUserRecord({
+        ...editingUser,
+        name: updatedFields.name,
+        email: updatedFields.email,
+        phone: updatedFields.phone,
+        role: updatedFields.roleKey,
+        isActive: editingUser.isActive,
+      })
     }
 
     setUsers((prev) =>
-      prev.map((item) => {
-        if (item.id !== editingUser.id) {
-          return item
-        }
-        return normalizeUserRecord({
-          ...item,
-          name: updatedFields.name,
-          email: updatedFields.email,
-          phone: updatedFields.phone,
-          role: updatedFields.roleKey,
-          isActive: item.isActive,
-        })
-      }),
+      prev.map((item) => (item.id === editingUser.id ? updatedUser : item)),
     )
 
     setEditingUser(null)
     setFeedbackBanner({
-      tone: 'info',
-      text: `Updated ${updatedFields.name} in development preview only (backend PATCH /api/admin/users/:id pending).`,
+      tone: 'success',
+      text: `Updated account details for ${updatedUser.name}.${
+        dataSource === 'dev-fallback' ? ' (preview mode)' : ''
+      }`,
     })
   }
 
@@ -244,8 +245,8 @@ export function useUsersManagement({ currentUser }) {
     })
   }
 
-  const confirmStatusToggle = () => {
-    if (!statusActionTarget) {
+  const confirmStatusToggle = async () => {
+    if (!statusActionTarget || isStatusSubmitting) {
       return
     }
 
@@ -256,33 +257,38 @@ export function useUsersManagement({ currentUser }) {
       return
     }
 
-    if (dataSource === 'api') {
-      setStatusActionError(
-        'User status endpoint (PATCH /api/admin/users/:id) is not yet implemented on the backend. No changes were applied.',
+    try {
+      setIsStatusSubmitting(true)
+      setStatusActionError('')
+
+      let updatedUser
+      if (dataSource === 'api') {
+        updatedUser = await updateManagedUserStatus(user.id, nextIsActive)
+      } else {
+        updatedUser = normalizeUserRecord({
+          ...user,
+          role: user.roleKey,
+          isActive: nextIsActive,
+        })
+      }
+
+      setUsers((prev) =>
+        prev.map((item) => (item.id === user.id ? updatedUser : item)),
       )
-      return
+
+      setStatusActionTarget(null)
+      setStatusActionError('')
+      setFeedbackBanner({
+        tone: 'success',
+        text: `${updatedUser.name} marked as ${
+          nextIsActive ? 'Active' : 'Inactive'
+        }.${dataSource === 'dev-fallback' ? ' (preview mode)' : ''}`,
+      })
+    } catch (err) {
+      setStatusActionError(err?.message || 'Failed to update user status.')
+    } finally {
+      setIsStatusSubmitting(false)
     }
-
-    setUsers((prev) =>
-      prev.map((item) =>
-        item.id === user.id
-          ? normalizeUserRecord({
-              ...item,
-              role: item.roleKey,
-              isActive: nextIsActive,
-            })
-          : item,
-      ),
-    )
-
-    setStatusActionTarget(null)
-    setStatusActionError('')
-    setFeedbackBanner({
-      tone: 'info',
-      text: `${user.name} marked as ${
-        nextIsActive ? 'Active' : 'Inactive'
-      } in development preview only (backend PATCH endpoint pending).`,
-    })
   }
 
   return {
@@ -335,6 +341,7 @@ export function useUsersManagement({ currentUser }) {
 
     statusActionTarget,
     statusActionError,
+    isStatusSubmitting,
     requestStatusToggle,
     confirmStatusToggle,
     closeStatusModal: () => {

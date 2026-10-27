@@ -56,6 +56,7 @@ export function UserManagementPage({ currentUser, onNavigate }) {
 
     statusActionTarget,
     statusActionError,
+    isStatusSubmitting,
     requestStatusToggle,
     confirmStatusToggle,
     closeStatusModal,
@@ -340,9 +341,11 @@ export function UserManagementPage({ currentUser, onNavigate }) {
       <ConfirmUserStatusModal
         target={statusActionTarget}
         errorMessage={statusActionError}
+        isSubmitting={isStatusSubmitting}
         onConfirm={confirmStatusToggle}
         onCancel={closeStatusModal}
       />
     </div>
   )
 }
+ 

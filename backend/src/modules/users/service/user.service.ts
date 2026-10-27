@@ -249,6 +249,19 @@ export class UserService implements IUserService {
       updatePayload.password = this.hashPassword(dto.password);
     }
 
+    if (dto.isActive !== undefined) {
+      if (
+        (String(existing._id) === currentAdminId ||
+          existing.email.toLowerCase() === currentAdminId.toLowerCase()) &&
+        !dto.isActive
+      ) {
+        throw new SelfDeactivationError(
+          'You cannot deactivate your own administrative account.',
+        );
+      }
+      updatePayload.isActive = dto.isActive;
+    }
+
     try {
       const updated = await this.userRepository.update(
         id.trim(),

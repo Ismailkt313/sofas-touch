@@ -5,6 +5,7 @@ export interface UpdateUserDto {
   image?: string;
   role?: 'admin' | 'data_entry';
   password?: string;
+  isActive?: boolean;
 }
 
 export interface ValidationResult<T> {
@@ -115,6 +116,32 @@ export function validateUpdateUserDto(input: unknown): ValidationResult<UpdateUs
     } else {
       sanitized.password = raw.password;
       fieldCount++;
+    }
+  }
+
+  if (raw.isActive !== undefined) {
+    if (typeof raw.isActive === 'boolean') {
+      sanitized.isActive = raw.isActive;
+      fieldCount++;
+    } else if (raw.isActive === 'true') {
+      sanitized.isActive = true;
+      fieldCount++;
+    } else if (raw.isActive === 'false') {
+      sanitized.isActive = false;
+      fieldCount++;
+    } else {
+      errors.isActive = 'Field isActive must be a boolean.';
+    }
+  } else if (typeof raw.status === 'string') {
+    const normalized = raw.status.trim().toLowerCase();
+    if (normalized === 'active') {
+      sanitized.isActive = true;
+      fieldCount++;
+    } else if (normalized === 'inactive') {
+      sanitized.isActive = false;
+      fieldCount++;
+    } else {
+      errors.status = "Status must be either 'active' or 'inactive'.";
     }
   }
 

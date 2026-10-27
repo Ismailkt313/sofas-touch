@@ -3,6 +3,7 @@ import {
   PROJECT_CATEGORY_OPTIONS,
   PROJECT_STATUS_OPTIONS,
 } from '../services/projectService'
+import { Dropdown } from '../../../components/common'
 
 function buildInitialFormValues(project) {
   if (!project) {
@@ -361,22 +362,16 @@ export function ProjectFormModal({
                 >
                   Category
                 </label>
-                <select
+                <Dropdown
                   id="project-form-category"
                   name="category"
-                  className={`projects-form-field__select${
-                    errors.category ? ' projects-form-field__input--error' : ''
-                  }`}
+                  variant="form"
                   value={values.category}
-                  onChange={handleChange}
+                  options={PROJECT_CATEGORY_OPTIONS}
+                  onChange={(val) => setValues((prev) => ({ ...prev, category: val }))}
                   disabled={isSubmitting}
-                >
-                  {PROJECT_CATEGORY_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                  error={Boolean(errors.category)}
+                />
                 {errors.category ? (
                   <p className="projects-form-field__error" role="alert">
                     {errors.category}
@@ -424,22 +419,16 @@ export function ProjectFormModal({
                 >
                   Project Status
                 </label>
-                <select
+                <Dropdown
                   id="project-form-status"
                   name="status"
-                  className={`projects-form-field__select${
-                    errors.status ? ' projects-form-field__input--error' : ''
-                  }`}
+                  variant="form"
                   value={values.status}
-                  onChange={handleChange}
+                  options={PROJECT_STATUS_OPTIONS}
+                  onChange={(val) => setValues((prev) => ({ ...prev, status: val }))}
                   disabled={isSubmitting}
-                >
-                  {PROJECT_STATUS_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                  error={Boolean(errors.status)}
+                />
                 {errors.status ? (
                   <p className="projects-form-field__error" role="alert">
                     {errors.status}

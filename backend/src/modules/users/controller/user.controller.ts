@@ -218,6 +218,14 @@ export class UserController implements IUserController {
         return;
       }
 
+      if (error instanceof SelfDeactivationError) {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: error.message,
+        });
+        return;
+      }
+
       next(error);
     }
   };

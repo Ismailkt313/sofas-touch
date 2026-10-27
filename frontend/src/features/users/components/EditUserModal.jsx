@@ -4,6 +4,12 @@ import {
   validateFullName,
   validatePhone,
 } from '../../auth/utils/validation'
+import { Dropdown } from '../../../components/common'
+
+const ROLE_OPTIONS = [
+  { value: 'data_entry', label: 'Data Entry' },
+  { value: 'admin', label: 'Admin' },
+]
 
 export function EditUserModal({
   user,
@@ -256,17 +262,15 @@ export function EditUserModal({
               <label htmlFor="edit-user-role" className="users-form-field__label">
                 Role
               </label>
-              <select
+              <Dropdown
                 id="edit-user-role"
                 name="roleKey"
-                className="users-form-field__select"
+                variant="form"
                 value={values.roleKey}
-                onChange={handleChange}
+                options={ROLE_OPTIONS}
+                onChange={(val) => setValues((prev) => ({ ...prev, roleKey: val }))}
                 disabled={isSaving || isSelf}
-              >
-                <option value="data_entry">Data Entry</option>
-                <option value="admin">Admin</option>
-              </select>
+              />
               {isSelf ? (
                 <p className="users-form-field__hint">
                   Your own Admin role cannot be modified to prevent accidental

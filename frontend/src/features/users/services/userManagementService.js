@@ -265,3 +265,176 @@ export async function createManagedUser({ name, email, password, role }) {
     )
   }
 }
+
+/**
+ * Updates a user's active/inactive status via PATCH /api/admin/users/:id/status
+ * or PATCH /api/admin/users/:id.
+ */
+export async function updateManagedUserStatus(userId, isActive) {
+  const cleanId = String(userId || '').trim()
+  if (!cleanId) {
+    throw new Error('User ID is required to update status.')
+  }
+
+  try {
+    let response
+    try {
+      response = await api.patch(
+        `/api/admin/users/${encodeURIComponent(cleanId)}/status`,
+        { isActive: Boolean(isActive) },
+      )
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        try {
+          response = await api.patch(
+            `/api/admin/users/${encodeURIComponent(cleanId)}`,
+            { isActive: Boolean(isActive) },
+          )
+        } catch {
+          response = await api.patch(
+            `/api/users/${encodeURIComponent(cleanId)}/status`,
+            { isActive: Boolean(isActive) },
+          )
+        }
+      } else {
+        throw err
+      }
+    }
+
+    const updated = response.data?.user
+    if (!updated || typeof updated !== 'object') {
+      throw new Error('Server returned an unexpected response format.')
+    }
+    return normalizeUserRecord(updated)
+  } catch (error) {
+    if (!error?.response) {
+      throw new Error(
+        error instanceof Error && error.message.startsWith('Server returned')
+          ? error.message
+          : 'Unable to reach user status update endpoint. Please check your connection.',
+        { cause: error },
+      )
+    }
+
+    const { status, data } = error.response
+    if (status === 400) {
+      throw new Error(data?.message || 'Invalid status update request.', {
+        cause: error,
+      })
+    }
+    if (status === 401) {
+      throw new Error(
+        data?.message ||
+          'You must be signed in as an Administrator to update user status.',
+        { cause: error },
+      )
+    }
+    if (status === 403) {
+      throw new Error(
+        data?.message ||
+          'Only Administrators are permitted to change user status.',
+        { cause: error },
+      )
+    }
+    if (status === 404) {
+      throw new Error(data?.message || 'User account not found on server.', {
+        cause: error,
+      })
+    }
+
+    throw new Error(data?.message || 'Failed to update user status.', {
+      cause: error,
+    })
+  }
+}
+
+/**
+ * Updates managed user details (name, email, phone, role) via PATCH /api/admin/users/:id
+ */
+export async function updateManagedUser(userId, fields = {}) {
+  const cleanId = String(userId || '').trim()
+  if (!cleanId) {
+    throw new Error('User ID is required to update account.')
+  }
+
+  const payload = {}
+  if (fields.name !== undefined) payload.name = fields.name.trim()
+  if (fields.email !== undefined) payload.email = fields.email.trim()
+  if (fields.phone !== undefined) payload.phone = fields.phone.trim()
+  if (fields.roleKey !== undefined || fields.role !== undefined) {
+    const canonical = normalizeRoleKey(fields.roleKey || fields.role)
+    payload.role = canonical === 'admin' ? 'admin' : 'data_entry'
+  }
+  if (fields.isActive !== undefined) payload.isActive = Boolean(fields.isActive)
+
+  try {
+    let response
+    try {
+      response = await api.patch(
+        `/api/admin/users/${encodeURIComponent(cleanId)}`,
+        payload,
+      )
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        response = await api.patch(
+          `/api/users/${encodeURIComponent(cleanId)}`,
+          payload,
+        )
+      } else {
+        throw err
+      }
+    }
+
+    const updated = response.data?.user
+    if (!updated || typeof updated !== 'object') {
+      throw new Error('Server returned an unexpected response format.')
+    }
+    return normalizeUserRecord(updated)
+  } catch (error) {
+    if (!error?.response) {
+      throw new Error(
+        error instanceof Error && error.message.startsWith('Server returned')
+          ? error.message
+          : 'Unable to reach user update endpoint. Please check your connection.',
+        { cause: error },
+      )
+    }
+
+    const { status, data } = error.response
+    if (status === 400) {
+      throw new Error(data?.message || 'Invalid user update request.', {
+        cause: error,
+      })
+    }
+    if (status === 401) {
+      throw new Error(
+        data?.message ||
+          'You must be signed in as an Administrator to update user accounts.',
+        { cause: error },
+      )
+    }
+    if (status === 403) {
+      throw new Error(
+        data?.message || 'Only Administrators are permitted to update users.',
+        { cause: error },
+      )
+    }
+    if (status === 404) {
+      throw new Error(data?.message || 'User account not found on server.', {
+        cause: error,
+      })
+    }
+    if (status === 409) {
+      throw new Error(
+        data?.message ||
+          'Another user account already uses this email address.',
+        { cause: error },
+      )
+    }
+
+    throw new Error(data?.message || 'Failed to update user account.', {
+      cause: error,
+    })
+  }
+}
+

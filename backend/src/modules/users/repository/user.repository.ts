@@ -206,7 +206,7 @@ export class UserRepository implements IUserRepository {
     }
 
     for (const user of this.memoryStore.values()) {
-      if (String(user._id) === id) {
+      if (String(user._id) === id || user.email.toLowerCase() === id.toLowerCase()) {
         const { password: _p, ...withoutPassword } = user;
         return withoutPassword as IUser;
       }
@@ -325,7 +325,7 @@ export class UserRepository implements IUserRepository {
     }
 
     for (const [key, user] of this.memoryStore.entries()) {
-      if (String(user._id) === id) {
+      if (String(user._id) === id || user.email.toLowerCase() === id.toLowerCase()) {
         if (
           updateData.email &&
           updateData.email.toLowerCase() !== user.email.toLowerCase()

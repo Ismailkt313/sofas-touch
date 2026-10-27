@@ -1,9 +1,14 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { requireAdmin, verifyToken } from '../middleware/auth';
-import { createUser, getAllUsers } from '../services/userService';
+import {
+  createUser,
+  getAllUsers,
+  updateUserStatus,
+  updateUser,
+} from '../services/userService';
 import { AuthenticatedRequest } from '../types/auth';
 
-import { userRepository } from '../modules/users';
+import { userController, userRepository } from '../modules/users';
 
 const router = Router();
 
@@ -69,6 +74,61 @@ router.post('/users', (req: AuthenticatedRequest, res: Response) => {
     res.status(409).json({ error: 'Conflict', message });
   }
 });
+
+router.patch(
+  '/users/:id/status',
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    const { id } = req.params;
+    const originalJson = res.json.bind(res);
+    res.json = (body: any) => {
+      if (body?.user?.id || id) {
+        const targetId = body?.user?.id || id;
+        const isActive =
+          body?.user?.isActive ??
+          req.body?.isActive ??
+          (req.body?.status === 'active');
+        if (typeof isActive === 'boolean') {
+          updateUserStatus(targetId, isActive);
+        }
+      }
+      return originalJson(body);
+    };
+    return userController.updateStatus(req, res, next);
+  },
+);
+
+router.patch(
+  '/users/:id',
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    const { id } = req.params;
+    const originalJson = res.json.bind(res);
+    res.json = (body: any) => {
+      if (body?.user) {
+        updateUser(body.user.id || id, {
+          name: body.user.name,
+          email: body.user.email,
+          role: body.user.role,
+          isActive: body.user.isActive,
+        });
+      }
+      return originalJson(body);
+    };
+
+    if (
+      req.body &&
+      (req.body.isActive !== undefined || req.body.status !== undefined) &&
+      req.body.name === undefined &&
+      req.body.email === undefined &&
+      req.body.role === undefined &&
+      req.body.phone === undefined &&
+      req.body.password === undefined
+    ) {
+      return userController.updateStatus(req, res, next);
+    }
+
+    return userController.update(req, res, next);
+  },
+);
 
 router.get('/permissions', (_req: AuthenticatedRequest, res: Response) => {
   res.json({

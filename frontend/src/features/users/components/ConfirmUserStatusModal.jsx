@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 export function ConfirmUserStatusModal({
   target,
   errorMessage,
+  isSubmitting = false,
   onConfirm,
   onCancel,
 }) {
@@ -18,7 +19,7 @@ export function ConfirmUserStatusModal({
     cancelBtnRef.current?.focus()
 
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !isSubmitting) {
         onCancel()
       }
     }
@@ -28,7 +29,7 @@ export function ConfirmUserStatusModal({
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [target, onCancel])
+  }, [target, isSubmitting, onCancel])
 
   if (!target) {
     return null
@@ -41,7 +42,7 @@ export function ConfirmUserStatusModal({
     <div
       className="admin-modal-backdrop"
       onClick={(event) => {
-        if (event.target === event.currentTarget) {
+        if (event.target === event.currentTarget && !isSubmitting) {
           onCancel()
         }
       }}
@@ -63,6 +64,7 @@ export function ConfirmUserStatusModal({
             type="button"
             className="admin-modal__close"
             onClick={onCancel}
+            disabled={isSubmitting}
             aria-label="Close confirmation dialog"
           >
             <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -109,16 +111,25 @@ export function ConfirmUserStatusModal({
             type="button"
             className="admin-btn admin-btn--secondary"
             onClick={onCancel}
+            disabled={isSubmitting}
           >
             Cancel
           </button>
           <button
             type="button"
-            className={`admin-btn ${isDeactivating ? 'admin-btn--danger' : 'admin-btn--primary'
-              }`}
+            className={`admin-btn ${
+              isDeactivating ? 'admin-btn--danger' : 'admin-btn--primary'
+            }`}
             onClick={onConfirm}
+            disabled={isSubmitting}
           >
-            {isDeactivating ? 'Deactivate Account' : 'Activate Account'}
+            {isSubmitting
+              ? isDeactivating
+                ? 'Deactivating...'
+                : 'Activating...'
+              : isDeactivating
+                ? 'Deactivate Account'
+                : 'Activate Account'}
           </button>
         </div>
       </div>

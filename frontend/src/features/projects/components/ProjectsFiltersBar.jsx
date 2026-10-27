@@ -4,10 +4,18 @@ import {
   MobileFilterButton,
   MobileFilterSheet,
 } from '../../../components/responsive'
-import {
-  PROJECT_CATEGORY_OPTIONS,
-  PROJECT_STATUS_OPTIONS,
-} from '../services/projectService'
+import { Dropdown } from '../../../components/common'
+import { PROJECT_CATEGORY_OPTIONS, PROJECT_STATUS_OPTIONS } from '../services/projectService'
+
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'All Statuses' },
+  ...PROJECT_STATUS_OPTIONS.map((status) => ({ value: status, label: status })),
+]
+
+const CATEGORY_OPTIONS = [
+  { value: 'all', label: 'All Categories' },
+  ...PROJECT_CATEGORY_OPTIONS.map((cat) => ({ value: cat, label: cat })),
+]
 
 export function ProjectsFiltersBar({
   searchQuery,
@@ -168,19 +176,13 @@ export function ProjectsFiltersBar({
             >
               Status
             </label>
-            <select
+            <Dropdown
               id="projects-status-filter"
-              className="projects-select"
+              variant="filter"
               value={statusFilter}
-              onChange={(event) => onStatusFilterChange(event.target.value)}
-            >
-              <option value="all">All Statuses</option>
-              {PROJECT_STATUS_OPTIONS.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
+              options={STATUS_OPTIONS}
+              onChange={(val) => onStatusFilterChange(val)}
+            />
           </div>
 
           <div className="projects-filter-group">
@@ -190,19 +192,13 @@ export function ProjectsFiltersBar({
             >
               Category
             </label>
-            <select
+            <Dropdown
               id="projects-category-filter"
-              className="projects-select"
+              variant="filter"
               value={categoryFilter}
-              onChange={(event) => onCategoryFilterChange(event.target.value)}
-            >
-              <option value="all">All Categories</option>
-              {PROJECT_CATEGORY_OPTIONS.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
+              options={CATEGORY_OPTIONS}
+              onChange={(val) => onCategoryFilterChange(val)}
+            />
           </div>
 
           <button

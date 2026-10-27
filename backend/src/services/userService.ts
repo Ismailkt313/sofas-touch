@@ -107,3 +107,35 @@ export function createUser(
   users.set(normalized, newUser);
   return toPublicUser(newUser);
 }
+
+export function updateUserStatus(id: string, isActive: boolean): UserPublic | null {
+  const user = findUserById(id);
+  if (!user) {
+    return null;
+  }
+  user.isActive = isActive;
+  return toPublicUser(user);
+}
+
+export function updateUser(
+  id: string,
+  updates: Partial<Pick<User, 'name' | 'email' | 'role' | 'isActive'>>,
+): UserPublic | null {
+  const user = findUserById(id);
+  if (!user) {
+    return null;
+  }
+  if (updates.name !== undefined) user.name = updates.name;
+  if (updates.email !== undefined) {
+    const normalized = updates.email.toLowerCase().trim();
+    if (normalized !== user.email && users.has(normalized)) {
+      throw new Error('A user with this email address already exists.');
+    }
+    users.delete(user.email);
+    user.email = normalized;
+    users.set(normalized, user);
+  }
+  if (updates.role !== undefined) user.role = updates.role;
+  if (updates.isActive !== undefined) user.isActive = updates.isActive;
+  return toPublicUser(user);
+}

@@ -398,6 +398,71 @@ async function runTests() {
     });
     assert.strictEqual(reactRes.status, 200);
 
+    console.log('Testing PATCH /api/admin/users/:id/status & PATCH /api/admin/users/:id...');
+    // 1. PATCH /api/admin/users/:id/status with isActive: false
+    const adminStatusDeact = await fetch(`${baseUrl}/api/admin/users/${createdUserId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({ isActive: false }),
+    });
+    assert.strictEqual(adminStatusDeact.status, 200);
+    const adminStatusDeactData = (await adminStatusDeact.json()) as { user?: { isActive: boolean } };
+    assert.strictEqual(adminStatusDeactData.user?.isActive, false);
+
+    // 2. PATCH /api/admin/users/:id with isActive: true
+    const adminDirectAct = await fetch(`${baseUrl}/api/admin/users/${createdUserId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({ isActive: true }),
+    });
+    assert.strictEqual(adminDirectAct.status, 200);
+    const adminDirectActData = (await adminDirectAct.json()) as { user?: { isActive: boolean } };
+    assert.strictEqual(adminDirectActData.user?.isActive, true);
+
+    // 3. PATCH /api/admin/users/:id with status: 'inactive'
+    const adminSlugDeact = await fetch(`${baseUrl}/api/admin/users/${createdUserId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({ status: 'inactive' }),
+    });
+    assert.strictEqual(adminSlugDeact.status, 200);
+    const adminSlugDeactData = (await adminSlugDeact.json()) as { user?: { isActive: boolean } };
+    assert.strictEqual(adminSlugDeactData.user?.isActive, false);
+
+    // 4. PATCH /api/admin/users/:id with name update
+    const adminNameUpdate = await fetch(`${baseUrl}/api/admin/users/${createdUserId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({ name: 'Admin Route Updated Name', isActive: true }),
+    });
+    assert.strictEqual(adminNameUpdate.status, 200);
+    const adminNameUpdateData = (await adminNameUpdate.json()) as { user?: { name: string; isActive: boolean } };
+    assert.strictEqual(adminNameUpdateData.user?.name, 'Admin Route Updated Name');
+    assert.strictEqual(adminNameUpdateData.user?.isActive, true);
+
+    // 5. Self-deactivation prevention on /api/admin/users/:id
+    const adminSelfDeact = await fetch(`${baseUrl}/api/admin/users/usr_admin_001`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({ isActive: false }),
+    });
+    assert.strictEqual(adminSelfDeact.status, 400);
+
   } finally {
     server.close();
     if (mongoose.connection.readyState === 1) {
