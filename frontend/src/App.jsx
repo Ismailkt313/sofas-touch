@@ -10,6 +10,7 @@ import {
   fetchCurrentUser,
   getStoredSession,
 } from './features/auth'
+import { ProjectDetailsPage, ProjectsPage } from './features/projects'
 import { UserManagementPage } from './features/users'
 
 const ROUTE_CHANGE_EVENT = 'sts:routechange'
@@ -78,6 +79,11 @@ function App() {
   const matchedAdminNav = findNavItemByPath(pathname)
   const isUsersRoute = isNavItemActive(pathname, '/users')
   const isUserApprovalsRoute = isNavItemActive(pathname, '/user-approvals')
+  const isProjectsListRoute = pathname === '/projects'
+  const projectDetailsMatch = pathname.match(/^\/projects\/([^/]+)$/)
+  const projectDetailsIdentifier = projectDetailsMatch
+    ? decodeURIComponent(projectDetailsMatch[1])
+    : ''
   const isSignupRoute = pathname === '/signup' || pathname === '/register'
 
   useEffect(() => {
@@ -85,6 +91,10 @@ function App() {
       document.title = 'Soft Touch Sofas — User Approvals'
     } else if (isUsersRoute) {
       document.title = 'Soft Touch Sofas — User Management'
+    } else if (projectDetailsIdentifier) {
+      document.title = 'Soft Touch Sofas — Project Details'
+    } else if (isProjectsListRoute) {
+      document.title = 'Soft Touch Sofas — Projects'
     } else if (matchedAdminNav) {
       document.title = `Soft Touch Sofas — ${matchedAdminNav.label}`
     } else if (isSignupRoute) {
@@ -92,7 +102,14 @@ function App() {
     } else {
       document.title = 'Soft Touch Sofas — Admin Sign In'
     }
-  }, [isUserApprovalsRoute, isUsersRoute, matchedAdminNav, isSignupRoute])
+  }, [
+    isUserApprovalsRoute,
+    isUsersRoute,
+    projectDetailsIdentifier,
+    isProjectsListRoute,
+    matchedAdminNav,
+    isSignupRoute,
+  ])
 
   const handleAuthenticated = useCallback(
     (sessionPayload) => {
@@ -133,6 +150,17 @@ function App() {
             />
           ) : isUsersRoute ? (
             <UserManagementPage
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : projectDetailsIdentifier ? (
+            <ProjectDetailsPage
+              projectIdentifier={projectDetailsIdentifier}
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : isProjectsListRoute ? (
+            <ProjectsPage
               currentUser={currentUser}
               onNavigate={navigate}
             />
