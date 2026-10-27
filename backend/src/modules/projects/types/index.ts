@@ -30,11 +30,20 @@ export interface PaginatedResult<T> {
   totalPages: number;
 }
 
+export interface UpdateProjectStatusDto {
+  status: ProjectStatus;
+}
+
 export interface IProjectController {
   list(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
   getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
   create(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
   update(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
+  updateStatus(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void>;
   remove(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
   getFinancialSummary(
     req: AuthenticatedRequest,
@@ -236,6 +245,10 @@ export interface IProjectService {
   updateProject(
     identifier: string,
     dto: UpdateProjectDto,
+  ): Promise<ProjectResponseDto>;
+  updateProjectStatus(
+    identifier: string,
+    status: ProjectStatus,
   ): Promise<ProjectResponseDto>;
   deleteProject(identifier: string): Promise<ProjectResponseDto>;
   getProjectFinancialSummary(

@@ -1683,6 +1683,263 @@
   color: var(--sts-taupe);
 }
 
+/* ==========================================================================
+   Project Status Modal (Soft Touch Sofas Luxury Aesthetic)
+   ========================================================================== */
+
+.project-status-modal {
+  max-width: 480px;
+}
+
+.project-status-modal__header {
+  padding: 1.25rem 1.4rem 1.1rem;
+}
+
+.project-status-modal__header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.project-status-modal__eyebrow {
+  font-size: 0.71875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sts-gold);
+}
+
+.project-status-modal__subtitle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.2rem 0 0;
+  flex-wrap: wrap;
+}
+
+.project-status-modal__project-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--sts-charcoal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.project-status-modal__body {
+  padding: 1.25rem 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.project-status-modal__alert {
+  margin: 0 0 0.5rem;
+}
+
+.project-status-modal__current-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.95rem;
+  border-radius: 10px;
+  background-color: var(--sts-sand-light);
+  border: 1px solid #ebd9c4;
+}
+
+.project-status-modal__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sts-taupe);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.project-status-modal__options-group {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.project-status-modal__legend {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sts-walnut);
+  margin-bottom: 0.25rem;
+}
+
+.project-status-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.project-status-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1.5px solid #e7ded4;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+  user-select: none;
+}
+
+.project-status-option:hover {
+  border-color: #c9b193;
+  background-color: #fdfaf6;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(74, 52, 35, 0.05);
+}
+
+.project-status-option--selected {
+  border-color: var(--sts-walnut);
+  background-color: #faf4eb;
+  box-shadow:
+    0 0 0 1px var(--sts-walnut),
+    0 4px 12px rgba(74, 52, 35, 0.08);
+}
+
+.project-status-option--current {
+  border-style: dashed;
+}
+
+.project-status-option--selected.project-status-option--current {
+  border-style: solid;
+}
+
+.project-status-option__radio {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.project-status-option__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.project-status-option__top {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.project-status-option__current-tag {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sts-taupe);
+  background-color: #ede4d8;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+}
+
+.project-status-option__desc {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--sts-charcoal-muted);
+  line-height: 1.4;
+}
+
+.project-status-option__indicator {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #cdbfae;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+  background-color: #ffffff;
+}
+
+.project-status-option:hover .project-status-option__indicator {
+  border-color: var(--sts-walnut);
+}
+
+.project-status-option--selected .project-status-option__indicator {
+  border-color: var(--sts-walnut);
+  background-color: #ffffff;
+}
+
+.project-status-option__indicator-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--sts-walnut);
+  opacity: 0;
+  transform: scale(0.4);
+  transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.project-status-option--selected .project-status-option__indicator-dot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.project-status-modal__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.95rem;
+  border-radius: 10px;
+  background-color: #edf7f0;
+  border: 1px solid #bce1c8;
+  color: #1a5834;
+  font-size: 0.8125rem;
+  line-height: 1.42;
+}
+
+.project-status-modal__note svg {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.projects-btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: projects-spin 0.7s linear infinite;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+
+@keyframes projects-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 1080px) {
   .projects-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1856,6 +2113,10 @@
     grid-template-columns: 1fr 1fr;
     gap: 0.55rem;
     padding-top: 0.25rem;
+  }
+
+  .project-mobile-card__actions .project-mobile-card__btn:last-child {
+    grid-column: 1 / -1;
   }
 
   .project-mobile-card__btn {

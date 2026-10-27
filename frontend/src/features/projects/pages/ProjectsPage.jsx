@@ -1,5 +1,6 @@
 import { ProjectAutomationBanners } from '../components/ProjectAutomationBanners'
 import { ProjectFormModal } from '../components/ProjectFormModal'
+import { ProjectStatusModal } from '../components/ProjectStatusModal'
 import { ProjectsFiltersBar } from '../components/ProjectsFiltersBar'
 import { ProjectsMobileList } from '../components/ProjectsMobileList'
 import { ProjectsPagination } from '../components/ProjectsPagination'
@@ -53,6 +54,11 @@ export function ProjectsPage({ currentUser, onNavigate }) {
     openEditModal,
     closeEditModal,
     handleEditSubmit,
+
+    statusModalProject,
+    openStatusModal,
+    closeStatusModal,
+    handleStatusSubmit,
   } = useProjectsList({ currentUser })
 
   const handleViewProject = (projectIdentifier) => {
@@ -322,6 +328,7 @@ export function ProjectsPage({ currentUser, onNavigate }) {
                   activeWarningByProjectCode={activeWarningByProjectCode}
                   onViewDetails={handleViewProject}
                   onEdit={openEditModal}
+                  onEditStatus={openStatusModal}
                 />
 
                 <ProjectsMobileList
@@ -329,6 +336,7 @@ export function ProjectsPage({ currentUser, onNavigate }) {
                   activeWarningByProjectCode={activeWarningByProjectCode}
                   onViewDetails={handleViewProject}
                   onEdit={openEditModal}
+                  onEditStatus={openStatusModal}
                 />
 
                 <ProjectsPagination
@@ -363,6 +371,16 @@ export function ProjectsPage({ currentUser, onNavigate }) {
           isOpen
           onClose={closeEditModal}
           onSubmit={handleEditSubmit}
+        />
+      ) : null}
+
+      {statusModalProject ? (
+        <ProjectStatusModal
+          key={`status-project-${statusModalProject.id || statusModalProject.projectId}`}
+          project={statusModalProject}
+          isOpen={Boolean(statusModalProject)}
+          onClose={closeStatusModal}
+          onSubmit={handleStatusSubmit}
         />
       ) : null}
     </div>

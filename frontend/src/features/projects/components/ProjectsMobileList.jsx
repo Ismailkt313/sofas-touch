@@ -10,6 +10,7 @@ export function ProjectsMobileList({
   activeWarningByProjectCode,
   onViewDetails,
   onEdit,
+  onEditStatus,
 }) {
   return (
     <div
@@ -78,6 +79,13 @@ export function ProjectsMobileList({
             </dl>
 
             <div className="project-mobile-card__actions">
+              <button
+                type="button"
+                className="admin-btn admin-btn--secondary project-mobile-card__btn"
+                onClick={() => onEditStatus?.(project)}
+              >
+                Status
+              </button>
               <button
                 type="button"
                 className="admin-btn admin-btn--secondary project-mobile-card__btn"

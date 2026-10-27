@@ -497,6 +497,32 @@ export async function updateProject(identifier, input) {
   }
 }
 
+export async function updateProjectStatus(identifier, status) {
+  if (!identifier || !String(identifier).trim()) {
+    throw new Error('A valid project identifier is required for status updates.')
+  }
+
+  const normalizedStatus = String(status || '').trim()
+  if (!PROJECT_STATUS_OPTIONS.includes(normalizedStatus)) {
+    throw new Error(
+      `Status must be one of: ${PROJECT_STATUS_OPTIONS.join(', ')}.`,
+    )
+  }
+
+  try {
+    const response = await api.patch(
+      `/api/projects/${encodeURIComponent(String(identifier).trim())}/status`,
+      { status: normalizedStatus },
+    )
+    return normalizeProject(response.data?.project || response.data)
+  } catch (error) {
+    throw buildApiError(
+      error,
+      'Unable to update project status. Please try again.',
+    )
+  }
+}
+
 export async function fetchProjectFinancialSummary(identifier) {
   if (!identifier || !String(identifier).trim()) {
     throw new Error('A valid project identifier is required.')

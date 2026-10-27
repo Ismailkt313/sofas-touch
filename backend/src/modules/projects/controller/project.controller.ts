@@ -8,6 +8,7 @@ import {
   validateListProjectsDto,
 } from '../dto/list-projects.dto';
 import { validateUpdateProjectDto } from '../dto/update-project.dto';
+import { validateUpdateProjectStatusDto } from '../dto/update-status.dto';
 import { IProjectController, IProjectService } from '../types';
 import {
   InvalidProjectOperationError,
@@ -164,6 +165,62 @@ export class ProjectController implements IProjectController {
 
       res.status(200).json({
         message: 'Project updated successfully.',
+        project,
+      });
+    } catch (error: unknown) {
+      if (error instanceof ProjectNotFoundError) {
+        res.status(404).json({
+          error: 'Not Found',
+          message: error.message,
+        });
+        return;
+      }
+      if (error instanceof InvalidProjectOperationError) {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: error.message,
+        });
+        return;
+      }
+      next(error);
+    }
+  };
+
+  updateStatus = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const id = extractParam(req.params.id);
+      if (!id) {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: 'A valid project ID or code is required.',
+        });
+        return;
+      }
+
+      const validation = validateUpdateProjectStatusDto(req.body);
+      if (!validation.isValid || !validation.value) {
+        const firstError = validation.errors
+          ? Object.values(validation.errors)[0]
+          : 'Validation failed for project status update.';
+        res.status(400).json({
+          error: 'Bad Request',
+          message: firstError,
+          errors: validation.errors,
+        });
+        return;
+      }
+
+      const project = await this.projectService.updateProjectStatus(
+        id,
+        validation.value.status,
+      );
+
+      res.status(200).json({
+        message: `Project status updated to '${validation.value.status}' successfully.`,
         project,
       });
     } catch (error: unknown) {

@@ -500,6 +500,13 @@ export class ProjectService implements IProjectService {
     });
   }
 
+  async updateProjectStatus(
+    identifier: string,
+    status: ProjectStatus,
+  ): Promise<ProjectResponseDto> {
+    return this.updateProject(identifier, { status });
+  }
+
   async deleteProject(identifier: string): Promise<ProjectResponseDto> {
     const target = await this.projectRepository.findByIdOrCode(identifier);
     if (!target || !target._id) {

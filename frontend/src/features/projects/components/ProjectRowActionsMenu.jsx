@@ -19,7 +19,7 @@ function computeMenuCoords(triggerEl) {
     return null
   }
 
-  const estimatedMenuHeight = 104
+  const estimatedMenuHeight = 146
   const spaceBelow = window.innerHeight - rect.bottom
   const openUpward =
     spaceBelow < estimatedMenuHeight + VIEWPORT_MARGIN &&
@@ -35,7 +35,12 @@ function computeMenuCoords(triggerEl) {
   return { top, left }
 }
 
-export function ProjectRowActionsMenu({ project, onViewDetails, onEdit }) {
+export function ProjectRowActionsMenu({
+  project,
+  onViewDetails,
+  onEdit,
+  onEditStatus,
+}) {
   const [isOpen, setIsOpen] = useState(false)
   const [coords, setCoords] = useState({ top: 0, left: 0 })
   const triggerRef = useRef(null)
@@ -195,6 +200,32 @@ export function ProjectRowActionsMenu({ project, onViewDetails, onEdit }) {
                   />
                 </svg>
                 <span>Edit Project</span>
+              </button>
+
+              <button
+                type="button"
+                className="project-portal-menu__item"
+                role="menuitem"
+                onClick={() => {
+                  setIsOpen(false)
+                  if (typeof onEditStatus === 'function') {
+                    onEditStatus(project)
+                  }
+                }}
+              >
+                <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <path
+                    d="M9 2.5C5.41 2.5 2.5 5.41 2.5 9C2.5 12.59 5.41 15.5 9 15.5C12.59 15.5 15.5 12.59 15.5 9C15.5 5.41 12.59 2.5 9 2.5ZM9 14.15C6.16 14.15 3.85 11.84 3.85 9C3.85 6.16 6.16 3.85 9 3.85C11.84 3.85 14.15 6.16 14.15 9C14.15 11.84 11.84 14.15 9 14.15Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M9 5.5V9.25L11.75 11"
+                    stroke="currentColor"
+                    strokeWidth="1.35"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span>Edit Status</span>
               </button>
             </div>,
             document.body,

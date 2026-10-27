@@ -11,6 +11,7 @@ export function ProjectsTable({
   activeWarningByProjectCode,
   onViewDetails,
   onEdit,
+  onEditStatus,
 }) {
   return (
     <div className="projects-table-wrap">
@@ -131,6 +132,7 @@ export function ProjectsTable({
                     project={project}
                     onViewDetails={onViewDetails}
                     onEdit={onEdit}
+                    onEditStatus={onEditStatus}
                   />
                 </td>
               </tr>

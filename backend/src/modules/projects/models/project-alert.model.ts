@@ -118,7 +118,6 @@ const ProjectActivityWarningSchema = new Schema<IProjectActivityWarning>(
     projectRecordId: {
       type: String,
       required: true,
-      index: true,
     },
     projectId: {
       type: String,

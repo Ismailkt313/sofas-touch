@@ -27,6 +27,10 @@ import {
   validateUpdateProjectDto,
 } from './dto/update-project.dto';
 import {
+  UpdateProjectStatusDto,
+  validateUpdateProjectStatusDto,
+} from './dto/update-status.dto';
+import {
   IProjectActivityWarning,
   IProjectCostAlert,
   ProjectActivityWarningModel,
@@ -130,6 +134,7 @@ projectRouter.get(
   projectController.getProjectCostAlerts,
 );
 projectRouter.get('/:id', requireDataEntryOrAdmin, projectController.getById);
+projectRouter.patch('/:id/status', requireDataEntryOrAdmin, projectController.updateStatus);
 projectRouter.patch('/:id', requireDataEntryOrAdmin, projectController.update);
 projectRouter.delete('/:id', requireAdmin, projectController.remove);
 
@@ -162,6 +167,7 @@ export {
   MongooseVoucherTotalsProvider,
   validateCreateProjectDto,
   validateUpdateProjectDto,
+  validateUpdateProjectStatusDto,
   validateListProjectsDto,
   validateListProjectAlertsDto,
   validateListActivityWarningsDto,
@@ -181,6 +187,7 @@ export type {
   ProjectStatus,
   CreateProjectDto,
   UpdateProjectDto,
+  UpdateProjectStatusDto,
   ListProjectsDto,
   ListProjectAlertsDto,
   ListActivityWarningsDto,

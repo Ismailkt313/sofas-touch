@@ -8,6 +8,7 @@ import {
   isAdminUser,
   triggerActivityWarningsEvaluation,
   updateProject,
+  updateProjectStatus,
 } from '../services/projectService'
 
 const DEFAULT_PAGE_SIZE = 10
@@ -55,6 +56,7 @@ export function useProjectsList({ currentUser }) {
   const [feedbackBanner, setFeedbackBanner] = useState(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [editingProject, setEditingProject] = useState(null)
+  const [statusModalProject, setStatusModalProject] = useState(null)
 
   const [refreshTick, setRefreshTick] = useState(0)
   const requestSeqRef = useRef(0)
@@ -341,6 +343,29 @@ export function useProjectsList({ currentUser }) {
     return updated
   }, [])
 
+  const openStatusModal = useCallback((project) => {
+    setStatusModalProject(project)
+  }, [])
+
+  const closeStatusModal = useCallback(() => {
+    setStatusModalProject(null)
+  }, [])
+
+  const handleStatusSubmit = useCallback(
+    async (projectIdentifier, nextStatus) => {
+      const updated = await updateProjectStatus(projectIdentifier, nextStatus)
+      setStatusModalProject(null)
+      setFeedbackBanner({
+        tone: 'success',
+        text: `Project ${updated.projectId || projectIdentifier} status was updated to "${updated.status}".`,
+        projectId: updated.projectId || updated.id,
+      })
+      setRefreshTick((prev) => prev + 1)
+      return updated
+    },
+    [],
+  )
+
   const handleRunInactivityEvaluation = useCallback(async () => {
     if (!adminAccess || isEvaluatingInactivity) {
       return
@@ -431,5 +456,10 @@ export function useProjectsList({ currentUser }) {
     openEditModal,
     closeEditModal,
     handleEditSubmit,
+
+    statusModalProject,
+    openStatusModal,
+    closeStatusModal,
+    handleStatusSubmit,
   }
 }
