@@ -67,4 +67,6 @@ export {
   InvalidOperationError,
 };
 
+export * from './types';
+
 export default userRouter;

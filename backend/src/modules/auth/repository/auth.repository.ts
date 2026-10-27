@@ -1,12 +1,9 @@
 import mongoose, { Model } from 'mongoose';
 import { IUser, UserModel, sharedUserMemoryStore } from '../models/user.model';
 
-export interface IAuthRepository {
-  findByEmail(email: string, includePassword?: boolean): Promise<IUser | null>;
-  findById(id: string): Promise<IUser | null>;
-  create(userData: Partial<IUser>): Promise<IUser>;
-  count(): Promise<number>;
-}
+import { IAuthRepository } from '../types';
+
+export { IAuthRepository };
 
 export class AuthRepository implements IAuthRepository {
   private memoryStore: Map<string, IUser> = sharedUserMemoryStore;

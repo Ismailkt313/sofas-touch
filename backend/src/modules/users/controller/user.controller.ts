@@ -6,8 +6,8 @@ import { validateRejectUserDto } from '../dto/reject-user.dto';
 import { validateCreateUserDto } from '../dto/create-user.dto';
 import { validateUpdateUserDto } from '../dto/update-user.dto';
 import { validateUpdateStatusDto } from '../dto/update-status.dto';
+import { IUserController, IUserService } from '../types';
 import {
-  IUserService,
   InvalidOperationError,
   SelfApprovalError,
   SelfDeactivationError,
@@ -15,20 +15,7 @@ import {
   UserNotFoundError,
 } from '../service/user.service';
 
-export interface IUserController {
-  list(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-  listPendingApprovals(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void>;
-  getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-  create(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-  update(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-  updateStatus(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-  approveUser(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-  rejectUser(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-}
+export { IUserController };
 
 export class UserController implements IUserController {
   constructor(private userService: IUserService) {}

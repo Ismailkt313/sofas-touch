@@ -19,13 +19,20 @@ import {
   ProjectStatus,
 } from '../models/project.model';
 import {
+  ActivityEvaluationSummary,
   IProjectRepository,
+  IProjectService,
+  IVoucherTotalsProvider,
   PaginatedResult,
-} from '../repository/project.repository';
+  ProjectActivityWarningResponseDto,
+  ProjectCostAlertResponseDto,
+  ProjectFinancialSummaryDto,
+  ProjectResponseDto,
+  VoucherMutationEvent,
+} from '../types';
 import {
   calculateProjectFinancialMetrics,
   evaluateCostThresholdTransitions,
-  IVoucherTotalsProvider,
   NoopVoucherTotalsProvider,
 } from './project-financial.service';
 
@@ -43,167 +50,15 @@ export class InvalidProjectOperationError extends Error {
   }
 }
 
-export interface ProjectFinancialSummaryDto {
-  id: string;
-  projectId: string;
-  name: string;
-  clientName: string;
-  status: ProjectStatus;
-  contractValue: number;
-  totalPurchases: number;
-  totalOtherExpenses: number;
-  totalCost: number;
-  estimatedProfit: number;
-  costPercentage: number;
-  estimatedProfitMargin: number;
-  profitType: 'estimated';
-  isAudited: false;
-  costAlertThresholdPercent: number;
-  costThresholdState: {
-    warningCrossed: boolean;
-    exceededCrossed: boolean;
-    warningThresholdPercent: number;
-  };
-  financialSummaryUpdatedAt: Date;
-}
-
-export interface ProjectResponseDto {
-  id: string;
-  projectId: string;
-  name: string;
-  clientName: string;
-  category: ProjectCategory;
-  status: ProjectStatus;
-  description: string;
-  contractValue: number;
-  totalPurchases: number;
-  totalOtherExpenses: number;
-  totalCost: number;
-  estimatedProfit: number;
-  costPercentage: number;
-  estimatedProfitMargin: number;
-  profitType: 'estimated';
-  isAudited: false;
-  costAlertThresholdPercent: number;
-  costThresholdState: {
-    warningCrossed: boolean;
-    exceededCrossed: boolean;
-    warningThresholdPercent: number;
-  };
-  lastActivityAt: Date;
-  lastActivityType: ProjectActivityEventType;
-  createdBy: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-export interface ProjectCostAlertResponseDto {
-  id: string;
-  projectRecordId: string;
-  projectId: string;
-  projectName: string;
-  thresholdType: CostThresholdAlertType;
-  thresholdPercent: number;
-  contractValue: number;
-  totalCost: number;
-  costPercentage: number;
-  message: string;
-  status: AlertLifecycleStatus;
-  triggeredAt: Date;
-  resolvedAt: Date | null;
-  resolvedReason: string | null;
-}
-
-export interface ProjectActivityWarningResponseDto {
-  id: string;
-  projectRecordId: string;
-  projectId: string;
-  projectName: string;
-  projectStatus: ProjectStatus;
-  lastActivityAt: Date;
-  inactiveDays: number;
-  inactivityThresholdDays: number;
-  message: string;
-  status: AlertLifecycleStatus;
-  triggeredAt: Date;
-  resolvedAt: Date | null;
-  resolvedReason: string | null;
-}
-
-export interface VoucherMutationEvent {
-  projectId: string;
-  voucherType: 'purchase' | 'expense';
-  action: 'created' | 'updated' | 'deleted';
-  occurredAt?: Date;
-}
-
-export interface ActivityEvaluationSummary {
-  evaluatedCount: number;
-  newlyTriggeredCount: number;
-  activeWarningsCount: number;
-  inactivityThresholdDays: number;
-  schedulerConfigured: boolean;
-  warnings: ProjectActivityWarningResponseDto[];
-}
-
-export interface IProjectService {
-  setVoucherTotalsProvider(provider: IVoucherTotalsProvider): void;
-  getVoucherIntegrationStatus(): {
-    purchaseModuleIntegrated: boolean;
-    expenseModuleIntegrated: boolean;
-    schedulerConfigured: boolean;
-  };
-  createProject(
-    dto: CreateProjectDto,
-    createdBy: string,
-  ): Promise<ProjectResponseDto>;
-  listProjects(
-    filters: ListProjectsDto,
-  ): Promise<PaginatedResult<ProjectResponseDto>>;
-  getProjectByIdOrCode(identifier: string): Promise<ProjectResponseDto>;
-  updateProject(
-    identifier: string,
-    dto: UpdateProjectDto,
-  ): Promise<ProjectResponseDto>;
-  deleteProject(identifier: string): Promise<ProjectResponseDto>;
-  getProjectFinancialSummary(
-    identifier: string,
-  ): Promise<ProjectFinancialSummaryDto>;
-  listProjectFinancialSummaries(
-    filters: ListProjectsDto,
-  ): Promise<PaginatedResult<ProjectFinancialSummaryDto>>;
-  recalculateProjectFinancials(
-    identifier: string,
-  ): Promise<ProjectFinancialSummaryDto>;
-  syncAfterVoucherMutation(
-    event: VoucherMutationEvent,
-  ): Promise<{
-    summary: ProjectFinancialSummaryDto;
-    triggeredAlerts: ProjectCostAlertResponseDto[];
-  }>;
-  listCostAlerts(
-    filters: ListProjectAlertsDto,
-  ): Promise<PaginatedResult<ProjectCostAlertResponseDto>>;
-  getProjectCostAlerts(
-    identifier: string,
-  ): Promise<{
-    projectId: string;
-    alerts: ProjectCostAlertResponseDto[];
-  }>;
-  evaluateProjectInactivity(options?: {
-    inactivityDays?: number;
-    referenceDate?: Date;
-  }): Promise<ActivityEvaluationSummary>;
-  listActivityWarnings(
-    filters: ListActivityWarningsDto,
-    referenceDate?: Date,
-  ): Promise<
-    PaginatedResult<ProjectActivityWarningResponseDto> & {
-      inactivityThresholdDays: number;
-      schedulerConfigured: boolean;
-    }
-  >;
-}
+export {
+  ActivityEvaluationSummary,
+  IProjectService,
+  ProjectActivityWarningResponseDto,
+  ProjectCostAlertResponseDto,
+  ProjectFinancialSummaryDto,
+  ProjectResponseDto,
+  VoucherMutationEvent,
+};
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 

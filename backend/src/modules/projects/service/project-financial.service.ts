@@ -2,47 +2,21 @@ import mongoose, { Model } from 'mongoose';
 import { env } from '../../../config/env';
 import { IProjectCostThresholdState } from '../models/project.model';
 
-export interface ProjectFinancialCalculationInput {
-  contractValue: number;
-  totalPurchases: number;
-  totalOtherExpenses: number;
-}
+import {
+  CostThresholdTransitionResult,
+  IVoucherTotalsProvider,
+  ProjectFinancialCalculationInput,
+  ProjectFinancialMetrics,
+  ProjectVoucherAggregationTotals,
+} from '../types';
 
-export interface ProjectFinancialMetrics {
-  contractValue: number;
-  totalPurchases: number;
-  totalOtherExpenses: number;
-  totalCost: number;
-  estimatedProfit: number;
-  costPercentage: number;
-  estimatedProfitMargin: number;
-  profitType: 'estimated';
-  isAudited: false;
-}
-
-export interface CostThresholdTransitionResult {
-  nextState: IProjectCostThresholdState;
-  triggerWarningAlert: boolean;
-  resolveWarningAlert: boolean;
-  triggerCriticalAlert: boolean;
-  resolveCriticalAlert: boolean;
-  criticalThresholdPercent: number;
-}
-
-export interface ProjectVoucherAggregationTotals {
-  totalPurchases: number;
-  totalOtherExpenses: number;
-  latestVoucherActivityAt: Date | null;
-}
-
-export interface IVoucherTotalsProvider {
-  aggregateProjectVouchers(
-    projectRecordId: string,
-    projectCode: string,
-  ): Promise<ProjectVoucherAggregationTotals>;
-  isPurchaseIntegrationActive(): boolean;
-  isExpenseIntegrationActive(): boolean;
-}
+export {
+  CostThresholdTransitionResult,
+  IVoucherTotalsProvider,
+  ProjectFinancialCalculationInput,
+  ProjectFinancialMetrics,
+  ProjectVoucherAggregationTotals,
+};
 
 export interface VoucherModelBindingConfig {
   model: Model<Record<string, unknown>>;

@@ -171,6 +171,8 @@ export {
   ProjectPersistenceError,
 };
 
+export * from './types';
+
 export type {
   IProject,
   IProjectCostAlert,

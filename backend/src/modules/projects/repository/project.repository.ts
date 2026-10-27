@@ -28,13 +28,9 @@ import {
   ListProjectsDto,
 } from '../dto/list-projects.dto';
 
-export interface PaginatedResult<T> {
-  items: T[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+import { IProjectRepository, PaginatedResult } from '../types';
+
+export { IProjectRepository, PaginatedResult };
 
 export class ProjectPersistenceError extends Error {
   constructor(message: string) {
@@ -43,48 +39,6 @@ export class ProjectPersistenceError extends Error {
   }
 }
 
-export interface IProjectRepository {
-  allocateNextProjectCode(): Promise<string>;
-  createWithGeneratedCode(
-    buildProject: (projectId: string) => Omit<IProject, '_id'>,
-  ): Promise<IProject>;
-  findProjects(filters: ListProjectsDto): Promise<PaginatedResult<IProject>>;
-  findAllProjects(): Promise<IProject[]>;
-  findAllNonCompletedProjects(): Promise<IProject[]>;
-  findByIdOrCode(identifier: string): Promise<IProject | null>;
-  updateByRecordId(
-    recordId: string,
-    updateData: Partial<IProject>,
-  ): Promise<IProject | null>;
-  deleteByRecordId(recordId: string): Promise<IProject | null>;
-  createCostAlert(
-    alertData: Omit<IProjectCostAlert, '_id'>,
-  ): Promise<IProjectCostAlert>;
-  resolveActiveCostAlerts(
-    projectRecordId: string,
-    thresholdType: CostThresholdAlertType,
-    reason: string,
-    resolvedAt?: Date,
-  ): Promise<number>;
-  findCostAlerts(
-    filters: ListProjectAlertsDto,
-  ): Promise<PaginatedResult<IProjectCostAlert>>;
-  findCostAlertsByProject(projectRecordId: string): Promise<IProjectCostAlert[]>;
-  createActivityWarning(
-    warningData: Omit<IProjectActivityWarning, '_id'>,
-  ): Promise<IProjectActivityWarning>;
-  resolveActiveActivityWarnings(
-    projectRecordId: string,
-    reason: string,
-    resolvedAt?: Date,
-  ): Promise<number>;
-  findActivityWarnings(filters: {
-    page: number;
-    limit: number;
-    projectId?: string;
-    status?: AlertLifecycleStatus;
-  }): Promise<PaginatedResult<IProjectActivityWarning>>;
-}
 
 function cloneProject(project: IProject): IProject {
   return {

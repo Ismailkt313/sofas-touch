@@ -3,28 +3,9 @@ import { IUser, UserModel, sharedUserMemoryStore } from '../../auth/models/user.
 import { ListUsersDto } from '../dto/list-users.dto';
 import { ListPendingApprovalsDto } from '../dto/list-pending-approvals.dto';
 
-export interface PaginatedResult<T> {
-  items: T[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+import { IUserRepository, PaginatedResult } from '../types';
 
-export interface IUserRepository {
-  findUsers(filters: ListUsersDto): Promise<PaginatedResult<IUser>>;
-  findPendingApprovals(
-    filters: ListPendingApprovalsDto,
-  ): Promise<PaginatedResult<IUser>>;
-  findById(id: string): Promise<IUser | null>;
-  findByEmail(email: string, includePassword?: boolean): Promise<IUser | null>;
-  create(userData: Partial<IUser>): Promise<IUser>;
-  update(id: string, updateData: Partial<IUser>): Promise<IUser | null>;
-  updateStatus(id: string, isActive: boolean): Promise<IUser | null>;
-  approveUser(id: string, adminId: string): Promise<IUser | null>;
-  rejectUser(id: string, adminId: string, reason?: string): Promise<IUser | null>;
-  count(): Promise<number>;
-}
+export { IUserRepository, PaginatedResult };
 
 export class UserRepository implements IUserRepository {
   private memoryStore: Map<string, IUser> = sharedUserMemoryStore;

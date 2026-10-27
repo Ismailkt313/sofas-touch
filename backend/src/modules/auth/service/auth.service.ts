@@ -4,7 +4,7 @@ import { env } from '../../../config/env';
 import { UserResponse } from '../../../types/auth';
 import { LoginDto } from '../dto/login.dto';
 import { SignupDto } from '../dto/signup.dto';
-import { IAuthRepository } from '../repository/auth.repository';
+import { IAuthRepository, IAuthService } from '../types';
 
 export class InvalidCredentialsError extends Error {
   constructor(message = 'Invalid email address or password.') {
@@ -47,14 +47,7 @@ export class UserAlreadyExistsError extends Error {
   }
 }
 
-export interface IAuthService {
-  login(
-    dto: LoginDto,
-  ): Promise<{ authenticated: boolean; token: string; user: UserResponse }>;
-  signup(dto: SignupDto): Promise<{ user: UserResponse }>;
-  getCurrentUser(userId: string): Promise<UserResponse>;
-  hashPassword(plainPassword: string): string;
-}
+export { IAuthService };
 
 export class AuthService implements IAuthService {
   constructor(private authRepository: IAuthRepository) {}

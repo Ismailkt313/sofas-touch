@@ -8,54 +8,13 @@ import {
   validateListProjectsDto,
 } from '../dto/list-projects.dto';
 import { validateUpdateProjectDto } from '../dto/update-project.dto';
+import { IProjectController, IProjectService } from '../types';
 import {
   InvalidProjectOperationError,
-  IProjectService,
   ProjectNotFoundError,
 } from '../service/project.service';
 
-export interface IProjectController {
-  list(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-  getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-  create(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-  update(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-  remove(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-  getFinancialSummary(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void>;
-  listFinancialSummaries(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void>;
-  recalculateFinancials(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void>;
-  listCostAlerts(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void>;
-  getProjectCostAlerts(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void>;
-  listActivityWarnings(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void>;
-  evaluateActivityWarnings(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void>;
-}
+export { IProjectController };
 
 function extractParam(raw: string | string[] | undefined): string {
   if (Array.isArray(raw)) {

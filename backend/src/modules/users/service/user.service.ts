@@ -5,7 +5,7 @@ import { ListUsersDto } from '../dto/list-users.dto';
 import { ListPendingApprovalsDto } from '../dto/list-pending-approvals.dto';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
-import { IUserRepository, PaginatedResult } from '../repository/user.repository';
+import { IUserRepository, IUserService, PaginatedResult } from '../types';
 
 export class UserNotFoundError extends Error {
   constructor(message = 'User not found.') {
@@ -71,49 +71,7 @@ export function toUserResponse(user: IUser): UserResponse {
   };
 }
 
-export interface IUserService {
-  listUsers(
-    filters: ListUsersDto,
-  ): Promise<{
-    users: UserResponse[];
-    pagination: {
-      page: number;
-      limit: number;
-      total: number;
-      totalPages: number;
-    };
-  }>;
-  listPendingApprovals(
-    filters: ListPendingApprovalsDto,
-  ): Promise<{
-    users: UserResponse[];
-    pagination: {
-      page: number;
-      limit: number;
-      total: number;
-      totalPages: number;
-    };
-  }>;
-  getUserById(id: string): Promise<UserResponse>;
-  createUser(dto: CreateUserDto, currentAdminId?: string): Promise<UserResponse>;
-  updateUser(
-    id: string,
-    dto: UpdateUserDto,
-    currentAdminId: string,
-  ): Promise<UserResponse>;
-  updateUserStatus(
-    id: string,
-    isActive: boolean,
-    currentAdminId: string,
-  ): Promise<UserResponse>;
-  approveUser(id: string, currentAdminId: string): Promise<UserResponse>;
-  rejectUser(
-    id: string,
-    currentAdminId: string,
-    reason?: string,
-  ): Promise<UserResponse>;
-  hashPassword(plainPassword: string): string;
-}
+export { IUserService };
 
 export class UserService implements IUserService {
   constructor(private userRepository: IUserRepository) {}

@@ -67,4 +67,6 @@ export {
   UserAlreadyExistsError,
 };
 
+export * from './types';
+
 export default authRouter;

@@ -2,8 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../../../types/auth';
 import { validateLoginDto } from '../dto/login.dto';
 import { validateSignupDto } from '../dto/signup.dto';
+import { IAuthController, IAuthService } from '../types';
 import {
-  IAuthService,
   InactiveAccountError,
   InvalidCredentialsError,
   PendingApprovalError,
@@ -11,11 +11,7 @@ import {
   UserAlreadyExistsError,
 } from '../service/auth.service';
 
-export interface IAuthController {
-  login(req: Request, res: Response, next: NextFunction): Promise<void>;
-  signup(req: Request, res: Response, next: NextFunction): Promise<void>;
-  me(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
-}
+export { IAuthController };
 
 export class AuthController implements IAuthController {
   constructor(private authService: IAuthService) {}
