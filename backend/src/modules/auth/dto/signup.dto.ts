@@ -28,7 +28,6 @@ export function validateSignupDto(input: unknown): ValidationResult<SignupDto> {
 
   const raw = input as Record<string, unknown>;
 
-  // Name validation: supports 'name' as well as 'fullName'
   const candidateName =
     typeof raw.name === 'string' && raw.name.trim()
       ? raw.name
@@ -52,7 +51,6 @@ export function validateSignupDto(input: unknown): ValidationResult<SignupDto> {
     }
   }
 
-  // Email validation
   if (
     raw.email === undefined ||
     raw.email === null ||
@@ -67,7 +65,6 @@ export function validateSignupDto(input: unknown): ValidationResult<SignupDto> {
     }
   }
 
-  // Phone validation (optional or required depending on submission, validated if non-empty)
   let sanitizedPhone = '';
   if (raw.phone !== undefined && raw.phone !== null && raw.phone !== '') {
     if (typeof raw.phone !== 'string') {
@@ -87,7 +84,6 @@ export function validateSignupDto(input: unknown): ValidationResult<SignupDto> {
     }
   }
 
-  // Password validation
   if (
     raw.password === undefined ||
     raw.password === null ||
@@ -105,7 +101,6 @@ export function validateSignupDto(input: unknown): ValidationResult<SignupDto> {
     }
   }
 
-  // Confirm password validation (if provided in payload)
   if (
     raw.confirmPassword !== undefined &&
     raw.confirmPassword !== null &&
@@ -123,7 +118,6 @@ export function validateSignupDto(input: unknown): ValidationResult<SignupDto> {
     };
   }
 
-  // Any role passed in request body is intentionally stripped to prevent privilege escalation
   const sanitized: SignupDto = {
     name: (candidateName as string).trim(),
     email: (raw.email as string).trim().toLowerCase(),

@@ -182,6 +182,22 @@ const ProjectActivityWarningSchema = new Schema<IProjectActivityWarning>(
   },
 );
 
+ProjectCostAlertSchema.index(
+  { projectRecordId: 1, thresholdType: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: 'active' },
+  },
+);
+
+ProjectActivityWarningSchema.index(
+  { projectRecordId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: 'active' },
+  },
+);
+
 export const ProjectCostAlertModel: Model<IProjectCostAlert> =
   mongoose.models.ProjectCostAlert ||
   mongoose.model<IProjectCostAlert>('ProjectCostAlert', ProjectCostAlertSchema);

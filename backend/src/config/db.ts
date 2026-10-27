@@ -10,7 +10,6 @@ export async function connectDB(): Promise<void> {
       await mongoose.connect(env.DATABASE_URL);
       console.log('Connected to MongoDB database.');
 
-      // Migration safeguard: ensure pre-existing accounts have an approvalStatus
       if (mongoose.models.User) {
         await mongoose.models.User.updateMany(
           { role: { $in: ['admin', 'Admin'] }, approvalStatus: { $in: [null, undefined] } },
@@ -22,7 +21,6 @@ export async function connectDB(): Promise<void> {
           { $set: { approvalStatus: 'approved', approvedAt: new Date() } },
         ).exec().catch(() => null);
 
-        // If MongoDB has 0 users, populate from sharedUserMemoryStore
         const count = await mongoose.models.User.countDocuments().exec().catch(() => 0);
         if (count === 0) {
           const { sharedUserMemoryStore, seedSharedUserMemoryStore } = await import(
@@ -38,6 +36,17 @@ export async function connectDB(): Promise<void> {
           await mongoose.models.User.insertMany(seedUsers).catch(() => null);
         }
       }
+
+      const projectModels = [
+        mongoose.models.Project,
+        mongoose.models.ProjectCounter,
+        mongoose.models.ProjectCostAlert,
+        mongoose.models.ProjectActivityWarning,
+      ].filter(Boolean);
+
+      await Promise.all(
+        projectModels.map((model) => model.createIndexes().catch(() => null)),
+      );
     } catch (err) {
       console.error('MongoDB connection error:', err);
     }

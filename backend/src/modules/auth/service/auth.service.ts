@@ -72,7 +72,6 @@ export class AuthService implements IAuthService {
     const user = await this.authRepository.findByEmail(normalizedEmail, true);
 
     if (!user || !user.password) {
-      // Mitigate timing-based user enumeration attacks
       bcrypt.compareSync(
         dto.password,
         '$2a$10$abcdefghijklmnopqrstuuNOPQRSTUVWXYZ1234567890abcdefghi',

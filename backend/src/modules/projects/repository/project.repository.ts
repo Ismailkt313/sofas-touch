@@ -138,6 +138,32 @@ export class ProjectRepository implements IProjectRepository {
     return mongoose.connection.readyState === 1;
   }
 
+  private async updateCounterAtomically(
+    updateQuery: Record<string, unknown>,
+  ): Promise<IProjectCounter | null> {
+    const maxRetries = 4;
+    for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+      try {
+        const doc = await this.counterModel
+          .findOneAndUpdate(
+            { _id: PROJECT_SEQUENCE_COUNTER_ID },
+            updateQuery,
+            { upsert: true, new: true },
+          )
+          .lean()
+          .exec();
+        return (doc as unknown as IProjectCounter) || null;
+      } catch (err: unknown) {
+        const mongoError = err as { code?: number };
+        if (mongoError?.code === 11000 && attempt < maxRetries) {
+          continue;
+        }
+        throw err;
+      }
+    }
+    return null;
+  }
+
   private async ensureDbCounterFloorSynced(force = false): Promise<void> {
     if (!this.isDbConnected()) {
       return;
@@ -163,13 +189,7 @@ export class ProjectRepository implements IProjectRepository {
         }
 
         if (maxSeq > 0) {
-          await this.counterModel
-            .findOneAndUpdate(
-              { _id: PROJECT_SEQUENCE_COUNTER_ID },
-              { $max: { seq: maxSeq } },
-              { upsert: true, new: true },
-            )
-            .exec();
+          await this.updateCounterAtomically({ $max: { seq: maxSeq } });
         }
       })().catch((err) => {
         this.dbFloorSyncPromise = null;
@@ -183,14 +203,9 @@ export class ProjectRepository implements IProjectRepository {
   async allocateNextProjectCode(): Promise<string> {
     if (this.isDbConnected()) {
       await this.ensureDbCounterFloorSynced(false);
-      const updatedCounter = await this.counterModel
-        .findOneAndUpdate(
-          { _id: PROJECT_SEQUENCE_COUNTER_ID },
-          { $inc: { seq: 1 } },
-          { upsert: true, new: true },
-        )
-        .lean()
-        .exec();
+      const updatedCounter = await this.updateCounterAtomically({
+        $inc: { seq: 1 },
+      });
 
       if (!updatedCounter || typeof updatedCounter.seq !== 'number') {
         throw new ProjectPersistenceError(
@@ -540,8 +555,38 @@ export class ProjectRepository implements IProjectRepository {
     alertData: Omit<IProjectCostAlert, '_id'>,
   ): Promise<IProjectCostAlert> {
     if (this.isDbConnected()) {
-      const created = await this.costAlertModel.create(alertData);
-      return created.toObject() as unknown as IProjectCostAlert;
+      try {
+        const created = await this.costAlertModel.create(alertData);
+        return created.toObject() as unknown as IProjectCostAlert;
+      } catch (err: unknown) {
+        const mongoError = err as { code?: number };
+        if (mongoError?.code === 11000 && alertData.status === 'active') {
+          const existingActive = await this.costAlertModel
+            .findOne({
+              projectRecordId: alertData.projectRecordId,
+              thresholdType: alertData.thresholdType,
+              status: 'active',
+            })
+            .lean()
+            .exec();
+          if (existingActive) {
+            return existingActive as unknown as IProjectCostAlert;
+          }
+        }
+        throw err;
+      }
+    }
+
+    if (alertData.status === 'active') {
+      for (const existing of this.costAlertMemory.values()) {
+        if (
+          existing.projectRecordId === alertData.projectRecordId &&
+          existing.thresholdType === alertData.thresholdType &&
+          existing.status === 'active'
+        ) {
+          return { ...existing };
+        }
+      }
     }
 
     const now = new Date();
@@ -713,8 +758,36 @@ export class ProjectRepository implements IProjectRepository {
     warningData: Omit<IProjectActivityWarning, '_id'>,
   ): Promise<IProjectActivityWarning> {
     if (this.isDbConnected()) {
-      const created = await this.activityWarningModel.create(warningData);
-      return created.toObject() as unknown as IProjectActivityWarning;
+      try {
+        const created = await this.activityWarningModel.create(warningData);
+        return created.toObject() as unknown as IProjectActivityWarning;
+      } catch (err: unknown) {
+        const mongoError = err as { code?: number };
+        if (mongoError?.code === 11000 && warningData.status === 'active') {
+          const existingActive = await this.activityWarningModel
+            .findOne({
+              projectRecordId: warningData.projectRecordId,
+              status: 'active',
+            })
+            .lean()
+            .exec();
+          if (existingActive) {
+            return existingActive as unknown as IProjectActivityWarning;
+          }
+        }
+        throw err;
+      }
+    }
+
+    if (warningData.status === 'active') {
+      for (const existing of this.activityWarningMemory.values()) {
+        if (
+          existing.projectRecordId === warningData.projectRecordId &&
+          existing.status === 'active'
+        ) {
+          return { ...existing };
+        }
+      }
     }
 
     const now = new Date();

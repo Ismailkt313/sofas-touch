@@ -32,7 +32,6 @@ export function validateUpdateUserDto(input: unknown): ValidationResult<UpdateUs
   const sanitized: UpdateUserDto = {};
   let fieldCount = 0;
 
-  // Name
   if (raw.name !== undefined) {
     if (typeof raw.name !== 'string' || !raw.name.trim()) {
       errors.name = 'Name must be a non-empty string.';
@@ -49,7 +48,6 @@ export function validateUpdateUserDto(input: unknown): ValidationResult<UpdateUs
     }
   }
 
-  // Email
   if (raw.email !== undefined) {
     if (typeof raw.email !== 'string' || !raw.email.trim()) {
       errors.email = 'Email must be a non-empty string.';
@@ -64,7 +62,6 @@ export function validateUpdateUserDto(input: unknown): ValidationResult<UpdateUs
     }
   }
 
-  // Phone
   if (raw.phone !== undefined) {
     if (raw.phone === '' || raw.phone === null) {
       sanitized.phone = '';
@@ -83,7 +80,6 @@ export function validateUpdateUserDto(input: unknown): ValidationResult<UpdateUs
     }
   }
 
-  // Image
   if (raw.image !== undefined) {
     if (typeof raw.image !== 'string') {
       errors.image = 'Image must be a string URL or path.';
@@ -93,7 +89,6 @@ export function validateUpdateUserDto(input: unknown): ValidationResult<UpdateUs
     }
   }
 
-  // Role
   if (raw.role !== undefined) {
     if (typeof raw.role !== 'string') {
       errors.role = 'Role must be a string.';
@@ -108,7 +103,6 @@ export function validateUpdateUserDto(input: unknown): ValidationResult<UpdateUs
     }
   }
 
-  // Password (optional reset/update by admin)
   if (raw.password !== undefined) {
     if (typeof raw.password !== 'string' || raw.password.length === 0) {
       errors.password = 'Password must be a non-empty string.';

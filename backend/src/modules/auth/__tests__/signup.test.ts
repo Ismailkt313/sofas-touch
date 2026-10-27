@@ -17,10 +17,8 @@ async function runTests() {
   await connectDB();
   console.log('--- Starting Signup & Approval Module Test Suite ---');
 
-  // 1. Validation Tests (validateSignupDto)
   console.log('Testing validateSignupDto...');
   {
-    // Valid input with name
     const validResult = validateSignupDto({
       name: 'Jane Doe',
       email: 'Jane.Doe@example.com',
@@ -33,7 +31,6 @@ async function runTests() {
     assert.strictEqual(validResult.value?.phone, '+44 20 7946 0123');
     assert.strictEqual(validResult.value?.password, 'SecurePassword123');
 
-    // Valid input with fullName alias
     const fullNameResult = validateSignupDto({
       fullName: 'John Smith',
       email: 'john@example.com',
@@ -42,7 +39,6 @@ async function runTests() {
     assert.strictEqual(fullNameResult.isValid, true);
     assert.strictEqual(fullNameResult.value?.name, 'John Smith');
 
-    // Role and approvalStatus tampering prevention in DTO
     const roleTamperResult = validateSignupDto({
       name: 'Hacker',
       email: 'hacker@example.com',
@@ -52,19 +48,16 @@ async function runTests() {
       approvedBy: 'usr_admin_001',
     });
     assert.strictEqual(roleTamperResult.isValid, true);
-    // TypeScript & value guarantee no role or approvalStatus is passed
     assert.strictEqual((roleTamperResult.value as any).role, undefined);
     assert.strictEqual((roleTamperResult.value as any).approvalStatus, undefined);
     assert.strictEqual((roleTamperResult.value as any).approvedBy, undefined);
 
-    // Missing required fields
     const emptyResult = validateSignupDto({});
     assert.strictEqual(emptyResult.isValid, false);
     assert.ok(emptyResult.errors?.name);
     assert.ok(emptyResult.errors?.email);
     assert.ok(emptyResult.errors?.password);
 
-    // Invalid email format
     const invalidEmailResult = validateSignupDto({
       name: 'Alice',
       email: 'not-an-email',
@@ -73,7 +66,6 @@ async function runTests() {
     assert.strictEqual(invalidEmailResult.isValid, false);
     assert.ok(invalidEmailResult.errors?.email);
 
-    // Weak password (too short)
     const shortPasswordResult = validateSignupDto({
       name: 'Bob',
       email: 'bob@example.com',
@@ -82,7 +74,6 @@ async function runTests() {
     assert.strictEqual(shortPasswordResult.isValid, false);
     assert.ok(shortPasswordResult.errors?.password);
 
-    // Weak password (no number)
     const noNumberPasswordResult = validateSignupDto({
       name: 'Bob',
       email: 'bob@example.com',
@@ -91,7 +82,6 @@ async function runTests() {
     assert.strictEqual(noNumberPasswordResult.isValid, false);
     assert.ok(noNumberPasswordResult.errors?.password);
 
-    // Password mismatch when confirmPassword is provided
     const mismatchResult = validateSignupDto({
       name: 'Bob',
       email: 'bob@example.com',
@@ -103,13 +93,11 @@ async function runTests() {
   }
   console.log('✓ validateSignupDto tests passed.');
 
-  // 2. AuthService Tests
   console.log('Testing AuthService.signup and approval enforcement...');
   {
     const repo = new AuthRepository();
     const service = new AuthService(repo);
 
-    // Attempting to signup with existing seed email throws UserAlreadyExistsError
     let threw = false;
     try {
       await service.signup({
@@ -123,7 +111,6 @@ async function runTests() {
     }
     assert.strictEqual(threw, true, 'Should reject existing user email');
 
-    // Successful signup defaults to data_entry and pending
     const testSignupEmail = `service_new_${Date.now()}@softtouchsofas.com`;
     const signupResult = await service.signup({
       name: 'Brand New User',
@@ -141,14 +128,12 @@ async function runTests() {
     assert.strictEqual((signupResult.user as any).password, undefined);
     assert.strictEqual((signupResult.user as any).passwordHash, undefined);
 
-    // Verify password is encrypted in database/store
     const savedUserInRepo = await repo.findByEmail(testSignupEmail, true);
     assert.ok(savedUserInRepo);
     assert.notStrictEqual(savedUserInRepo.password, 'SecurePassword123');
     assert.ok(bcrypt.compareSync('SecurePassword123', savedUserInRepo.password!));
     assert.strictEqual(savedUserInRepo.approvalStatus, 'pending');
 
-    // Verify pending user CANNOT authenticate
     let pendingLoginThrew = false;
     try {
       await service.login({
@@ -161,7 +146,6 @@ async function runTests() {
     }
     assert.strictEqual(pendingLoginThrew, true);
 
-    // Verify duplicate signup with new user email fails
     let threwDuplicate = false;
     try {
       await service.signup({
@@ -175,7 +159,6 @@ async function runTests() {
     }
     assert.strictEqual(threwDuplicate, true, 'Should reject duplicate user email on second attempt');
 
-    // Verify Mongo duplicate key error handling (code 11000) simulation
     const mockRepo: any = {
       findByEmail: async () => null,
       create: async () => {
@@ -200,7 +183,6 @@ async function runTests() {
   }
   console.log('✓ AuthService.signup tests passed.');
 
-  // 3. HTTP Server Integration Tests
   console.log('Testing HTTP /api/auth/signup & approval enforcement...');
   {
     const server = app.listen(0);
@@ -208,7 +190,6 @@ async function runTests() {
     const baseUrl = `http://localhost:${address.port}`;
 
     try {
-      // Test 1: Successful registration - response indicates pending Admin approval
       const testEmail = `test_approval_${Date.now()}@example.com`;
       const res1 = await fetch(`${baseUrl}/api/auth/signup`, {
         method: 'POST',
@@ -218,8 +199,8 @@ async function runTests() {
           email: testEmail,
           phone: '+44 7123 456789',
           password: 'ValidPassword123',
-          role: 'admin', // Tamper attempt
-          approvalStatus: 'approved', // Tamper attempt
+          role: 'admin',
+          approvalStatus: 'approved',
         }),
       });
       const data1: any = await res1.json();
@@ -233,7 +214,6 @@ async function runTests() {
       assert.strictEqual(data1.user.password, undefined);
       assert.strictEqual(data1.token, undefined, 'Signup must never return authentication token');
 
-      // Test 2: Duplicate registration returns 409 Conflict
       const res2 = await fetch(`${baseUrl}/api/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -248,7 +228,6 @@ async function runTests() {
       assert.strictEqual(data2.error, 'Conflict');
       assert.ok(data2.message.includes('already exists'));
 
-      // Test 3: Validation failure returns 400 Bad Request
       const res3 = await fetch(`${baseUrl}/api/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -264,7 +243,6 @@ async function runTests() {
       assert.ok(data3.errors.email);
       assert.ok(data3.errors.password);
 
-      // Test 4: Pending user login is blocked with 403 Forbidden and code PENDING_APPROVAL
       const loginResPending = await fetch(`${baseUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -280,7 +258,6 @@ async function runTests() {
       assert.ok(loginDataPending.message.includes('pending'));
       assert.strictEqual(loginDataPending.token, undefined);
 
-      // Test 5: Wrong password for pending user returns 401 Unauthorized (timing/enumeration defense)
       const loginWrongPass = await fetch(`${baseUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -291,7 +268,6 @@ async function runTests() {
       });
       assert.strictEqual(loginWrongPass.status, 401, 'Wrong password must return 401 without revealing status');
 
-      // Test 6: Existing admin can log in normally
       const adminLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -306,7 +282,6 @@ async function runTests() {
       assert.strictEqual(adminLoginData.user.role, 'admin');
       const adminToken = adminLoginData.token;
 
-      // Test 7: Admin approves the pending user via API
       const userRepo = new UserRepository();
       const userRecord = await userRepo.findByEmail(testEmail);
       assert.ok(userRecord);
@@ -325,7 +300,6 @@ async function runTests() {
       const approveData: any = await approveRes.json();
       assert.strictEqual(approveData.user.approvalStatus, 'approved');
 
-      // Test 8: Approved user can now log in successfully
       const loginApprovedRes = await fetch(`${baseUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -341,7 +315,6 @@ async function runTests() {
       assert.strictEqual(loginApprovedData.user.approvalStatus, 'approved');
       assert.strictEqual(loginApprovedData.user.role, 'data_entry');
 
-      // Test 9: Approved user can access protected data entry routes (e.g., /api/projects)
       const projectRes = await fetch(`${baseUrl}/api/projects`, {
         headers: { Authorization: `Bearer ${loginApprovedData.token}` },
       });

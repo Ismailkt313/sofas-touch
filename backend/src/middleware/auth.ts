@@ -9,8 +9,10 @@ export function generateToken(
   payload: AuthTokenPayload,
   expiresIn: string = env.JWT_EXPIRES_IN,
 ): string {
-  // @ts-expect-error jsonwebtoken types signature
-  return jwt.sign(payload, env.JWT_SECRET, { expiresIn });
+  const options: jwt.SignOptions = {
+    expiresIn: expiresIn as jwt.SignOptions['expiresIn'],
+  };
+  return jwt.sign(payload, env.JWT_SECRET, options);
 }
 
 export async function findLiveUserById(id: string): Promise<IUser | null> {
@@ -21,7 +23,7 @@ export async function findLiveUserById(id: string): Promise<IUser | null> {
         return doc as unknown as IUser;
       }
     } catch {
-      // Continue to check in-memory store
+      void 0;
     }
   }
 
@@ -60,7 +62,6 @@ export async function verifyToken(
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET) as AuthTokenPayload;
 
-    // Server-side verification of user status and approval
     const liveUser = await findLiveUserById(decoded.id);
     if (!liveUser) {
       res.status(401).json({
@@ -107,7 +108,6 @@ export async function verifyToken(
       return;
     }
 
-    // Attach server-verified claims to request
     req.user = {
       ...decoded,
       id: String(liveUser._id),
@@ -167,14 +167,6 @@ export function requireRole(allowedRoles: string[]) {
 export const requireAdmin = requireRole(['admin']);
 export const requireDataEntryOrAdmin = requireRole(['admin', 'data_entry']);
 
-/**
- * Reusable authorization guard for Data Entry onboarding and protected operations.
- * Enforces:
- * 1. Valid authentication session
- * 2. Active account (isActive !== false)
- * 3. Approved status (approvalStatus === 'approved')
- * 4. Permitted role (data_entry or admin)
- */
 export function requireApprovedDataEntry(
   req: AuthenticatedRequest,
   res: Response,

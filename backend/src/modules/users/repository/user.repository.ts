@@ -221,7 +221,6 @@ export class UserRepository implements IUserRepository {
           return doc as unknown as IUser;
         }
       } catch {
-        // Fall back to memoryStore
       }
     }
 
@@ -419,7 +418,6 @@ export class UserRepository implements IUserRepository {
           return updated as unknown as IUser;
         }
       } catch {
-        // Fall back to memoryStore
       }
     }
 
@@ -487,7 +485,6 @@ export class UserRepository implements IUserRepository {
           return updated as unknown as IUser;
         }
       } catch {
-        // Fall back to memoryStore
       }
     }
 

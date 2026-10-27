@@ -555,6 +555,14 @@ export class ProjectService implements IProjectService {
       const nextWarningThreshold =
         dto.costAlertThresholdPercent ?? fresh.costAlertThresholdPercent;
 
+      const hasOperationalProjectUpdate =
+        nextName !== fresh.name ||
+        nextClientName !== fresh.clientName ||
+        nextCategory !== fresh.category ||
+        nextStatus !== fresh.status ||
+        nextDescription !== (fresh.description ?? '') ||
+        nextContractValue !== fresh.contractValue;
+
       const voucherTotals =
         await this.voucherTotalsProvider.aggregateProjectVouchers(
           recordId,
@@ -579,13 +587,34 @@ export class ProjectService implements IProjectService {
         now,
       });
 
-      const resolveReason =
-        nextStatus === 'Completed' ? 'project_completed' : 'activity_resumed';
-      await this.projectRepository.resolveActiveActivityWarnings(
-        recordId,
-        resolveReason,
-        now,
-      );
+      let nextLastActivityAt = new Date(fresh.lastActivityAt);
+      let nextLastActivityType = fresh.lastActivityType;
+      let nextInactivityState = {
+        activeWarningId: fresh.inactivityWarningState?.activeWarningId ?? null,
+        warnedForLastActivityAt: fresh.inactivityWarningState
+          ?.warnedForLastActivityAt
+          ? new Date(fresh.inactivityWarningState.warnedForLastActivityAt)
+          : null,
+      };
+
+      if (nextStatus === 'Completed' || hasOperationalProjectUpdate) {
+        const resolveReason =
+          nextStatus === 'Completed' ? 'project_completed' : 'activity_resumed';
+        await this.projectRepository.resolveActiveActivityWarnings(
+          recordId,
+          resolveReason,
+          now,
+        );
+        nextInactivityState = {
+          activeWarningId: null,
+          warnedForLastActivityAt: null,
+        };
+      }
+
+      if (hasOperationalProjectUpdate) {
+        nextLastActivityAt = now;
+        nextLastActivityType = 'project_updated';
+      }
 
       const updated = await this.projectRepository.updateByRecordId(recordId, {
         name: nextName,
@@ -603,12 +632,9 @@ export class ProjectService implements IProjectService {
         estimatedProfitMargin: metrics.estimatedProfitMargin,
         financialSummaryUpdatedAt: now,
         costThresholdState: thresholdOutcome.nextState,
-        lastActivityAt: now,
-        lastActivityType: 'project_updated',
-        inactivityWarningState: {
-          activeWarningId: null,
-          warnedForLastActivityAt: null,
-        },
+        lastActivityAt: nextLastActivityAt,
+        lastActivityType: nextLastActivityType,
+        inactivityWarningState: nextInactivityState,
       });
 
       if (!updated) {
@@ -658,6 +684,24 @@ export class ProjectService implements IProjectService {
     filters: ListProjectsDto,
   ): Promise<PaginatedResult<ProjectFinancialSummaryDto>> {
     const result = await this.projectRepository.findProjects(filters);
+
+    if (
+      this.voucherTotalsProvider.isPurchaseIntegrationActive() ||
+      this.voucherTotalsProvider.isExpenseIntegrationActive()
+    ) {
+      const refreshedItems = await Promise.all(
+        result.items.map((item) =>
+          item._id
+            ? this.recalculateProjectFinancials(String(item._id))
+            : Promise.resolve(mapFinancialSummary(item)),
+        ),
+      );
+      return {
+        ...result,
+        items: refreshedItems,
+      };
+    }
+
     return {
       ...result,
       items: result.items.map(mapFinancialSummary),
@@ -927,6 +971,15 @@ export class ProjectService implements IProjectService {
           );
 
         let effectiveLastActivityAt = new Date(fresh.lastActivityAt);
+        let currentActiveWarningId =
+          fresh.inactivityWarningState?.activeWarningId ?? null;
+        let alreadyWarnedTimestamp = fresh.inactivityWarningState
+          ?.warnedForLastActivityAt
+          ? new Date(
+              fresh.inactivityWarningState.warnedForLastActivityAt,
+            ).getTime()
+          : null;
+
         if (
           voucherTotals.latestVoucherActivityAt &&
           voucherTotals.latestVoucherActivityAt.getTime() >
@@ -946,6 +999,8 @@ export class ProjectService implements IProjectService {
             'activity_resumed',
             referenceDate,
           );
+          currentActiveWarningId = null;
+          alreadyWarnedTimestamp = null;
           await this.projectRepository.updateByRecordId(recordId, {
             lastActivityAt: effectiveLastActivityAt,
             inactivityWarningState: {
@@ -959,15 +1014,21 @@ export class ProjectService implements IProjectService {
           referenceDate.getTime() - effectiveLastActivityAt.getTime();
 
         if (elapsedMs < thresholdMs) {
+          if (currentActiveWarningId !== null || alreadyWarnedTimestamp !== null) {
+            await this.projectRepository.resolveActiveActivityWarnings(
+              recordId,
+              'below_inactivity_threshold',
+              referenceDate,
+            );
+            await this.projectRepository.updateByRecordId(recordId, {
+              inactivityWarningState: {
+                activeWarningId: null,
+                warnedForLastActivityAt: null,
+              },
+            });
+          }
           return;
         }
-
-        const alreadyWarnedTimestamp = fresh.inactivityWarningState
-          ?.warnedForLastActivityAt
-          ? new Date(
-              fresh.inactivityWarningState.warnedForLastActivityAt,
-            ).getTime()
-          : null;
 
         if (alreadyWarnedTimestamp === effectiveLastActivityAt.getTime()) {
           return;

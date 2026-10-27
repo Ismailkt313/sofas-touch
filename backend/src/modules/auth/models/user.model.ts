@@ -90,7 +90,6 @@ const UserSchema = new Schema<IUser>(
 export const UserModel: Model<IUser> =
   mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
 
-// Shared in-memory fallback store used across Auth and User Management modules
 export const sharedUserMemoryStore: Map<string, IUser> = new Map();
 
 export function seedSharedUserMemoryStore(): void {
