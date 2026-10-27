@@ -1,6 +1,5 @@
 import { ProjectAutomationBanners } from '../components/ProjectAutomationBanners'
 import { ProjectFormModal } from '../components/ProjectFormModal'
-import { ProjectStatusModal } from '../components/ProjectStatusModal'
 import { ProjectsFiltersBar } from '../components/ProjectsFiltersBar'
 import { ProjectsMobileList } from '../components/ProjectsMobileList'
 import { ProjectsPagination } from '../components/ProjectsPagination'
@@ -29,6 +28,7 @@ export function ProjectsPage({ currentUser, onNavigate }) {
     handleSearchChange,
     handleStatusFilterChange,
     handleCategoryFilterChange,
+    handleApplyFilters,
     resetFilters,
 
     isLoading,
@@ -55,9 +55,7 @@ export function ProjectsPage({ currentUser, onNavigate }) {
     closeEditModal,
     handleEditSubmit,
 
-    statusModalProject,
-    openStatusModal,
-    closeStatusModal,
+    updatingStatusKey,
     handleStatusSubmit,
   } = useProjectsList({ currentUser })
 
@@ -205,6 +203,7 @@ export function ProjectsPage({ currentUser, onNavigate }) {
               onSearchChange={handleSearchChange}
               onStatusFilterChange={handleStatusFilterChange}
               onCategoryFilterChange={handleCategoryFilterChange}
+              onApplyFilters={handleApplyFilters}
               onResetFilters={resetFilters}
             />
 
@@ -326,17 +325,19 @@ export function ProjectsPage({ currentUser, onNavigate }) {
                 <ProjectsTable
                   projects={projects}
                   activeWarningByProjectCode={activeWarningByProjectCode}
+                  updatingStatusKey={updatingStatusKey}
                   onViewDetails={handleViewProject}
                   onEdit={openEditModal}
-                  onEditStatus={openStatusModal}
+                  onStatusChange={handleStatusSubmit}
                 />
 
                 <ProjectsMobileList
                   projects={projects}
                   activeWarningByProjectCode={activeWarningByProjectCode}
+                  updatingStatusKey={updatingStatusKey}
                   onViewDetails={handleViewProject}
                   onEdit={openEditModal}
-                  onEditStatus={openStatusModal}
+                  onStatusChange={handleStatusSubmit}
                 />
 
                 <ProjectsPagination
@@ -371,16 +372,6 @@ export function ProjectsPage({ currentUser, onNavigate }) {
           isOpen
           onClose={closeEditModal}
           onSubmit={handleEditSubmit}
-        />
-      ) : null}
-
-      {statusModalProject ? (
-        <ProjectStatusModal
-          key={`status-project-${statusModalProject.id || statusModalProject.projectId}`}
-          project={statusModalProject}
-          isOpen={Boolean(statusModalProject)}
-          onClose={closeStatusModal}
-          onSubmit={handleStatusSubmit}
         />
       ) : null}
     </div>

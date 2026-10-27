@@ -56,7 +56,7 @@ export function useProjectsList({ currentUser }) {
   const [feedbackBanner, setFeedbackBanner] = useState(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [editingProject, setEditingProject] = useState(null)
-  const [statusModalProject, setStatusModalProject] = useState(null)
+  const [updatingStatusKey, setUpdatingStatusKey] = useState('')
 
   const [refreshTick, setRefreshTick] = useState(0)
   const requestSeqRef = useRef(0)
@@ -286,6 +286,12 @@ export function useProjectsList({ currentUser }) {
     setCurrentPage(1)
   }, [])
 
+  const handleApplyFilters = useCallback((nextStatus, nextCategory) => {
+    setStatusFilter(nextStatus || 'all')
+    setCategoryFilter(nextCategory || 'all')
+    setCurrentPage(1)
+  }, [])
+
   const resetFilters = useCallback(() => {
     setSearchInput('')
     setDebouncedSearch('')
@@ -343,68 +349,89 @@ export function useProjectsList({ currentUser }) {
     return updated
   }, [])
 
-  const openStatusModal = useCallback((project) => {
-    setStatusModalProject(project)
-  }, [])
-
-  const closeStatusModal = useCallback(() => {
-    setStatusModalProject(null)
-  }, [])
-
   const handleStatusSubmit = useCallback(
     async (projectIdentifier, nextStatus) => {
-      const updated = await updateProjectStatus(projectIdentifier, nextStatus)
-      const targetCode = (updated.projectId || projectIdentifier || '').trim()
-      const targetId = updated.id || projectIdentifier
+      const normalizedTarget = String(projectIdentifier || '').trim()
+      if (!normalizedTarget) {
+        return null
+      }
 
-      setProjects((prev) =>
-        prev.map((item) => {
-          const isMatch =
-            (targetCode && String(item.projectId).toUpperCase() === targetCode.toUpperCase()) ||
-            (targetId && String(item.id) === String(targetId))
-          if (!isMatch) {
-            return item
-          }
-          return {
-            ...item,
-            status: updated.status,
-          }
-        }),
+      const previousItem = projects.find(
+        (item) =>
+          String(item.projectId || '').toUpperCase() ===
+            normalizedTarget.toUpperCase() ||
+          String(item.id || '') === normalizedTarget,
       )
+      const oldStatus = previousItem?.status
 
-      setStatusCounts((prev) => {
-        const oldStatus = statusModalProject?.status
-        const newStatus = updated.status
-        if (!oldStatus || oldStatus === newStatus) {
-          return prev
-        }
-        const next = { ...prev }
-        if (oldStatus === 'In Progress' && next.inProgress > 0) next.inProgress -= 1
-        if (oldStatus === 'Under Review' && next.underReview > 0) next.underReview -= 1
-        if (oldStatus === 'Completed' && next.completed > 0) next.completed -= 1
+      setUpdatingStatusKey(normalizedTarget)
+      try {
+        const updated = await updateProjectStatus(normalizedTarget, nextStatus)
+        const targetCode = (updated.projectId || normalizedTarget).trim()
+        const targetId = updated.id || normalizedTarget
 
-        if (newStatus === 'In Progress') next.inProgress += 1
-        if (newStatus === 'Under Review') next.underReview += 1
-        if (newStatus === 'Completed') next.completed += 1
-        return next
-      })
+        setProjects((prev) =>
+          prev.map((item) => {
+            const isMatch =
+              (targetCode &&
+                String(item.projectId).toUpperCase() ===
+                  targetCode.toUpperCase()) ||
+              (targetId && String(item.id) === String(targetId))
+            if (!isMatch) {
+              return item
+            }
+            return {
+              ...item,
+              status: updated.status,
+            }
+          }),
+        )
 
-      setStatusModalProject(null)
+        setStatusCounts((prev) => {
+          const newStatus = updated.status
+          if (!oldStatus || oldStatus === newStatus) {
+            return prev
+          }
+          const next = { ...prev }
+          if (oldStatus === 'In Progress' && next.inProgress > 0)
+            next.inProgress -= 1
+          if (oldStatus === 'Under Review' && next.underReview > 0)
+            next.underReview -= 1
+          if (oldStatus === 'Completed' && next.completed > 0)
+            next.completed -= 1
 
-      const filterExcludes =
-        statusFilter !== 'all' && statusFilter !== updated.status
-      setFeedbackBanner({
-        tone: 'success',
-        text: filterExcludes
-          ? `Project ${targetCode} status updated to "${updated.status}" (it was moved out of the "${statusFilter}" view).`
-          : `Project ${targetCode} status was updated to "${updated.status}".`,
-        projectId: targetCode || targetId,
-      })
+          if (newStatus === 'In Progress') next.inProgress += 1
+          if (newStatus === 'Under Review') next.underReview += 1
+          if (newStatus === 'Completed') next.completed += 1
+          return next
+        })
 
-      setRefreshTick((prev) => prev + 1)
-      return updated
+        const filterExcludes =
+          statusFilter !== 'all' && statusFilter !== updated.status
+        setFeedbackBanner({
+          tone: 'success',
+          text: filterExcludes
+            ? `Project ${targetCode} status updated to "${updated.status}" (moved out of the "${statusFilter}" filter).`
+            : `Project ${targetCode} status updated to "${updated.status}".`,
+          projectId: targetCode || targetId,
+        })
+
+        setRefreshTick((prev) => prev + 1)
+        return updated
+      } catch (err) {
+        setFeedbackBanner({
+          tone: 'error',
+          text:
+            err instanceof Error
+              ? err.message
+              : 'Failed to update project status. Please try again.',
+        })
+        throw err
+      } finally {
+        setUpdatingStatusKey('')
+      }
     },
-    [statusModalProject?.status, statusFilter],
+    [projects, statusFilter],
   )
 
   const handleRunInactivityEvaluation = useCallback(async () => {
@@ -472,6 +499,7 @@ export function useProjectsList({ currentUser }) {
     handleSearchChange,
     handleStatusFilterChange,
     handleCategoryFilterChange,
+    handleApplyFilters,
     resetFilters,
 
     isLoading,
@@ -498,9 +526,7 @@ export function useProjectsList({ currentUser }) {
     closeEditModal,
     handleEditSubmit,
 
-    statusModalProject,
-    openStatusModal,
-    closeStatusModal,
+    updatingStatusKey,
     handleStatusSubmit,
   }
 }

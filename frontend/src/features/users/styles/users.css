@@ -1,7 +1,3 @@
-/* ==========================================================================
-   Soft Touch Sofas — User Management Feature Styles (/users)
-   ========================================================================== */
-
 .sr-only {
   position: absolute;
   width: 1px;
@@ -21,7 +17,6 @@
   min-width: 0;
 }
 
-/* Page Header */
 .users-header {
   display: flex;
   align-items: flex-start;
@@ -52,7 +47,6 @@
   gap: 0.65rem;
 }
 
-/* Explicit Development-Only Preview Notice */
 .users-dev-banner {
   display: flex;
   align-items: center;
@@ -133,7 +127,6 @@
   outline-offset: 2px;
 }
 
-/* Action Feedback Banner */
 .users-feedback {
   display: flex;
   align-items: center;
@@ -183,7 +176,6 @@
   background-color: rgba(0, 0, 0, 0.05);
 }
 
-/* Main Directory Card Surface */
 .users-surface {
   background-color: #ffffff;
   border: 1px solid #e4dbd0;
@@ -192,7 +184,6 @@
   min-width: 0;
 }
 
-/* Search & Filter Toolbar */
 .users-toolbar {
   display: flex;
   align-items: center;
@@ -361,7 +352,6 @@
   cursor: not-allowed;
 }
 
-/* Desktop & Tablet Table */
 .users-table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -473,7 +463,6 @@
   line-height: 1.2;
 }
 
-/* Avatar */
 .user-avatar {
   border-radius: 50%;
   background-color: #ede4d8;
@@ -512,7 +501,6 @@
   object-fit: cover;
 }
 
-/* Role & Status Badges */
 .user-badge {
   display: inline-flex;
   align-items: center;
@@ -558,7 +546,6 @@
   flex-shrink: 0;
 }
 
-/* Per-Row Actions Menu */
 .user-actions {
   position: relative;
   display: inline-flex;
@@ -709,12 +696,10 @@
   margin: 0.3rem 0.2rem;
 }
 
-/* Mobile Card List (hidden on >= 768px) */
 .users-mobile-list {
   display: none;
 }
 
-/* Pagination Footer */
 .users-pagination {
   display: flex;
   align-items: center;
@@ -795,7 +780,6 @@
   outline-offset: 2px;
 }
 
-/* Loading, Empty, No-Results & Error States */
 .users-loading {
   padding: 1.15rem;
   display: flex;
@@ -916,7 +900,6 @@
   gap: 0.65rem;
 }
 
-/* Modal Forms & Detail Views */
 .users-modal-form {
   display: flex;
   flex-direction: column;
@@ -1103,10 +1086,6 @@
   margin-top: 0.9rem;
 }
 
-/* ==========================================================================
-   Tablet Adaptation (768px – 1023px)
-   ========================================================================== */
-
 @media (max-width: 1023px) and (min-width: 768px) {
   .users-search {
     max-width: none;
@@ -1132,64 +1111,99 @@
   }
 }
 
-/* ==========================================================================
-   Mobile Layout (< 768px) — Responsive User Cards
-   ========================================================================== */
-
 @media (max-width: 767px) {
+  .users-page {
+    gap: 0.7rem;
+  }
+
   .users-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
+    gap: 0.2rem 0.6rem;
+  }
+
+  .users-header__text {
+    display: contents;
+  }
+
+  .users-header__title {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 1.32rem;
   }
 
   .users-header__actions {
-    width: 100%;
+    grid-column: 2;
+    grid-row: 1;
+    width: auto;
   }
 
   .users-header__actions .admin-btn {
-    width: 100%;
+    width: auto;
+    min-height: 36px;
+    padding: 0.38rem 0.75rem;
+    font-size: 0.8125rem;
+    border-radius: 9px;
+    gap: 0.35rem;
+  }
+
+  .users-header__actions .admin-btn svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .users-header__subtitle {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .users-surface {
+    border-radius: 13px;
   }
 
   .users-toolbar {
-    padding: 0.9rem;
-    gap: 0.75rem;
+    flex-wrap: nowrap;
+    padding: 0.62rem 0.72rem;
+    gap: 0.48rem;
   }
 
   .users-search {
     max-width: none;
-    flex: 1 1 100%;
+    flex: 1 1 auto;
   }
 
   .users-search__input,
-  .users-select,
   .users-form-field__input,
   .users-form-field__select,
   .users-password-wrap__input {
     font-size: 1rem;
   }
 
+  .users-search__input {
+    height: 38px;
+    padding-left: 2.15rem;
+  }
+
+  .users-toolbar .sts-mobile-filter-btn {
+    display: inline-flex;
+  }
+
   .users-filters {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.6rem;
+    display: none;
   }
 
-  .users-filter-group {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.25rem;
+  .users-surface .sts-active-chips {
+    padding: 0.42rem 0.72rem;
   }
 
-  .users-select {
-    width: 100%;
+  .users-mobile-meta-bar {
+    display: flex;
   }
 
-  .users-reset-btn {
-    grid-column: 1 / -1;
-    width: 100%;
-  }
-
-  /* Switch from desktop table to mobile cards */
   .users-table-wrap {
     display: none;
   }
@@ -1197,101 +1211,120 @@
   .users-mobile-list {
     display: flex;
     flex-direction: column;
-    padding: 0.75rem;
-    gap: 0.75rem;
+    padding: 0.5rem 0.68rem 0.68rem;
+    gap: 0.52rem;
   }
 
   .user-mobile-card {
     border: 1px solid #e6ddd2;
-    border-radius: 12px;
-    padding: 0.95rem;
+    border-radius: 11px;
+    padding: 0.65rem 0.74rem;
     background-color: #ffffff;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.46rem;
   }
 
   .user-mobile-card__top {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: 0.45rem;
   }
 
   .user-mobile-card__identity {
     display: flex;
     align-items: center;
-    gap: 0.7rem;
+    gap: 0.58rem;
     min-width: 0;
     flex: 1;
+  }
+
+  .user-mobile-card__identity .user-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 0.76rem;
   }
 
   .user-mobile-card__titles {
     min-width: 0;
     display: flex;
     flex-direction: column;
+    gap: 0.06rem;
   }
 
   .user-mobile-card__name-row {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.35rem;
     flex-wrap: wrap;
   }
 
-  .user-mobile-card__name {
-    font-size: 0.9375rem;
+  .user-mobile-card__name-btn {
+    padding: 0;
+    border: none;
+    background: transparent;
+    text-align: left;
+    font-family: var(--sts-font-sans);
+    font-size: 0.90625rem;
     font-weight: 600;
     color: var(--sts-charcoal);
+    cursor: pointer;
     word-break: break-word;
   }
 
+  .user-mobile-card__name-btn:hover {
+    color: var(--sts-walnut);
+  }
+
   .user-mobile-card__email {
-    font-size: 0.8125rem;
+    font-size: 0.78125rem;
     color: var(--sts-charcoal-muted);
     overflow-wrap: anywhere;
+    line-height: 1.3;
+  }
+
+  .user-mobile-card__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.6rem;
+    padding-top: 0.42rem;
+    border-top: 1px solid #f2ebe2;
   }
 
   .user-mobile-card__badges {
     display: flex;
     align-items: center;
-    gap: 0.45rem;
+    gap: 0.35rem;
     flex-wrap: wrap;
   }
 
-  .user-mobile-card__meta {
-    margin: 0;
-    padding-top: 0.65rem;
-    border-top: 1px solid #f1eae0;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.6rem;
-  }
-
-  .user-mobile-card__meta-item {
-    min-width: 0;
-  }
-
-  .user-mobile-card__meta-item dt {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+  .user-mobile-card__secondary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.55rem;
+    font-size: 0.75rem;
     color: var(--sts-taupe);
   }
 
-  .user-mobile-card__meta-item dd {
-    margin: 0.15rem 0 0;
-    font-size: 0.8125rem;
-    color: var(--sts-charcoal);
-    overflow-wrap: anywhere;
+  .user-mobile-card__phone {
+    color: var(--sts-charcoal-muted);
+    font-weight: 500;
+  }
+
+  .user-mobile-card__joined {
+    white-space: nowrap;
   }
 
   .users-pagination {
     flex-direction: column;
     align-items: stretch;
     text-align: center;
-    padding: 0.85rem 0.9rem;
+    padding: 0.7rem 0.75rem;
+    gap: 0.5rem;
   }
 
   .users-pagination__controls {
@@ -1303,13 +1336,9 @@
   }
 }
 
-@media (max-width: 380px) {
-  .users-filters {
-    grid-template-columns: 1fr;
-  }
-
-  .user-mobile-card__meta {
-    grid-template-columns: 1fr;
+@media (max-width: 359px) {
+  .users-header__title {
+    font-size: 1.2rem;
   }
 }
 

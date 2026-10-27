@@ -1,10 +1,26 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { PROJECT_STATUS_OPTIONS } from '../services/projectService'
 
-const MENU_WIDTH = 176
-const VIEWPORT_MARGIN = 12
+const MENU_WIDTH = 192
+const VIEWPORT_MARGIN = 10
 
-function computeMenuCoords(triggerEl) {
+function normalizeStatusValue(status) {
+  const clean = String(status || '')
+    .toLowerCase()
+    .replace(/[\s_-]+/g, '')
+  if (clean === 'underreview') return 'Under Review'
+  if (clean === 'completed') return 'Completed'
+  return 'In Progress'
+}
+
+function getDotModifier(status) {
+  if (status === 'Completed') return 'completed'
+  if (status === 'Under Review') return 'under-review'
+  return 'in-progress'
+}
+
+function computeMenuCoords(triggerEl, includeViewItem) {
   if (!triggerEl || typeof window === 'undefined') {
     return null
   }
@@ -19,7 +35,7 @@ function computeMenuCoords(triggerEl) {
     return null
   }
 
-  const estimatedMenuHeight = 146
+  const estimatedMenuHeight = includeViewItem ? 228 : 192
   const spaceBelow = window.innerHeight - rect.bottom
   const openUpward =
     spaceBelow < estimatedMenuHeight + VIEWPORT_MARGIN &&
@@ -27,19 +43,21 @@ function computeMenuCoords(triggerEl) {
 
   const top = openUpward ? rect.top - estimatedMenuHeight - 6 : rect.bottom + 6
   const rawLeft = rect.right - MENU_WIDTH
-  const left = Math.max(
+  const maxLeft = Math.max(
     VIEWPORT_MARGIN,
-    Math.min(rawLeft, window.innerWidth - MENU_WIDTH - VIEWPORT_MARGIN),
+    window.innerWidth - MENU_WIDTH - VIEWPORT_MARGIN,
   )
+  const left = Math.max(VIEWPORT_MARGIN, Math.min(rawLeft, maxLeft))
 
-  return { top, left }
+  return { top: Math.round(top), left: Math.round(left) }
 }
 
 export function ProjectRowActionsMenu({
   project,
   onViewDetails,
   onEdit,
-  onEditStatus,
+  onStatusChange,
+  showQuickViewButton = true,
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [coords, setCoords] = useState({ top: 0, left: 0 })
@@ -47,10 +65,13 @@ export function ProjectRowActionsMenu({
   const menuRef = useRef(null)
   const menuId = useId()
 
+  const currentStatus = normalizeStatusValue(project?.status)
+  const targetKey = String(project?.projectId || project?.id || '').trim()
+
   const closeMenu = useCallback((restoreFocus = false) => {
     setIsOpen(false)
     if (restoreFocus) {
-      requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
         triggerRef.current?.focus()
       })
     }
@@ -62,7 +83,7 @@ export function ProjectRowActionsMenu({
     }
 
     const handleScrollOrResize = () => {
-      const next = computeMenuCoords(triggerRef.current)
+      const next = computeMenuCoords(triggerRef.current, showQuickViewButton)
       if (!next) {
         setIsOpen(false)
       } else {
@@ -90,39 +111,44 @@ export function ProjectRowActionsMenu({
     window.addEventListener('scroll', handleScrollOrResize, true)
     window.addEventListener('resize', handleScrollOrResize)
     document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('touchstart', handlePointerDown, { passive: true })
     document.addEventListener('keydown', handleKeyDown)
 
     return () => {
       window.removeEventListener('scroll', handleScrollOrResize, true)
       window.removeEventListener('resize', handleScrollOrResize)
       document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('touchstart', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isOpen, closeMenu])
+  }, [isOpen, closeMenu, showQuickViewButton])
 
   const handleToggle = () => {
     if (isOpen) {
       setIsOpen(false)
       return
     }
-    const nextCoords = computeMenuCoords(triggerRef.current)
+    const nextCoords = computeMenuCoords(
+      triggerRef.current,
+      showQuickViewButton,
+    )
     if (nextCoords) {
       setCoords(nextCoords)
     }
     setIsOpen(true)
   }
 
-  const targetKey = project.projectId || project.id
-
   return (
     <div className="project-row-actions">
-      <button
-        type="button"
-        className="project-row-actions__quick-btn"
-        onClick={() => onViewDetails(targetKey)}
-      >
-        View Details
-      </button>
+      {showQuickViewButton ? (
+        <button
+          type="button"
+          className="project-row-actions__quick-btn"
+          onClick={() => onViewDetails(targetKey)}
+        >
+          View Details
+        </button>
+      ) : null}
 
       <button
         ref={triggerRef}
@@ -156,31 +182,33 @@ export function ProjectRowActionsMenu({
                 width: `${MENU_WIDTH}px`,
               }}
             >
-              <button
-                type="button"
-                className="project-portal-menu__item"
-                role="menuitem"
-                onClick={() => {
-                  setIsOpen(false)
-                  onViewDetails(targetKey)
-                }}
-              >
-                <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                  <path
-                    d="M1.75 9C3.1 5.6 5.8 3.75 9 3.75C12.2 3.75 14.9 5.6 16.25 9C14.9 12.4 12.2 14.25 9 14.25C5.8 14.25 3.1 12.4 1.75 9Z"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                  />
-                  <circle
-                    cx="9"
-                    cy="9"
-                    r="2.25"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                  />
-                </svg>
-                <span>View Details</span>
-              </button>
+              {showQuickViewButton ? (
+                <button
+                  type="button"
+                  className="project-portal-menu__item"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsOpen(false)
+                    onViewDetails(targetKey)
+                  }}
+                >
+                  <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                    <path
+                      d="M1.75 9C3.1 5.6 5.8 3.75 9 3.75C12.2 3.75 14.9 5.6 16.25 9C14.9 12.4 12.2 14.25 9 14.25C5.8 14.25 3.1 12.4 1.75 9Z"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                    />
+                    <circle
+                      cx="9"
+                      cy="9"
+                      r="2.25"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                    />
+                  </svg>
+                  <span>View Details</span>
+                </button>
+              ) : null}
 
               <button
                 type="button"
@@ -202,31 +230,65 @@ export function ProjectRowActionsMenu({
                 <span>Edit Project</span>
               </button>
 
-              <button
-                type="button"
-                className="project-portal-menu__item"
-                role="menuitem"
-                onClick={() => {
-                  setIsOpen(false)
-                  if (typeof onEditStatus === 'function') {
-                    onEditStatus(project)
-                  }
-                }}
-              >
-                <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                  <path
-                    d="M9 2.5C5.41 2.5 2.5 5.41 2.5 9C2.5 12.59 5.41 15.5 9 15.5C12.59 15.5 15.5 12.59 15.5 9C15.5 5.41 12.59 2.5 9 2.5ZM9 14.15C6.16 14.15 3.85 11.84 3.85 9C3.85 6.16 6.16 3.85 9 3.85C11.84 3.85 14.15 6.16 14.15 9C14.15 11.84 11.84 14.15 9 14.15Z"
-                    fill="currentColor"
+              {typeof onStatusChange === 'function' ? (
+                <>
+                  <div
+                    className="project-portal-menu__divider"
+                    role="separator"
                   />
-                  <path
-                    d="M9 5.5V9.25L11.75 11"
-                    stroke="currentColor"
-                    strokeWidth="1.35"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span>Edit Status</span>
-              </button>
+                  <div className="project-portal-menu__section-label">
+                    Status
+                  </div>
+                  {PROJECT_STATUS_OPTIONS.map((statusOption) => {
+                    const isCurrent = statusOption === currentStatus
+                    const dotTone = getDotModifier(statusOption)
+
+                    return (
+                      <button
+                        key={statusOption}
+                        type="button"
+                        className={`project-portal-menu__item project-portal-menu__item--status${
+                          isCurrent
+                            ? ' project-portal-menu__item--active'
+                            : ''
+                        }`}
+                        role="menuitemradio"
+                        aria-checked={isCurrent}
+                        onClick={() => {
+                          setIsOpen(false)
+                          if (!isCurrent && targetKey) {
+                            onStatusChange(targetKey, statusOption)
+                          }
+                        }}
+                      >
+                        <span className="project-status-menu__item-left">
+                          <span
+                            className={`project-status-menu__dot project-status-menu__dot--${dotTone}`}
+                            aria-hidden="true"
+                          />
+                          <span>{statusOption}</span>
+                        </span>
+                        {isCurrent ? (
+                          <svg
+                            className="project-status-menu__check"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M3.5 8.25L6.5 11.25L12.5 4.75"
+                              stroke="currentColor"
+                              strokeWidth="1.7"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                </>
+              ) : null}
             </div>,
             document.body,
           )

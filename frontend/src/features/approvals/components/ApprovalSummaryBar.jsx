@@ -26,16 +26,29 @@ export function ApprovalSummaryBar({
     >
       <button
         type="button"
-        className={`approvals-summary__card approvals-summary__card--pending${activeStatus === 'pending' ? ' approvals-summary__card--selected' : ''
-          }`}
+        className={`approvals-summary__card approvals-summary__card--pending${
+          activeStatus === 'pending' ? ' approvals-summary__card--selected' : ''
+        }`}
         onClick={() => onSelectStatus?.('pending')}
+        aria-pressed={activeStatus === 'pending'}
       >
         <div className="approvals-summary__top">
-          <span className="approvals-summary__label">Pending Requests</span>
+          <span className="approvals-summary__label">
+            <span className="approvals-summary__label-desktop">
+              Pending Requests
+            </span>
+            <span className="approvals-summary__label-mobile">Pending</span>
+          </span>
           {pending > 0 ? (
             <span className="approvals-summary__attention-pill">
               Action needed
             </span>
+          ) : null}
+          {pending > 0 ? (
+            <span
+              className="approvals-summary__mobile-dot"
+              aria-hidden="true"
+            />
           ) : null}
         </div>
         <span className="approvals-summary__value">{pending}</span>
@@ -44,11 +57,13 @@ export function ApprovalSummaryBar({
 
       <button
         type="button"
-        className={`approvals-summary__card${activeStatus === 'approved'
+        className={`approvals-summary__card${
+          activeStatus === 'approved'
             ? ' approvals-summary__card--selected'
             : ''
-          }`}
+        }`}
         onClick={() => onSelectStatus?.('approved')}
+        aria-pressed={activeStatus === 'approved'}
       >
         <div className="approvals-summary__top">
           <span className="approvals-summary__label">Approved</span>
@@ -61,11 +76,13 @@ export function ApprovalSummaryBar({
 
       <button
         type="button"
-        className={`approvals-summary__card${activeStatus === 'rejected'
+        className={`approvals-summary__card${
+          activeStatus === 'rejected'
             ? ' approvals-summary__card--selected'
             : ''
-          }`}
+        }`}
         onClick={() => onSelectStatus?.('rejected')}
+        aria-pressed={activeStatus === 'rejected'}
       >
         <div className="approvals-summary__top">
           <span className="approvals-summary__label">Rejected</span>

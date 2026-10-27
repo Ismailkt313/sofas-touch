@@ -1,7 +1,3 @@
-/* ==========================================================================
-   Soft Touch Sofas — Reusable Admin Dashboard Shell & Sidebar Styles
-   ========================================================================== */
-
 .admin-shell {
   --admin-canvas: #f6f2eb;
   --admin-surface: #ffffff;
@@ -26,7 +22,6 @@
   overflow-x: clip;
 }
 
-/* Persistent Desktop Sidebar */
 .admin-sidebar {
   width: var(--admin-sidebar-width, 264px);
   position: fixed;
@@ -50,7 +45,6 @@
   min-height: 0;
 }
 
-/* Brand Header at Top of Sidebar */
 .admin-sidebar__brand-row {
   display: flex;
   align-items: center;
@@ -149,7 +143,6 @@
   outline-offset: 2px;
 }
 
-/* Primary Navigation Links */
 .admin-sidebar__nav {
   flex: 1;
   overflow-y: auto;
@@ -261,7 +254,6 @@
   color: #241810;
 }
 
-/* Sidebar Footer Profile */
 .admin-sidebar__footer {
   margin-top: auto;
   padding: 0.85rem;
@@ -428,7 +420,6 @@
   margin: 0.3rem 0.25rem;
 }
 
-/* Main Workspace & Top Header */
 .admin-workspace {
   flex: 1;
   min-width: 0;
@@ -553,7 +544,6 @@
   letter-spacing: 0.02em;
 }
 
-/* Header Notification Bell & Popover */
 .header-notifications {
   position: relative;
   display: inline-flex;
@@ -939,7 +929,6 @@
   padding: clamp(1.25rem, 2.6vw, 2rem) clamp(1rem, 2.8vw, 2.25rem) 2.5rem;
 }
 
-/* Shared Admin Buttons */
 .admin-btn {
   display: inline-flex;
   align-items: center;
@@ -1008,7 +997,6 @@
   background-color: #8c2e20;
 }
 
-/* Shared Accessible Modal Shell */
 .admin-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1117,7 +1105,6 @@
   background-color: var(--admin-surface-subtle);
 }
 
-/* Profile Dialog Details */
 .profile-summary {
   display: flex;
   align-items: center;
@@ -1199,7 +1186,6 @@
   line-height: 1.5;
 }
 
-/* Placeholder Destination Card for Non-Implemented Sidebar Items */
 .admin-placeholder {
   display: flex;
   align-items: center;
@@ -1264,10 +1250,6 @@
   font-size: 0.8125rem;
 }
 
-/* ==========================================================================
-   Responsive Sidebar Drawer (< 1024px)
-   ========================================================================== */
-
 .admin-drawer-overlay {
   display: none;
 }
@@ -1276,11 +1258,13 @@
   .admin-workspace {
     margin-left: 0;
     width: 100%;
-    padding-top: 62px;
+    padding-top: 54px;
   }
 
   .admin-topbar {
     left: 0;
+    height: 54px;
+    padding: 0 1rem;
   }
 
   .admin-drawer-overlay {
@@ -1323,6 +1307,12 @@
 
   .admin-topbar__mobile-brand {
     display: inline-flex;
+    min-width: 0;
+  }
+
+  .admin-topbar__mobile-brand span {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .admin-topbar__crumb-root,
@@ -1340,17 +1330,50 @@
   }
 }
 
-@media (max-width: 540px) {
+@media (max-width: 767px) {
   .admin-workspace {
-    padding-top: 56px;
+    padding-top: 48px;
   }
 
   .admin-topbar {
-    height: 56px;
+    height: 48px;
+    padding: 0 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .admin-topbar__left {
+    gap: 0.55rem;
+  }
+
+  .admin-topbar__menu-btn,
+  .header-notifications__trigger {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+  }
+
+  .admin-topbar__menu-btn svg,
+  .header-notifications__bell-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .admin-topbar__mobile-brand {
+    gap: 0.42rem;
+    font-size: 0.96rem;
+  }
+
+  .admin-topbar__mobile-emblem {
+    width: 19px;
+    height: 19px;
   }
 
   .admin-topbar__breadcrumb {
     display: none;
+  }
+
+  .admin-main {
+    padding: 0.75rem 0.75rem 1.75rem;
   }
 
   .header-notifications {
@@ -1359,9 +1382,9 @@
 
   .header-notifications__popover {
     position: fixed;
-    left: 0.75rem;
-    right: 0.75rem;
-    top: calc(56px + 0.45rem);
+    left: 0.65rem;
+    right: 0.65rem;
+    top: calc(48px + 0.4rem);
     width: auto;
     max-width: none;
   }
@@ -1373,7 +1396,7 @@
   .admin-modal__header,
   .admin-modal__body,
   .admin-modal__footer {
-    padding-inline: 1.05rem;
+    padding-inline: 1rem;
   }
 
   .profile-details__row {
@@ -1383,6 +1406,16 @@
 
   .profile-details__row dd {
     text-align: left;
+  }
+}
+
+@media (max-width: 359px) {
+  .admin-topbar {
+    padding: 0 0.625rem;
+  }
+
+  .admin-main {
+    padding: 0.65rem 0.625rem 1.5rem;
   }
 }
 

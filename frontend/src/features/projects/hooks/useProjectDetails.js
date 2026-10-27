@@ -40,7 +40,7 @@ export function useProjectDetails({ projectIdentifier, currentUser }) {
   const [error, setError] = useState('')
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false)
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [feedbackBanner, setFeedbackBanner] = useState(null)
   const [refreshTick, setRefreshTick] = useState(0)
   const reqSeqRef = useRef(0)
@@ -231,25 +231,32 @@ export function useProjectDetails({ projectIdentifier, currentUser }) {
     [project, projectIdentifier],
   )
 
-  const openStatusModal = useCallback(() => {
-    setIsStatusModalOpen(true)
-  }, [])
-
-  const closeStatusModal = useCallback(() => {
-    setIsStatusModalOpen(false)
-  }, [])
-
   const handleStatusSubmit = useCallback(
     async (targetIdentifier, nextStatus) => {
-      const updated = await updateProjectStatus(targetIdentifier, nextStatus)
-      setProject((prev) => (prev ? { ...prev, status: updated.status } : updated))
-      setIsStatusModalOpen(false)
-      setFeedbackBanner({
-        tone: 'success',
-        text: `Project ${updated.projectId || targetIdentifier} status was updated to "${updated.status}".`,
-      })
-      setRefreshTick((prev) => prev + 1)
-      return updated
+      setIsUpdatingStatus(true)
+      try {
+        const updated = await updateProjectStatus(targetIdentifier, nextStatus)
+        setProject((prev) =>
+          prev ? { ...prev, status: updated.status } : updated,
+        )
+        setFeedbackBanner({
+          tone: 'success',
+          text: `Project ${updated.projectId || targetIdentifier} status updated to "${updated.status}".`,
+        })
+        setRefreshTick((prev) => prev + 1)
+        return updated
+      } catch (err) {
+        setFeedbackBanner({
+          tone: 'error',
+          text:
+            err instanceof Error
+              ? err.message
+              : 'Failed to update project status. Please try again.',
+        })
+        throw err
+      } finally {
+        setIsUpdatingStatus(false)
+      }
     },
     [],
   )
@@ -309,9 +316,7 @@ export function useProjectDetails({ projectIdentifier, currentUser }) {
     closeEditModal,
     handleEditSubmit,
 
-    isStatusModalOpen,
-    openStatusModal,
-    closeStatusModal,
+    isUpdatingStatus,
     handleStatusSubmit,
 
     feedbackBanner,
