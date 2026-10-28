@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { FieldSourceBadge, FieldSuggestionBanner } from './FieldProvenanceControl'
 import { formatInrCurrency } from '../services/purchaseService'
 import { reconcileInvoiceTotals } from '../utils/billOcrParser'
 
@@ -12,6 +13,12 @@ export function PurchaseTotalsSummary({
   onTaxChange,
   otherCharges,
   onOtherChargesChange,
+  fieldMeta = {},
+  fieldSuggestions = {},
+  ocrActive = false,
+  onConfirmField,
+  onAcceptFieldSuggestion,
+  onDismissFieldSuggestion,
   fieldErrors,
   ocrState,
   isSaving,
@@ -46,9 +53,18 @@ export function PurchaseTotalsSummary({
     <section className="pv-surface pv-section-card pv-totals-grid">
       <div className="pv-notes-column">
         <div className="pv-form-field">
-          <label htmlFor="pv-notes" className="pv-form-label">
-            Voucher Notes <span className="pv-opt">(Optional)</span>
-          </label>
+          <div className="pv-label-row">
+            <label htmlFor="pv-notes" className="pv-form-label">
+              Voucher Notes <span className="pv-opt">(Optional)</span>
+            </label>
+            <FieldSourceBadge
+              meta={fieldMeta.notes}
+              hasValue={Boolean(String(notes || '').trim())}
+              ocrActive={ocrActive}
+              onConfirm={() => onConfirmField?.('notes')}
+              disabled={isSaving}
+            />
+          </div>
           <textarea
             id="pv-notes"
             rows={4}
@@ -57,6 +73,12 @@ export function PurchaseTotalsSummary({
             value={notes}
             onChange={(e) => onNotesChange(e.target.value)}
             maxLength={1000}
+            disabled={isSaving}
+          />
+          <FieldSuggestionBanner
+            suggestion={fieldSuggestions.notes}
+            onAccept={() => onAcceptFieldSuggestion?.('notes')}
+            onDismiss={() => onDismissFieldSuggestion?.('notes')}
             disabled={isSaving}
           />
         </div>
@@ -70,67 +92,124 @@ export function PurchaseTotalsSummary({
           <strong>{formatInrCurrency(previewTotals.subtotal)}</strong>
         </div>
 
-        <div className="pv-financial-input-row">
-          <label htmlFor="pv-discount">Discount (− ₹)</label>
-          <input
-            id="pv-discount"
-            type="number"
-            step="0.01"
-            min="0"
-            className={`pv-input pv-input--num${
-              fieldErrors.discountAmount ? ' pv-input--error' : ''
-            }`}
-            placeholder="0.00"
-            value={discountAmount}
-            onChange={(e) => onDiscountChange(e.target.value)}
+        <div className="pv-financial-field-group">
+          <div className="pv-financial-input-row">
+            <span className="pv-financial-label-wrap">
+              <label htmlFor="pv-discount">Discount (− ₹)</label>
+              <FieldSourceBadge
+                meta={fieldMeta.discountAmount}
+                hasValue={String(discountAmount ?? '').trim() !== ''}
+                ocrActive={ocrActive}
+                onConfirm={() => onConfirmField?.('discountAmount')}
+                disabled={isSaving}
+              />
+            </span>
+            <input
+              id="pv-discount"
+              type="number"
+              step="0.01"
+              min="0"
+              className={`pv-input pv-input--num${
+                fieldErrors.discountAmount ? ' pv-input--error' : ''
+              }`}
+              placeholder="0.00"
+              value={discountAmount}
+              onChange={(e) => onDiscountChange(e.target.value)}
+              disabled={isSaving}
+            />
+          </div>
+          {fieldErrors.discountAmount ? (
+            <p className="pv-field-error">{fieldErrors.discountAmount}</p>
+          ) : null}
+          <FieldSuggestionBanner
+            suggestion={fieldSuggestions.discountAmount}
+            labelPrefix="Bill discount"
+            formatValue={(v) => formatInrCurrency(Number(v))}
+            onAccept={() => onAcceptFieldSuggestion?.('discountAmount')}
+            onDismiss={() => onDismissFieldSuggestion?.('discountAmount')}
             disabled={isSaving}
           />
         </div>
-        {fieldErrors.discountAmount ? (
-          <p className="pv-field-error">{fieldErrors.discountAmount}</p>
-        ) : null}
 
-        <div className="pv-financial-input-row">
-          <label htmlFor="pv-tax">GST / Tax (+ ₹)</label>
-          <input
-            id="pv-tax"
-            type="number"
-            step="0.01"
-            min="0"
-            className={`pv-input pv-input--num${
-              fieldErrors.taxAmount ? ' pv-input--error' : ''
-            }`}
-            placeholder="0.00"
-            value={taxAmount}
-            onChange={(e) => onTaxChange(e.target.value)}
+        <div className="pv-financial-field-group">
+          <div className="pv-financial-input-row">
+            <span className="pv-financial-label-wrap">
+              <label htmlFor="pv-tax">GST / Tax (+ ₹)</label>
+              <FieldSourceBadge
+                meta={fieldMeta.taxAmount}
+                hasValue={String(taxAmount ?? '').trim() !== ''}
+                ocrActive={ocrActive}
+                onConfirm={() => onConfirmField?.('taxAmount')}
+                disabled={isSaving}
+              />
+            </span>
+            <input
+              id="pv-tax"
+              type="number"
+              step="0.01"
+              min="0"
+              className={`pv-input pv-input--num${
+                fieldErrors.taxAmount ? ' pv-input--error' : ''
+              }`}
+              placeholder="0.00"
+              value={taxAmount}
+              onChange={(e) => onTaxChange(e.target.value)}
+              disabled={isSaving}
+            />
+          </div>
+          {fieldErrors.taxAmount ? (
+            <p className="pv-field-error">{fieldErrors.taxAmount}</p>
+          ) : null}
+          <FieldSuggestionBanner
+            suggestion={fieldSuggestions.taxAmount}
+            labelPrefix="Bill GST/tax"
+            formatValue={(v) => formatInrCurrency(Number(v))}
+            onAccept={() => onAcceptFieldSuggestion?.('taxAmount')}
+            onDismiss={() => onDismissFieldSuggestion?.('taxAmount')}
             disabled={isSaving}
           />
         </div>
-        {fieldErrors.taxAmount ? (
-          <p className="pv-field-error">{fieldErrors.taxAmount}</p>
-        ) : null}
 
-        <div className="pv-financial-input-row">
-          <label htmlFor="pv-other-charges">
-            Freight / Other Charges (+ ₹)
-          </label>
-          <input
-            id="pv-other-charges"
-            type="number"
-            step="0.01"
-            min="0"
-            className={`pv-input pv-input--num${
-              fieldErrors.otherCharges ? ' pv-input--error' : ''
-            }`}
-            placeholder="0.00"
-            value={otherCharges}
-            onChange={(e) => onOtherChargesChange(e.target.value)}
+        <div className="pv-financial-field-group">
+          <div className="pv-financial-input-row">
+            <span className="pv-financial-label-wrap">
+              <label htmlFor="pv-other-charges">
+                Freight / Other Charges (+ ₹)
+              </label>
+              <FieldSourceBadge
+                meta={fieldMeta.otherCharges}
+                hasValue={String(otherCharges ?? '').trim() !== ''}
+                ocrActive={ocrActive}
+                onConfirm={() => onConfirmField?.('otherCharges')}
+                disabled={isSaving}
+              />
+            </span>
+            <input
+              id="pv-other-charges"
+              type="number"
+              step="0.01"
+              min="0"
+              className={`pv-input pv-input--num${
+                fieldErrors.otherCharges ? ' pv-input--error' : ''
+              }`}
+              placeholder="0.00"
+              value={otherCharges}
+              onChange={(e) => onOtherChargesChange(e.target.value)}
+              disabled={isSaving}
+            />
+          </div>
+          {fieldErrors.otherCharges ? (
+            <p className="pv-field-error">{fieldErrors.otherCharges}</p>
+          ) : null}
+          <FieldSuggestionBanner
+            suggestion={fieldSuggestions.otherCharges}
+            labelPrefix="Bill freight/charges"
+            formatValue={(v) => formatInrCurrency(Number(v))}
+            onAccept={() => onAcceptFieldSuggestion?.('otherCharges')}
+            onDismiss={() => onDismissFieldSuggestion?.('otherCharges')}
             disabled={isSaving}
           />
         </div>
-        {fieldErrors.otherCharges ? (
-          <p className="pv-field-error">{fieldErrors.otherCharges}</p>
-        ) : null}
 
         <div className="pv-financial-row pv-financial-row--final">
           <span>Final Total</span>

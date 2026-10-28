@@ -5,6 +5,7 @@ import {
   formatMaterialUnit,
   formatMaterialUnitOptionLabel,
 } from '../../raw-materials'
+import { FieldSourceBadge, FieldSuggestionBanner } from './FieldProvenanceControl'
 import {
   calculateLineTotalPreview,
   formatInrCurrency,
@@ -18,17 +19,37 @@ const DETECTED_UNIT_OPTIONS = [
   })),
 ]
 
+function hasUnconfirmedOcrCell(row) {
+  const fm = row?.fieldMeta || {}
+  return ['materialId', 'quantity', 'unitPrice', 'extractedDescription', 'detectedUnit'].some(
+    (k) =>
+      String(row?.[k] ?? '').trim() !== '' &&
+      fm[k]?.source === 'ocr' &&
+      !fm[k]?.confirmed &&
+      !fm[k]?.touched,
+  )
+}
+
 export function PurchaseLineItemsEditor({
   lineItems,
+  suggestedLineItems = [],
   uncertainLineItems = [],
   materialById,
   materialOptions,
   fieldErrors,
+  ocrActive = false,
   isSaving,
   adminAccess,
   onAddLineRow,
   onUpdateLineItem,
+  onConfirmLineRow,
+  onAcceptRowSuggestion,
+  onDismissRowSuggestion,
   onRemoveLineRow,
+  onAddSuggestedLineItem,
+  onAddAllSuggestedLineItems,
+  onDismissSuggestedLineItem,
+  onDismissAllSuggestedLineItems,
   onPromoteUncertainRow,
   onDismissUncertainRow,
   onDismissAllUncertainRows,
@@ -82,9 +103,16 @@ export function PurchaseLineItemsEditor({
             !row.materialId
           const hasUnitMismatch =
             Boolean(selectedMat && row.detectedUnit) &&
-            String(formatMaterialUnit(selectedMat.unit) || selectedMat.unit || '').toLowerCase() !==
-              String(formatMaterialUnit(row.detectedUnit) || row.detectedUnit || '').toLowerCase()
+            String(
+              formatMaterialUnit(selectedMat.unit) || selectedMat.unit || '',
+            ).toLowerCase() !==
+              String(
+                formatMaterialUnit(row.detectedUnit) || row.detectedUnit || '',
+              ).toLowerCase()
           const isEditingOcrRef = Boolean(editingOcrRefMap[row.rowKey])
+          const fm = row.fieldMeta || {}
+          const rowSugs = row.rowSuggestions || {}
+          const canConfirmRow = hasUnconfirmedOcrCell(row)
 
           return (
             <div
@@ -96,18 +124,31 @@ export function PurchaseLineItemsEditor({
               }`}
             >
               <div className="pv-line-card__top">
-                <span className="pv-line-card__index">Item #{idx + 1}</span>
+                <div className="pv-line-card__left-tags">
+                  <span className="pv-line-card__index">Item #{idx + 1}</span>
 
-                {row.extractedDescription ? (
-                  <span className="pv-ocr-detected-pill">
-                    Detected on bill: &ldquo;{row.extractedDescription}&rdquo;
-                    {row.detectedUnit
-                      ? ` (${formatMaterialUnit(row.detectedUnit) || row.detectedUnit})`
-                      : ''}
-                  </span>
-                ) : null}
+                  {row.extractedDescription ? (
+                    <span className="pv-ocr-detected-pill">
+                      Bill: &ldquo;{row.extractedDescription}&rdquo;
+                      {row.detectedUnit
+                        ? ` (${formatMaterialUnit(row.detectedUnit) || row.detectedUnit})`
+                        : ''}
+                    </span>
+                  ) : null}
+                </div>
 
                 <div className="pv-line-card__top-actions">
+                  {canConfirmRow ? (
+                    <button
+                      type="button"
+                      className="pv-prov-confirm-btn"
+                      onClick={() => onConfirmLineRow?.(row.rowKey)}
+                      disabled={isSaving}
+                    >
+                      Confirm Row
+                    </button>
+                  ) : null}
+
                   {row.extractedDescription || row.detectedUnit ? (
                     <button
                       type="button"
@@ -115,7 +156,7 @@ export function PurchaseLineItemsEditor({
                       onClick={() => toggleEditOcrRef(row.rowKey)}
                       disabled={isSaving}
                     >
-                      {isEditingOcrRef ? 'Done Editing Bill Ref' : 'Edit Bill Ref'}
+                      {isEditingOcrRef ? 'Done Bill Ref' : 'Edit Bill Ref'}
                     </button>
                   ) : null}
 
@@ -134,9 +175,17 @@ export function PurchaseLineItemsEditor({
               {isEditingOcrRef ? (
                 <div className="pv-ocr-ref-edit-grid">
                   <div className="pv-form-field">
-                    <label className="pv-form-label">
-                      Extracted Bill Description
-                    </label>
+                    <div className="pv-label-row">
+                      <label className="pv-form-label">
+                        Extracted Bill Description
+                      </label>
+                      <FieldSourceBadge
+                        meta={fm.extractedDescription}
+                        hasValue={Boolean(row.extractedDescription)}
+                        ocrActive={ocrActive}
+                        disabled={isSaving}
+                      />
+                    </div>
                     <input
                       type="text"
                       className="pv-input pv-input--compact"
@@ -153,7 +202,15 @@ export function PurchaseLineItemsEditor({
                     />
                   </div>
                   <div className="pv-form-field">
-                    <label className="pv-form-label">Detected Bill Unit</label>
+                    <div className="pv-label-row">
+                      <label className="pv-form-label">Detected Bill Unit</label>
+                      <FieldSourceBadge
+                        meta={fm.detectedUnit}
+                        hasValue={Boolean(row.detectedUnit)}
+                        ocrActive={ocrActive}
+                        disabled={isSaving}
+                      />
+                    </div>
                     <select
                       className="pv-input pv-input--compact"
                       value={row.detectedUnit || ''}
@@ -175,6 +232,20 @@ export function PurchaseLineItemsEditor({
                     </select>
                   </div>
                 </div>
+              ) : null}
+
+              {rowSugs.extractedDescription ? (
+                <FieldSuggestionBanner
+                  suggestion={rowSugs.extractedDescription}
+                  labelPrefix="Bill description"
+                  onAccept={() =>
+                    onAcceptRowSuggestion?.(row.rowKey, 'extractedDescription')
+                  }
+                  onDismiss={() =>
+                    onDismissRowSuggestion?.(row.rowKey, 'extractedDescription')
+                  }
+                  disabled={isSaving}
+                />
               ) : null}
 
               {!row.materialId &&
@@ -201,9 +272,17 @@ export function PurchaseLineItemsEditor({
 
               <div className="pv-line-card__grid">
                 <div className="pv-form-field pv-line-card__mat-col">
-                  <label className="pv-form-label">
-                    Raw Material <span className="pv-req">*</span>
-                  </label>
+                  <div className="pv-label-row">
+                    <label className="pv-form-label">
+                      Raw Material <span className="pv-req">*</span>
+                    </label>
+                    <FieldSourceBadge
+                      meta={fm.materialId}
+                      hasValue={Boolean(row.materialId)}
+                      ocrActive={ocrActive}
+                      disabled={isSaving}
+                    />
+                  </div>
                   <Dropdown
                     variant="form"
                     value={row.materialId}
@@ -222,6 +301,22 @@ export function PurchaseLineItemsEditor({
                     <p className="pv-field-review-hint">
                       Confirm the matching Raw Material for this bill line.
                     </p>
+                  ) : null}
+                  {rowSugs.materialId ? (
+                    <FieldSuggestionBanner
+                      suggestion={rowSugs.materialId}
+                      labelPrefix="Bill material match"
+                      formatValue={(id) =>
+                        materialById.get(id)?.name || String(id)
+                      }
+                      onAccept={() =>
+                        onAcceptRowSuggestion?.(row.rowKey, 'materialId')
+                      }
+                      onDismiss={() =>
+                        onDismissRowSuggestion?.(row.rowKey, 'materialId')
+                      }
+                      disabled={isSaving}
+                    />
                   ) : null}
                 </div>
 
@@ -252,12 +347,34 @@ export function PurchaseLineItemsEditor({
                       — verify quantity.
                     </p>
                   ) : null}
+                  {rowSugs.detectedUnit ? (
+                    <FieldSuggestionBanner
+                      suggestion={rowSugs.detectedUnit}
+                      labelPrefix="Bill unit"
+                      formatValue={(u) => formatMaterialUnit(u) || u}
+                      onAccept={() =>
+                        onAcceptRowSuggestion?.(row.rowKey, 'detectedUnit')
+                      }
+                      onDismiss={() =>
+                        onDismissRowSuggestion?.(row.rowKey, 'detectedUnit')
+                      }
+                      disabled={isSaving}
+                    />
+                  ) : null}
                 </div>
 
                 <div className="pv-form-field">
-                  <label className="pv-form-label">
-                    Quantity <span className="pv-req">*</span>
-                  </label>
+                  <div className="pv-label-row">
+                    <label className="pv-form-label">
+                      Quantity <span className="pv-req">*</span>
+                    </label>
+                    <FieldSourceBadge
+                      meta={fm.quantity}
+                      hasValue={String(row.quantity ?? '').trim() !== ''}
+                      ocrActive={ocrActive}
+                      disabled={isSaving}
+                    />
+                  </div>
                   <input
                     type="number"
                     step="any"
@@ -272,12 +389,33 @@ export function PurchaseLineItemsEditor({
                     aria-label={`Line item ${idx + 1} quantity`}
                   />
                   {qtyErr ? <p className="pv-field-error">{qtyErr}</p> : null}
+                  {rowSugs.quantity ? (
+                    <FieldSuggestionBanner
+                      suggestion={rowSugs.quantity}
+                      labelPrefix="Bill qty"
+                      onAccept={() =>
+                        onAcceptRowSuggestion?.(row.rowKey, 'quantity')
+                      }
+                      onDismiss={() =>
+                        onDismissRowSuggestion?.(row.rowKey, 'quantity')
+                      }
+                      disabled={isSaving}
+                    />
+                  ) : null}
                 </div>
 
                 <div className="pv-form-field">
-                  <label className="pv-form-label">
-                    Unit Price (₹) <span className="pv-req">*</span>
-                  </label>
+                  <div className="pv-label-row">
+                    <label className="pv-form-label">
+                      Unit Price (₹) <span className="pv-req">*</span>
+                    </label>
+                    <FieldSourceBadge
+                      meta={fm.unitPrice}
+                      hasValue={String(row.unitPrice ?? '').trim() !== ''}
+                      ocrActive={ocrActive}
+                      disabled={isSaving}
+                    />
+                  </div>
                   <input
                     type="number"
                     step="0.01"
@@ -293,6 +431,20 @@ export function PurchaseLineItemsEditor({
                   />
                   {priceErr ? (
                     <p className="pv-field-error">{priceErr}</p>
+                  ) : null}
+                  {rowSugs.unitPrice ? (
+                    <FieldSuggestionBanner
+                      suggestion={rowSugs.unitPrice}
+                      labelPrefix="Bill rate"
+                      formatValue={(v) => formatInrCurrency(Number(v))}
+                      onAccept={() =>
+                        onAcceptRowSuggestion?.(row.rowKey, 'unitPrice')
+                      }
+                      onDismiss={() =>
+                        onDismissRowSuggestion?.(row.rowKey, 'unitPrice')
+                      }
+                      disabled={isSaving}
+                    />
                   ) : null}
                 </div>
 
@@ -323,8 +475,111 @@ export function PurchaseLineItemsEditor({
         })}
       </div>
 
+      {suggestedLineItems.length > 0 ? (
+        <div
+          className="pv-suggested-items-panel"
+          role="region"
+          aria-label="Suggested bill items"
+        >
+          <div className="pv-uncertain-panel__header">
+            <div>
+              <h3 className="pv-uncertain-panel__title">
+                Additional Bill Items Detected ({suggestedLineItems.length})
+              </h3>
+              <p className="pv-uncertain-panel__subtitle">
+                Your existing material rows were preserved. Add any of these
+                validated bill items if they belong on this voucher.
+              </p>
+            </div>
+            <div className="pv-alert__actions">
+              <button
+                type="button"
+                className="pv-action-btn"
+                onClick={onAddAllSuggestedLineItems}
+                disabled={isSaving}
+              >
+                + Add All
+              </button>
+              <button
+                type="button"
+                className="pv-text-btn"
+                onClick={onDismissAllSuggestedLineItems}
+                disabled={isSaving}
+              >
+                Dismiss All
+              </button>
+            </div>
+          </div>
+
+          <div className="pv-uncertain-list">
+            {suggestedLineItems.map((sug) => {
+              const matchedMat = sug.materialId
+                ? materialById.get(sug.materialId)
+                : null
+              const sugTotal = calculateLineTotalPreview(
+                sug.quantity,
+                sug.unitPrice,
+              )
+              return (
+                <div key={sug.suggestionKey} className="pv-uncertain-item">
+                  <div className="pv-uncertain-item__main">
+                    <div className="pv-uncertain-item__text">
+                      <strong>{sug.extractedDescription}</strong>
+                      {matchedMat ? (
+                        <span className="pv-uncertain-item__raw">
+                          Catalog match: {matchedMat.name} (
+                          {formatMaterialUnit(matchedMat.unit)})
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="pv-uncertain-item__meta">
+                      <span>Qty: {sug.quantity}</span>
+                      {sug.detectedUnit ? (
+                        <span>
+                          Unit:{' '}
+                          {formatMaterialUnit(sug.detectedUnit) ||
+                            sug.detectedUnit}
+                        </span>
+                      ) : null}
+                      <span>
+                        Rate: {formatInrCurrency(Number(sug.unitPrice))}
+                      </span>
+                      <span>Total: {formatInrCurrency(sugTotal)}</span>
+                    </div>
+                  </div>
+                  <div className="pv-uncertain-item__actions">
+                    <button
+                      type="button"
+                      className="pv-action-btn"
+                      onClick={() => onAddSuggestedLineItem?.(sug.suggestionKey)}
+                      disabled={isSaving}
+                    >
+                      + Add to Voucher
+                    </button>
+                    <button
+                      type="button"
+                      className="pv-action-btn pv-action-btn--danger"
+                      onClick={() =>
+                        onDismissSuggestedLineItem?.(sug.suggestionKey)
+                      }
+                      disabled={isSaving}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
+
       {uncertainLineItems.length > 0 ? (
-        <div className="pv-uncertain-panel" role="region" aria-label="Unverified bill rows">
+        <div
+          className="pv-uncertain-panel"
+          role="region"
+          aria-label="Unverified bill rows"
+        >
           <div className="pv-uncertain-panel__header">
             <div>
               <h3 className="pv-uncertain-panel__title">
@@ -333,8 +588,8 @@ export function PurchaseLineItemsEditor({
               </h3>
               <p className="pv-uncertain-panel__subtitle">
                 These OCR rows had missing columns, unreadable units, or
-                mismatched quantity × rate math. They are excluded from financial
-                totals until you manually verify or dismiss them.
+                mismatched quantity × rate math. They are excluded from
+                financial totals until you manually verify or dismiss them.
               </p>
             </div>
             <button

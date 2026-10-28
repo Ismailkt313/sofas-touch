@@ -8,6 +8,10 @@ import {
 } from '../../raw-materials'
 import { BillAttachmentModal } from '../components/BillAttachmentModal'
 import { BillUploadOcrPanel } from '../components/BillUploadOcrPanel'
+import {
+  FieldSourceBadge,
+  FieldSuggestionBanner,
+} from '../components/FieldProvenanceControl'
 import { PurchaseLineItemsEditor } from '../components/PurchaseLineItemsEditor'
 import { PurchaseTotalsSummary } from '../components/PurchaseTotalsSummary'
 import {
@@ -15,6 +19,8 @@ import {
   calculateVoucherPreviewTotals,
   createPurchaseVoucher,
   fetchPurchaseVoucherById,
+  formatInrCurrency,
+  formatPurchaseDate,
   hasActiveAuthToken,
   isAdminUser,
   toInputDateString,
@@ -23,32 +29,29 @@ import {
 } from '../services/purchaseService'
 import { parseBillOcrText } from '../utils/billOcrParser'
 import { extractBillTextLocally } from '../utils/ocrEngine'
+import {
+  acceptLineItemSuggestion,
+  applyManualLineItemEdit,
+  areFieldValuesEquivalent,
+  confirmLineItemOcrValues,
+  createEmptyLineItem,
+  createFieldProvenance,
+  createInitialHeaderFieldMeta,
+  createSavedHeaderFieldMeta,
+  createSavedLineItem,
+  dismissLineItemSuggestion,
+  isLineItemListEffectivelyEmpty,
+  mergeHeaderFieldsWithOcr,
+  mergeLineItemsWithOcr,
+  nextVoucherLineKey,
+  promoteSuggestedLineItemToRows,
+} from '../utils/voucherOcrMerge'
 import '../styles/purchases.css'
-
-let rowKeyCounter = 1
-function nextRowKey() {
-  rowKeyCounter += 1
-  return `pv-line-${rowKeyCounter}`
-}
 
 let uncertainKeyCounter = 1
 function nextUncertainKey() {
   uncertainKeyCounter += 1
   return `pv-uncertain-${uncertainKeyCounter}`
-}
-
-function makeEmptyLineItem() {
-  return {
-    rowKey: nextRowKey(),
-    materialId: '',
-    quantity: '',
-    unitPrice: '',
-    remarks: '',
-    extractedDescription: '',
-    detectedUnit: '',
-    suggestions: [],
-    needsReview: false,
-  }
 }
 
 function makeInitialOcrState() {
@@ -58,8 +61,8 @@ function makeInitialOcrState() {
     message: '',
     error: '',
     completed: false,
-    draftDiscarded: false,
     tableDetected: false,
+    summaryNote: '',
     rawText: '',
     warnings: [],
     detectedSubtotal: null,
@@ -75,15 +78,6 @@ function makeClientRequestId() {
   return `pv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function getInitialEntryMethodFromUrl() {
-  if (typeof window === 'undefined') {
-    return 'upload_bill'
-  }
-  const params = new URLSearchParams(window.location.search || '')
-  const mode = params.get('mode')
-  return mode === 'manual' ? 'manual' : 'upload_bill'
-}
-
 export function PurchaseVoucherFormPage({
   mode = 'create',
   voucherIdentifier = '',
@@ -94,19 +88,26 @@ export function PurchaseVoucherFormPage({
   const adminAccess = isAdminUser(currentUser)
   const [authRequired, setAuthRequired] = useState(() => !hasActiveAuthToken())
 
-  const [entryMethod, setEntryMethod] = useState(() =>
-    isEditMode ? 'manual' : getInitialEntryMethodFromUrl(),
+  const [headerValues, setHeaderValues] = useState(() => ({
+    purchaseDate: toInputDateString(),
+    supplierName: '',
+    supplierInvoiceNumber: '',
+    projectId: '',
+    discountAmount: '',
+    taxAmount: '',
+    otherCharges: '',
+    notes: '',
+  }))
+  const [fieldMeta, setFieldMeta] = useState(() =>
+    createInitialHeaderFieldMeta(),
   )
-  const [purchaseDate, setPurchaseDate] = useState(() => toInputDateString())
-  const [supplierName, setSupplierName] = useState('')
-  const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState('')
-  const [projectId, setProjectId] = useState('')
-  const [lineItems, setLineItems] = useState(() => [makeEmptyLineItem()])
+  const [fieldSuggestions, setFieldSuggestions] = useState({})
+
+  const [lineItems, setLineItems] = useState(() => [createEmptyLineItem()])
+  const [suggestedLineItems, setSuggestedLineItems] = useState([])
   const [uncertainLineItems, setUncertainLineItems] = useState([])
-  const [discountAmount, setDiscountAmount] = useState('')
-  const [taxAmount, setTaxAmount] = useState('')
-  const [otherCharges, setOtherCharges] = useState('')
-  const [notes, setNotes] = useState('')
+  const [dismissedFingerprints, setDismissedFingerprints] = useState([])
+  const [hasUsedOcr, setHasUsedOcr] = useState(false)
 
   const [existingVoucher, setExistingVoucher] = useState(null)
   const [existingAttachments, setExistingAttachments] = useState([])
@@ -134,11 +135,36 @@ export function PurchaseVoucherFormPage({
   const fileInputRef = useRef(null)
   const pendingFilesRef = useRef(pendingFiles)
   const rawMaterialsRef = useRef(rawMaterials)
+  const latestFormSnapshotRef = useRef({
+    headerValues,
+    fieldMeta,
+    fieldSuggestions,
+    lineItems,
+    suggestedLineItems,
+    dismissedFingerprints,
+  })
 
   useEffect(() => {
     pendingFilesRef.current = pendingFiles
     rawMaterialsRef.current = rawMaterials
-  }, [pendingFiles, rawMaterials])
+    latestFormSnapshotRef.current = {
+      headerValues,
+      fieldMeta,
+      fieldSuggestions,
+      lineItems,
+      suggestedLineItems,
+      dismissedFingerprints,
+    }
+  }, [
+    pendingFiles,
+    rawMaterials,
+    headerValues,
+    fieldMeta,
+    fieldSuggestions,
+    lineItems,
+    suggestedLineItems,
+    dismissedFingerprints,
+  ])
 
   useEffect(() => {
     return () => {
@@ -186,15 +212,18 @@ export function PurchaseVoucherFormPage({
             )
           }
           setExistingVoucher(v)
-          setEntryMethod(v.entryMethod || 'manual')
-          setPurchaseDate(toInputDateString(v.purchaseDate))
-          setSupplierName(v.supplierName || '')
-          setSupplierInvoiceNumber(v.supplierInvoiceNumber || '')
-          setProjectId(v.projectRecordId || '')
-          setDiscountAmount(v.discountAmount > 0 ? String(v.discountAmount) : '')
-          setTaxAmount(v.taxAmount > 0 ? String(v.taxAmount) : '')
-          setOtherCharges(v.otherCharges > 0 ? String(v.otherCharges) : '')
-          setNotes(v.notes || '')
+          setHeaderValues({
+            purchaseDate: toInputDateString(v.purchaseDate),
+            supplierName: v.supplierName || '',
+            supplierInvoiceNumber: v.supplierInvoiceNumber || '',
+            projectId: v.projectRecordId || '',
+            discountAmount:
+              v.discountAmount > 0 ? String(v.discountAmount) : '',
+            taxAmount: v.taxAmount > 0 ? String(v.taxAmount) : '',
+            otherCharges: v.otherCharges > 0 ? String(v.otherCharges) : '',
+            notes: v.notes || '',
+          })
+          setFieldMeta(createSavedHeaderFieldMeta(v))
           setExistingAttachments(v.attachments || [])
 
           const existingMatMap = new Map(activeMats.map((m) => [m.id, m]))
@@ -214,18 +243,8 @@ export function PurchaseVoucherFormPage({
 
           setLineItems(
             v.lineItems.length > 0
-              ? v.lineItems.map((li) => ({
-                  rowKey: nextRowKey(),
-                  materialId: li.materialId,
-                  quantity: String(li.quantity),
-                  unitPrice: String(li.unitPrice),
-                  remarks: li.remarks || '',
-                  extractedDescription: '',
-                  detectedUnit: '',
-                  suggestions: [],
-                  needsReview: false,
-                }))
-              : [makeEmptyLineItem()],
+              ? v.lineItems.map((li) => createSavedLineItem(li))
+              : [createEmptyLineItem()],
           )
         } else {
           setRawMaterials(activeMats)
@@ -302,11 +321,16 @@ export function PurchaseVoucherFormPage({
   const previewTotals = useMemo(
     () =>
       calculateVoucherPreviewTotals(lineItems, {
-        discountAmount,
-        taxAmount,
-        otherCharges,
+        discountAmount: headerValues.discountAmount,
+        taxAmount: headerValues.taxAmount,
+        otherCharges: headerValues.otherCharges,
       }),
-    [lineItems, discountAmount, taxAmount, otherCharges],
+    [
+      lineItems,
+      headerValues.discountAmount,
+      headerValues.taxAmount,
+      headerValues.otherCharges,
+    ],
   )
 
   const retainedExistingAttachments = useMemo(
@@ -320,88 +344,148 @@ export function PurchaseVoucherFormPage({
   const totalAttachmentCount =
     retainedExistingAttachments.length + pendingFiles.length
 
-  const applyParsedOcrToForm = useCallback((parsed) => {
-    if (parsed.supplierName) {
-      setSupplierName((prev) => (prev.trim() ? prev : parsed.supplierName))
-    }
-    if (parsed.supplierInvoiceNumber) {
-      setSupplierInvoiceNumber((prev) =>
-        prev.trim() ? prev : parsed.supplierInvoiceNumber,
-      )
-    }
-    if (parsed.purchaseDate) {
-      setPurchaseDate(parsed.purchaseDate)
-    }
-    if (parsed.discountAmount) {
-      setDiscountAmount((prev) => (prev.trim() ? prev : parsed.discountAmount))
-    }
-    if (parsed.taxAmount) {
-      setTaxAmount((prev) => (prev.trim() ? prev : parsed.taxAmount))
-    }
-    if (parsed.otherCharges) {
-      setOtherCharges((prev) => (prev.trim() ? prev : parsed.otherCharges))
-    }
+  const ocrActive = Boolean(
+    hasUsedOcr ||
+      ocrState.completed ||
+      Object.keys(fieldSuggestions).length > 0 ||
+      suggestedLineItems.length > 0,
+  )
 
-    if (Array.isArray(parsed.lineItems) && parsed.lineItems.length > 0) {
-      setLineItems((prev) => {
-        const hasPopulatedExisting = prev.some(
-          (row) =>
-            row.materialId ||
-            String(row.quantity).trim() ||
-            String(row.unitPrice).trim(),
-        )
-        const mappedOcrRows = parsed.lineItems.map((ocrRow) => ({
-          rowKey: nextRowKey(),
-          materialId: ocrRow.materialId || '',
-          quantity: ocrRow.quantity || '',
-          unitPrice: ocrRow.unitPrice || '',
-          remarks: '',
-          extractedDescription: ocrRow.extractedDescription || '',
-          detectedUnit: ocrRow.detectedUnit || '',
-          suggestions: ocrRow.suggestions || [],
-          needsReview: true,
-        }))
-        return hasPopulatedExisting
-          ? [...prev, ...mappedOcrRows]
-          : mappedOcrRows
-      })
-    }
-
-    if (
-      Array.isArray(parsed.uncertainLineItems) &&
-      parsed.uncertainLineItems.length > 0
-    ) {
-      setUncertainLineItems(
-        parsed.uncertainLineItems.map((uRow) => ({
-          ...uRow,
-          uncertainKey: nextUncertainKey(),
-        })),
-      )
-    } else {
-      setUncertainLineItems([])
-    }
-  }, [])
-
-  const handleDiscardOcrDraft = useCallback(() => {
-    setSupplierName('')
-    setSupplierInvoiceNumber('')
-    setPurchaseDate(toInputDateString())
-    setDiscountAmount('')
-    setTaxAmount('')
-    setOtherCharges('')
-    setLineItems([makeEmptyLineItem()])
-    setUncertainLineItems([])
-    setFieldErrors({})
-    setSubmitError('')
-    setShowRawOcrText(false)
-    setOcrState({
-      ...makeInitialOcrState(),
-      draftDiscarded: true,
+  const handleHeaderFieldChange = useCallback((fieldKey, nextValue) => {
+    setHeaderValues((prev) => ({
+      ...prev,
+      [fieldKey]: nextValue,
+    }))
+    setFieldMeta((prev) => ({
+      ...prev,
+      [fieldKey]: createFieldProvenance('manual', {
+        touched: true,
+        confirmed: false,
+      }),
+    }))
+    setFieldSuggestions((prev) => {
+      if (
+        prev[fieldKey] &&
+        areFieldValuesEquivalent(fieldKey, nextValue, prev[fieldKey].value)
+      ) {
+        const next = { ...prev }
+        delete next[fieldKey]
+        return next
+      }
+      return prev
+    })
+    setFieldErrors((prev) => {
+      if (!prev[fieldKey]) return prev
+      const next = { ...prev }
+      delete next[fieldKey]
+      return next
     })
   }, [])
 
+  const handleConfirmHeaderField = useCallback((fieldKey) => {
+    setFieldMeta((prev) => {
+      const current = prev[fieldKey] || createFieldProvenance('ocr')
+      return {
+        ...prev,
+        [fieldKey]: {
+          ...current,
+          confirmed: true,
+        },
+      }
+    })
+  }, [])
+
+  const handleAcceptHeaderSuggestion = useCallback((fieldKey) => {
+    setFieldSuggestions((prev) => {
+      const target = prev[fieldKey]
+      if (!target) return prev
+      setHeaderValues((vals) => ({
+        ...vals,
+        [fieldKey]: target.value,
+      }))
+      setFieldMeta((meta) => ({
+        ...meta,
+        [fieldKey]: createFieldProvenance('ocr', {
+          touched: false,
+          confirmed: true,
+        }),
+      }))
+      const next = { ...prev }
+      delete next[fieldKey]
+      return next
+    })
+  }, [])
+
+  const handleDismissHeaderSuggestion = useCallback((fieldKey) => {
+    setFieldSuggestions((prev) => {
+      if (!prev[fieldKey]) return prev
+      const next = { ...prev }
+      delete next[fieldKey]
+      return next
+    })
+  }, [])
+
+  const applyParsedOcrToForm = useCallback(
+    (parsed, { isAdditionalBill = false } = {}) => {
+      const snapshot = latestFormSnapshotRef.current
+
+      const headerMerged = mergeHeaderFieldsWithOcr({
+        values: snapshot.headerValues,
+        fieldMeta: snapshot.fieldMeta,
+        fieldSuggestions: snapshot.fieldSuggestions,
+        parsedOcr: parsed,
+        isAdditionalBill,
+      })
+
+      const linesMerged = mergeLineItemsWithOcr({
+        existingRows: snapshot.lineItems,
+        existingSuggestedRows: snapshot.suggestedLineItems,
+        incomingOcrRows: parsed.lineItems || [],
+        dismissedFingerprints: snapshot.dismissedFingerprints,
+        isAdditionalBill,
+      })
+
+      setHeaderValues(headerMerged.values)
+      setFieldMeta(headerMerged.fieldMeta)
+      setFieldSuggestions(headerMerged.fieldSuggestions)
+      setLineItems(linesMerged.lineItems)
+      setSuggestedLineItems(linesMerged.suggestedLineItems)
+      setHasUsedOcr(true)
+
+      if (
+        Array.isArray(parsed.uncertainLineItems) &&
+        parsed.uncertainLineItems.length > 0
+      ) {
+        setUncertainLineItems(
+          parsed.uncertainLineItems.map((uRow) => ({
+            ...uRow,
+            uncertainKey: nextUncertainKey(),
+          })),
+        )
+      } else {
+        setUncertainLineItems([])
+      }
+
+      const preservedCount = headerMerged.preservedFields.length
+      const hasRowConflicts = linesMerged.lineItems.some(
+        (r) => Object.keys(r.rowSuggestions || {}).length > 0,
+      )
+
+      if (
+        preservedCount > 0 ||
+        hasRowConflicts ||
+        linesMerged.suggestedLineItems.length > 0
+      ) {
+        return 'Empty untouched fields were autofilled. Your edited or confirmed entries were preserved — review any inline bill suggestions below.'
+      }
+
+      return 'Eligible empty fields were autofilled from the bill. Please review and verify every field before saving.'
+    },
+    [],
+  )
+
   const runOcrForPendingFile = useCallback(
-    async (fileEntry) => {
+    async (fileEntry, { isAdditionalBill = false } = {}) => {
       if (!fileEntry?.file) {
         return
       }
@@ -426,15 +510,18 @@ export function PurchaseVoucherFormPage({
           },
         })
 
-        if (extraction.previewDataUrl) {
-          setPendingFiles((prev) =>
-            prev.map((item) =>
-              item.localId === fileEntry.localId
-                ? { ...item, renderedPdfPreviewUrl: extraction.previewDataUrl }
-                : item,
-            ),
-          )
-        }
+        setPendingFiles((prev) =>
+          prev.map((item) =>
+            item.localId === fileEntry.localId
+              ? {
+                  ...item,
+                  ocrProcessedOnce: true,
+                  renderedPdfPreviewUrl:
+                    extraction.previewDataUrl || item.renderedPdfPreviewUrl,
+                }
+              : item,
+          ),
+        )
 
         const parsed = parseBillOcrText(extraction, rawMaterialsRef.current)
 
@@ -443,14 +530,14 @@ export function PurchaseVoucherFormPage({
           setOcrState({
             ...makeInitialOcrState(),
             error:
-              'Local OCR could not read clear text from this bill (it may be blurry, rotated, or low-contrast). You can still keep the bill attached and enter the fields manually below.',
+              'Local OCR could not read clear text from this bill. Your existing form entries and bill attachment remain intact so you can continue manually.',
             warnings: parsed.warnings,
             averageConfidence: extraction.averageConfidence,
           })
           return
         }
 
-        applyParsedOcrToForm(parsed)
+        const summaryNote = applyParsedOcrToForm(parsed, { isAdditionalBill })
 
         setOcrState({
           isRunning: false,
@@ -459,8 +546,8 @@ export function PurchaseVoucherFormPage({
             'Local OCR finished. Please review and verify every field before saving.',
           error: '',
           completed: true,
-          draftDiscarded: false,
           tableDetected: Boolean(parsed.tableDetected),
+          summaryNote,
           rawText: parsed.normalizedText,
           warnings: parsed.warnings,
           detectedSubtotal: parsed.detectedSubtotal,
@@ -473,12 +560,26 @@ export function PurchaseVoucherFormPage({
           ...makeInitialOcrState(),
           error:
             err?.message ||
-            'Local OCR could not read this file. You can continue by entering the purchase details manually below.',
+            'Local OCR could not read this file. Your form entries and bill attachment remain intact.',
         })
       }
     },
     [applyParsedOcrToForm],
   )
+
+  const buildLocalFileEntry = (file) => {
+    const isPdf =
+      String(file.type || '').toLowerCase() === 'application/pdf' ||
+      /\.pdf$/i.test(String(file.name || ''))
+    return {
+      localId: `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      file,
+      isPdf,
+      ocrProcessedOnce: false,
+      localObjectUrl: isPdf ? '' : URL.createObjectURL(file),
+      renderedPdfPreviewUrl: '',
+    }
+  }
 
   const handleFilesSelected = (event) => {
     const chosen = Array.from(event.target.files || [])
@@ -504,16 +605,7 @@ export function PurchaseVoucherFormPage({
         setFieldErrors((prev) => ({ ...prev, attachments: validationMsg }))
         return
       }
-      const isPdf =
-        String(file.type || '').toLowerCase() === 'application/pdf' ||
-        /\.pdf$/i.test(String(file.name || ''))
-      validEntries.push({
-        localId: `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        file,
-        isPdf,
-        localObjectUrl: isPdf ? '' : URL.createObjectURL(file),
-        renderedPdfPreviewUrl: '',
-      })
+      validEntries.push(buildLocalFileEntry(file))
     }
 
     setFieldErrors((prev) => {
@@ -522,12 +614,56 @@ export function PurchaseVoucherFormPage({
       return next
     })
 
+    const hadExistingBills =
+      pendingFiles.length > 0 || retainedExistingAttachments.length > 0
     const nextIndex = pendingFiles.length
     setPendingFiles((prev) => [...prev, ...validEntries])
     setActivePreviewFileIdx(nextIndex)
 
-    if (entryMethod === 'upload_bill' && validEntries[0] && !ocrState.isRunning) {
-      runOcrForPendingFile(validEntries[0])
+    if (validEntries[0] && !ocrState.isRunning) {
+      runOcrForPendingFile(validEntries[0], {
+        isAdditionalBill: hadExistingBills,
+      })
+    }
+  }
+
+  const handleReplacePendingFile = (targetLocalId, replacementFile) => {
+    const validationMsg = validateLocalBillFile(replacementFile)
+    if (validationMsg) {
+      setFieldErrors((prev) => ({ ...prev, attachments: validationMsg }))
+      return
+    }
+
+    setFieldErrors((prev) => {
+      const next = { ...prev }
+      delete next.attachments
+      return next
+    })
+
+    const newEntry = buildLocalFileEntry(replacementFile)
+    let replacedIndex = 0
+    const hadMultipleBills =
+      pendingFiles.length + retainedExistingAttachments.length > 1
+
+    setPendingFiles((prev) =>
+      prev.map((item, idx) => {
+        if (item.localId !== targetLocalId) {
+          return item
+        }
+        replacedIndex = idx
+        if (item.localObjectUrl) {
+          URL.revokeObjectURL(item.localObjectUrl)
+        }
+        return newEntry
+      }),
+    )
+
+    setActivePreviewFileIdx(replacedIndex)
+
+    if (!ocrState.isRunning) {
+      runOcrForPendingFile(newEntry, {
+        isAdditionalBill: hadMultipleBills,
+      })
     }
   }
 
@@ -541,22 +677,19 @@ export function PurchaseVoucherFormPage({
       setActivePreviewFileIdx((idx) =>
         Math.max(0, Math.min(idx, filtered.length - 1)),
       )
+      if (filtered.length === 0) {
+        setOcrState(makeInitialOcrState())
+        setShowRawOcrText(false)
+      }
       return filtered
     })
   }
 
   const updateLineItem = (rowKey, field, value) => {
     setLineItems((prev) =>
-      prev.map((row) => {
-        if (row.rowKey !== rowKey) {
-          return row
-        }
-        const updated = { ...row, [field]: value }
-        if (field === 'materialId') {
-          updated.needsReview = false
-        }
-        return updated
-      }),
+      prev.map((row) =>
+        row.rowKey === rowKey ? applyManualLineItemEdit(row, field, value) : row,
+      ),
     )
     setFieldErrors((prev) => {
       if (!Object.keys(prev).length) return prev
@@ -566,17 +699,104 @@ export function PurchaseVoucherFormPage({
     })
   }
 
+  const handleConfirmLineRow = (rowKey) => {
+    setLineItems((prev) =>
+      prev.map((row) =>
+        row.rowKey === rowKey ? confirmLineItemOcrValues(row) : row,
+      ),
+    )
+  }
+
+  const handleAcceptRowSuggestion = (rowKey, fieldKey) => {
+    setLineItems((prev) =>
+      prev.map((row) =>
+        row.rowKey === rowKey ? acceptLineItemSuggestion(row, fieldKey) : row,
+      ),
+    )
+  }
+
+  const handleDismissRowSuggestion = (rowKey, fieldKey) => {
+    setLineItems((prev) =>
+      prev.map((row) =>
+        row.rowKey === rowKey ? dismissLineItemSuggestion(row, fieldKey) : row,
+      ),
+    )
+  }
+
   const handleAddLineRow = () => {
-    setLineItems((prev) => [...prev, makeEmptyLineItem()])
+    setLineItems((prev) => [...prev, createEmptyLineItem()])
   }
 
   const handleRemoveLineRow = (rowKey) => {
     setLineItems((prev) => {
+      const target = prev.find((r) => r.rowKey === rowKey)
+      if (target?.ocrFingerprint) {
+        setDismissedFingerprints((fps) =>
+          fps.includes(target.ocrFingerprint)
+            ? fps
+            : [...fps, target.ocrFingerprint],
+        )
+      }
       if (prev.length <= 1) {
-        return [makeEmptyLineItem()]
+        return [createEmptyLineItem()]
       }
       return prev.filter((row) => row.rowKey !== rowKey)
     })
+  }
+
+  const handleAddSuggestedLineItem = (suggestionKey) => {
+    const target = suggestedLineItems.find(
+      (item) => item.suggestionKey === suggestionKey,
+    )
+    if (!target) return
+    setSuggestedLineItems((prev) =>
+      prev.filter((item) => item.suggestionKey !== suggestionKey),
+    )
+    if (target.ocrFingerprint) {
+      setDismissedFingerprints((prev) =>
+        prev.filter((fp) => fp !== target.ocrFingerprint),
+      )
+    }
+    setLineItems((prev) => promoteSuggestedLineItemToRows(prev, target))
+  }
+
+  const handleAddAllSuggestedLineItems = () => {
+    if (suggestedLineItems.length === 0) return
+    const itemsToAdd = [...suggestedLineItems]
+    setSuggestedLineItems([])
+    setLineItems((prev) => {
+      let current = prev
+      for (const item of itemsToAdd) {
+        current = promoteSuggestedLineItemToRows(current, item)
+      }
+      return current
+    })
+  }
+
+  const handleDismissSuggestedLineItem = (suggestionKey) => {
+    const target = suggestedLineItems.find(
+      (item) => item.suggestionKey === suggestionKey,
+    )
+    if (target?.ocrFingerprint) {
+      setDismissedFingerprints((prev) =>
+        prev.includes(target.ocrFingerprint)
+          ? prev
+          : [...prev, target.ocrFingerprint],
+      )
+    }
+    setSuggestedLineItems((prev) =>
+      prev.filter((item) => item.suggestionKey !== suggestionKey),
+    )
+  }
+
+  const handleDismissAllSuggestedLineItems = () => {
+    const fps = suggestedLineItems
+      .map((s) => s.ocrFingerprint)
+      .filter(Boolean)
+    if (fps.length > 0) {
+      setDismissedFingerprints((prev) => Array.from(new Set([...prev, ...fps])))
+    }
+    setSuggestedLineItems([])
   }
 
   const handlePromoteUncertainRow = (uncertainKey) => {
@@ -607,7 +827,8 @@ export function PurchaseVoucherFormPage({
       Math.abs(qtyNum * priceNum - amtNum) <= Math.max(2, amtNum * 0.02)
 
     const promotedRow = {
-      rowKey: nextRowKey(),
+      ...createEmptyLineItem(),
+      rowKey: nextVoucherLineKey(),
       materialId: '',
       quantity: isMathConsistent ? String(target.quantity) : '',
       unitPrice: isMathConsistent ? String(target.unitPrice) : '',
@@ -617,17 +838,25 @@ export function PurchaseVoucherFormPage({
       detectedUnit: target.detectedUnit || '',
       suggestions: target.suggestions || [],
       needsReview: true,
+      fieldMeta: {
+        materialId: createFieldProvenance('initial'),
+        quantity: isMathConsistent
+          ? createFieldProvenance('ocr')
+          : createFieldProvenance('initial'),
+        unitPrice: isMathConsistent
+          ? createFieldProvenance('ocr')
+          : createFieldProvenance('initial'),
+        remarks: createFieldProvenance('initial'),
+        extractedDescription: createFieldProvenance('ocr'),
+        detectedUnit: target.detectedUnit
+          ? createFieldProvenance('ocr')
+          : createFieldProvenance('initial'),
+      },
     }
 
-    setLineItems((prev) => {
-      const isSingleEmpty =
-        prev.length === 1 &&
-        !prev[0].materialId &&
-        !String(prev[0].quantity).trim() &&
-        !String(prev[0].unitPrice).trim() &&
-        !prev[0].extractedDescription
-      return isSingleEmpty ? [promotedRow] : [...prev, promotedRow]
-    })
+    setLineItems((prev) =>
+      isLineItemListEffectivelyEmpty(prev) ? [promotedRow] : [...prev, promotedRow],
+    )
   }
 
   const handleDismissUncertainRow = (uncertainKey) => {
@@ -645,20 +874,17 @@ export function PurchaseVoucherFormPage({
       return true
     }
     return Boolean(
-      supplierName.trim() ||
-        supplierInvoiceNumber.trim() ||
+      headerValues.supplierName.trim() ||
+        headerValues.supplierInvoiceNumber.trim() ||
+        headerValues.notes.trim() ||
         pendingFiles.length > 0 ||
-        lineItems.some(
-          (r) =>
-            r.materialId ||
-            String(r.quantity).trim() ||
-            String(r.unitPrice).trim(),
-        ),
+        !isLineItemListEffectivelyEmpty(lineItems),
     )
   }, [
     isEditMode,
-    supplierName,
-    supplierInvoiceNumber,
+    headerValues.supplierName,
+    headerValues.supplierInvoiceNumber,
+    headerValues.notes,
     pendingFiles.length,
     lineItems,
   ])
@@ -675,13 +901,16 @@ export function PurchaseVoucherFormPage({
   const validateClientForm = () => {
     const errors = {}
 
-    if (!purchaseDate || !/^\d{4}-\d{2}-\d{2}$/.test(purchaseDate)) {
+    if (
+      !headerValues.purchaseDate ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(headerValues.purchaseDate)
+    ) {
       errors.purchaseDate = 'Purchase date is required.'
     }
 
-    if (!supplierName.trim()) {
+    if (!headerValues.supplierName.trim()) {
       errors.supplierName = 'Supplier name is required.'
-    } else if (supplierName.trim().length > 200) {
+    } else if (headerValues.supplierName.trim().length > 200) {
       errors.supplierName = 'Supplier name cannot exceed 200 characters.'
     }
 
@@ -722,9 +951,9 @@ export function PurchaseVoucherFormPage({
         errors[key] = `${label} must be zero or a positive amount.`
       }
     }
-    checkCharge(discountAmount, 'discountAmount', 'Discount')
-    checkCharge(taxAmount, 'taxAmount', 'Tax / GST')
-    checkCharge(otherCharges, 'otherCharges', 'Other charges')
+    checkCharge(headerValues.discountAmount, 'discountAmount', 'Discount')
+    checkCharge(headerValues.taxAmount, 'taxAmount', 'Tax / GST')
+    checkCharge(headerValues.otherCharges, 'otherCharges', 'Other charges')
 
     if (previewTotals.discountExceedsSubtotal) {
       errors.discountAmount =
@@ -753,12 +982,19 @@ export function PurchaseVoucherFormPage({
     setIsSaving(true)
     setUploadProgress(pendingFiles.length > 0 ? 5 : 0)
 
+    const resolvedEntryMethod =
+      pendingFiles.length > 0 ||
+      retainedExistingAttachments.length > 0 ||
+      hasUsedOcr
+        ? 'upload_bill'
+        : existingVoucher?.entryMethod || 'manual'
+
     const payload = {
-      purchaseDate,
-      supplierName: supplierName.trim(),
-      supplierInvoiceNumber: supplierInvoiceNumber.trim(),
-      projectId: projectId || null,
-      entryMethod,
+      purchaseDate: headerValues.purchaseDate,
+      supplierName: headerValues.supplierName.trim(),
+      supplierInvoiceNumber: headerValues.supplierInvoiceNumber.trim(),
+      projectId: headerValues.projectId || null,
+      entryMethod: resolvedEntryMethod,
       lineItems: lineItems.map((row) => {
         const mat = materialById.get(row.materialId)
         return {
@@ -769,10 +1005,17 @@ export function PurchaseVoucherFormPage({
           remarks: String(row.remarks || '').trim(),
         }
       }),
-      discountAmount: discountAmount === '' ? 0 : Number(discountAmount),
-      taxAmount: taxAmount === '' ? 0 : Number(taxAmount),
-      otherCharges: otherCharges === '' ? 0 : Number(otherCharges),
-      notes: notes.trim(),
+      discountAmount:
+        headerValues.discountAmount === ''
+          ? 0
+          : Number(headerValues.discountAmount),
+      taxAmount:
+        headerValues.taxAmount === '' ? 0 : Number(headerValues.taxAmount),
+      otherCharges:
+        headerValues.otherCharges === ''
+          ? 0
+          : Number(headerValues.otherCharges),
+      notes: headerValues.notes.trim(),
     }
 
     const filesToSend = pendingFiles.map((item) => item.file)
@@ -868,7 +1111,7 @@ export function PurchaseVoucherFormPage({
           <p className="pv-header__subtitle">
             {isEditMode
               ? 'Update supplier details, material quantities, project link, or attached bills. Stock and project totals resynchronize automatically.'
-              : 'Upload a supplier bill for local OCR extraction or enter material lines manually. Totals are verified on the server upon save.'}
+              : 'Enter purchase details directly or attach an optional supplier bill to autofill empty fields via local OCR.'}
           </p>
         </div>
       </header>
@@ -902,126 +1145,92 @@ export function PurchaseVoucherFormPage({
         </section>
       ) : (
         <form className="pv-form-layout" onSubmit={handleSubmit} noValidate>
-          {!isEditMode ? (
-            <div
-              className="pv-method-tabs"
-              role="tablist"
-              aria-label="Purchase entry method"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={entryMethod === 'upload_bill'}
-                className={`pv-method-tab${
-                  entryMethod === 'upload_bill' ? ' pv-method-tab--active' : ''
-                }`}
-                onClick={() => setEntryMethod('upload_bill')}
-              >
-                <span className="pv-method-tab__title">
-                  1. Upload Bill (Local OCR)
-                </span>
-                <span className="pv-method-tab__desc">
-                  Upload or photograph an invoice image/PDF, preview locally,
-                  and autofill fields via free browser OCR
-                </span>
-              </button>
-
-              <button
-                type="button"
-                role="tab"
-                aria-selected={entryMethod === 'manual'}
-                className={`pv-method-tab${
-                  entryMethod === 'manual' ? ' pv-method-tab--active' : ''
-                }`}
-                onClick={() => setEntryMethod('manual')}
-              >
-                <span className="pv-method-tab__title">2. Enter Manually</span>
-                <span className="pv-method-tab__desc">
-                  Enter supplier and raw material lines directly without a bill
-                  (attach a bill later anytime)
-                </span>
-              </button>
-            </div>
-          ) : null}
-
           {submitError ? (
             <div className="pv-alert pv-alert--error" role="alert">
               <strong>Unable to save voucher:</strong> {submitError}
             </div>
           ) : null}
 
-          {entryMethod === 'upload_bill' ||
-          isEditMode ||
-          pendingFiles.length > 0 ? (
-            <BillUploadOcrPanel
-              isEditMode={isEditMode}
-              isSaving={isSaving}
-              totalAttachmentCount={totalAttachmentCount}
-              fileInputRef={fileInputRef}
-              fieldError={fieldErrors.attachments}
-              ocrState={ocrState}
-              showRawOcrText={showRawOcrText}
-              onToggleRawOcrText={() => setShowRawOcrText((prev) => !prev)}
-              onDiscardOcrDraft={handleDiscardOcrDraft}
-              pendingFiles={pendingFiles}
-              activePreviewFileIdx={activePreviewFileIdx}
-              onSelectPreviewFile={setActivePreviewFileIdx}
-              onFilesSelected={handleFilesSelected}
-              onRunOcrForFile={runOcrForPendingFile}
-              onRemovePendingFile={handleRemovePendingFile}
-              retainedExistingAttachments={retainedExistingAttachments}
-              onOpenExistingAttachmentPreview={setPreviewModalAttachment}
-              onMarkExistingAttachmentRemoved={(attachmentId) =>
-                setRemovedAttachmentIds((prev) => [...prev, attachmentId])
-              }
-            />
-          ) : (
-            <section className="pv-surface pv-section-card pv-optional-bill-bar">
-              <div>
-                <strong>Entering manually without a bill?</strong>
-                <span>
-                  You can save this voucher without any attachment now, or
-                  attach a bill image/PDF later from Edit Voucher.
-                </span>
-              </div>
-              <button
-                type="button"
-                className="admin-btn admin-btn--secondary"
-                onClick={() => setEntryMethod('upload_bill')}
-              >
-                Attach a Bill Instead
-              </button>
-            </section>
-          )}
+          <BillUploadOcrPanel
+            isSaving={isSaving}
+            totalAttachmentCount={totalAttachmentCount}
+            fileInputRef={fileInputRef}
+            fieldError={fieldErrors.attachments}
+            ocrState={ocrState}
+            showRawOcrText={showRawOcrText}
+            onToggleRawOcrText={() => setShowRawOcrText((prev) => !prev)}
+            pendingFiles={pendingFiles}
+            activePreviewFileIdx={activePreviewFileIdx}
+            onSelectPreviewFile={setActivePreviewFileIdx}
+            onFilesSelected={handleFilesSelected}
+            onReplacePendingFile={handleReplacePendingFile}
+            onRunOcrForFile={runOcrForPendingFile}
+            onRemovePendingFile={handleRemovePendingFile}
+            retainedExistingAttachments={retainedExistingAttachments}
+            onOpenExistingAttachmentPreview={setPreviewModalAttachment}
+            onMarkExistingAttachmentRemoved={(attachmentId) =>
+              setRemovedAttachmentIds((prev) => [...prev, attachmentId])
+            }
+          />
 
           <section className="pv-surface pv-section-card">
             <h2 className="pv-section-card__title">
-              Supplier &amp; Project Details
+              Supplier &amp; Purchase Details
             </h2>
             <div className="pv-form-grid">
               <div className="pv-form-field">
-                <label htmlFor="pv-purchase-date" className="pv-form-label">
-                  Purchase Date <span className="pv-req">*</span>
-                </label>
+                <div className="pv-label-row">
+                  <label htmlFor="pv-purchase-date" className="pv-form-label">
+                    Purchase Date <span className="pv-req">*</span>
+                  </label>
+                  <FieldSourceBadge
+                    meta={fieldMeta.purchaseDate}
+                    hasValue={Boolean(headerValues.purchaseDate)}
+                    ocrActive={ocrActive}
+                    onConfirm={() => handleConfirmHeaderField('purchaseDate')}
+                    disabled={isSaving}
+                  />
+                </div>
                 <input
                   id="pv-purchase-date"
                   type="date"
                   className={`pv-input${
                     fieldErrors.purchaseDate ? ' pv-input--error' : ''
                   }`}
-                  value={purchaseDate}
-                  onChange={(e) => setPurchaseDate(e.target.value)}
+                  value={headerValues.purchaseDate}
+                  onChange={(e) =>
+                    handleHeaderFieldChange('purchaseDate', e.target.value)
+                  }
                   disabled={isSaving}
                 />
                 {fieldErrors.purchaseDate ? (
                   <p className="pv-field-error">{fieldErrors.purchaseDate}</p>
                 ) : null}
+                <FieldSuggestionBanner
+                  suggestion={fieldSuggestions.purchaseDate}
+                  labelPrefix="Bill date"
+                  formatValue={(val) => `${formatPurchaseDate(val)} (${val})`}
+                  onAccept={() => handleAcceptHeaderSuggestion('purchaseDate')}
+                  onDismiss={() =>
+                    handleDismissHeaderSuggestion('purchaseDate')
+                  }
+                  disabled={isSaving}
+                />
               </div>
 
               <div className="pv-form-field">
-                <label htmlFor="pv-supplier-name" className="pv-form-label">
-                  Supplier Name <span className="pv-req">*</span>
-                </label>
+                <div className="pv-label-row">
+                  <label htmlFor="pv-supplier-name" className="pv-form-label">
+                    Supplier Name <span className="pv-req">*</span>
+                  </label>
+                  <FieldSourceBadge
+                    meta={fieldMeta.supplierName}
+                    hasValue={Boolean(headerValues.supplierName.trim())}
+                    ocrActive={ocrActive}
+                    onConfirm={() => handleConfirmHeaderField('supplierName')}
+                    disabled={isSaving}
+                  />
+                </div>
                 <input
                   id="pv-supplier-name"
                   type="text"
@@ -1029,20 +1238,44 @@ export function PurchaseVoucherFormPage({
                     fieldErrors.supplierName ? ' pv-input--error' : ''
                   }`}
                   placeholder="e.g., Malabar Woods & Veneers"
-                  value={supplierName}
-                  onChange={(e) => setSupplierName(e.target.value)}
+                  value={headerValues.supplierName}
+                  onChange={(e) =>
+                    handleHeaderFieldChange('supplierName', e.target.value)
+                  }
                   maxLength={200}
                   disabled={isSaving}
                 />
                 {fieldErrors.supplierName ? (
                   <p className="pv-field-error">{fieldErrors.supplierName}</p>
                 ) : null}
+                <FieldSuggestionBanner
+                  suggestion={fieldSuggestions.supplierName}
+                  labelPrefix="Bill supplier"
+                  onAccept={() => handleAcceptHeaderSuggestion('supplierName')}
+                  onDismiss={() =>
+                    handleDismissHeaderSuggestion('supplierName')
+                  }
+                  disabled={isSaving}
+                />
               </div>
 
               <div className="pv-form-field">
-                <label htmlFor="pv-invoice-number" className="pv-form-label">
-                  Supplier Invoice No <span className="pv-opt">(Optional)</span>
-                </label>
+                <div className="pv-label-row">
+                  <label htmlFor="pv-invoice-number" className="pv-form-label">
+                    Supplier Invoice No <span className="pv-opt">(Optional)</span>
+                  </label>
+                  <FieldSourceBadge
+                    meta={fieldMeta.supplierInvoiceNumber}
+                    hasValue={Boolean(
+                      headerValues.supplierInvoiceNumber.trim(),
+                    )}
+                    ocrActive={ocrActive}
+                    onConfirm={() =>
+                      handleConfirmHeaderField('supplierInvoiceNumber')
+                    }
+                    disabled={isSaving}
+                  />
+                </div>
                 <input
                   id="pv-invoice-number"
                   type="text"
@@ -1050,8 +1283,13 @@ export function PurchaseVoucherFormPage({
                     fieldErrors.supplierInvoiceNumber ? ' pv-input--error' : ''
                   }`}
                   placeholder="e.g., INV-2026-104"
-                  value={supplierInvoiceNumber}
-                  onChange={(e) => setSupplierInvoiceNumber(e.target.value)}
+                  value={headerValues.supplierInvoiceNumber}
+                  onChange={(e) =>
+                    handleHeaderFieldChange(
+                      'supplierInvoiceNumber',
+                      e.target.value,
+                    )
+                  }
                   maxLength={100}
                   disabled={isSaving}
                 />
@@ -1060,21 +1298,41 @@ export function PurchaseVoucherFormPage({
                     {fieldErrors.supplierInvoiceNumber}
                   </p>
                 ) : null}
+                <FieldSuggestionBanner
+                  suggestion={fieldSuggestions.supplierInvoiceNumber}
+                  labelPrefix="Bill invoice #"
+                  onAccept={() =>
+                    handleAcceptHeaderSuggestion('supplierInvoiceNumber')
+                  }
+                  onDismiss={() =>
+                    handleDismissHeaderSuggestion('supplierInvoiceNumber')
+                  }
+                  disabled={isSaving}
+                />
               </div>
 
               <div className="pv-form-field">
-                <label htmlFor="pv-project-select" className="pv-form-label">
-                  Associated Project <span className="pv-opt">(Optional)</span>
-                </label>
+                <div className="pv-label-row">
+                  <label htmlFor="pv-project-select" className="pv-form-label">
+                    Associated Project <span className="pv-opt">(Optional)</span>
+                  </label>
+                  <FieldSourceBadge
+                    meta={fieldMeta.projectId}
+                    hasValue={Boolean(headerValues.projectId)}
+                    ocrActive={ocrActive}
+                    onConfirm={() => handleConfirmHeaderField('projectId')}
+                    disabled={isSaving}
+                  />
+                </div>
                 <Dropdown
                   id="pv-project-select"
                   variant="form"
-                  value={projectId}
+                  value={headerValues.projectId}
                   options={projectOptions}
                   placeholder="None — General Workshop Stock"
                   error={Boolean(fieldErrors.projectId)}
                   disabled={isSaving}
-                  onChange={(val) => setProjectId(val)}
+                  onChange={(val) => handleHeaderFieldChange('projectId', val)}
                   ariaLabel="Associated project"
                 />
                 {fieldErrors.projectId ? (
@@ -1086,15 +1344,24 @@ export function PurchaseVoucherFormPage({
 
           <PurchaseLineItemsEditor
             lineItems={lineItems}
+            suggestedLineItems={suggestedLineItems}
             uncertainLineItems={uncertainLineItems}
             materialById={materialById}
             materialOptions={materialOptions}
             fieldErrors={fieldErrors}
+            ocrActive={ocrActive}
             isSaving={isSaving}
             adminAccess={adminAccess}
             onAddLineRow={handleAddLineRow}
             onUpdateLineItem={updateLineItem}
+            onConfirmLineRow={handleConfirmLineRow}
+            onAcceptRowSuggestion={handleAcceptRowSuggestion}
+            onDismissRowSuggestion={handleDismissRowSuggestion}
             onRemoveLineRow={handleRemoveLineRow}
+            onAddSuggestedLineItem={handleAddSuggestedLineItem}
+            onAddAllSuggestedLineItems={handleAddAllSuggestedLineItems}
+            onDismissSuggestedLineItem={handleDismissSuggestedLineItem}
+            onDismissAllSuggestedLineItems={handleDismissAllSuggestedLineItems}
             onPromoteUncertainRow={handlePromoteUncertainRow}
             onDismissUncertainRow={handleDismissUncertainRow}
             onDismissAllUncertainRows={handleDismissAllUncertainRows}
@@ -1104,15 +1371,25 @@ export function PurchaseVoucherFormPage({
           />
 
           <PurchaseTotalsSummary
-            notes={notes}
-            onNotesChange={setNotes}
+            notes={headerValues.notes}
+            onNotesChange={(val) => handleHeaderFieldChange('notes', val)}
             previewTotals={previewTotals}
-            discountAmount={discountAmount}
-            onDiscountChange={setDiscountAmount}
-            taxAmount={taxAmount}
-            onTaxChange={setTaxAmount}
-            otherCharges={otherCharges}
-            onOtherChargesChange={setOtherCharges}
+            discountAmount={headerValues.discountAmount}
+            onDiscountChange={(val) =>
+              handleHeaderFieldChange('discountAmount', val)
+            }
+            taxAmount={headerValues.taxAmount}
+            onTaxChange={(val) => handleHeaderFieldChange('taxAmount', val)}
+            otherCharges={headerValues.otherCharges}
+            onOtherChargesChange={(val) =>
+              handleHeaderFieldChange('otherCharges', val)
+            }
+            fieldMeta={fieldMeta}
+            fieldSuggestions={fieldSuggestions}
+            ocrActive={ocrActive}
+            onConfirmField={handleConfirmHeaderField}
+            onAcceptFieldSuggestion={handleAcceptHeaderSuggestion}
+            onDismissFieldSuggestion={handleDismissHeaderSuggestion}
             fieldErrors={fieldErrors}
             ocrState={ocrState}
             isSaving={isSaving}
@@ -1135,34 +1412,46 @@ export function PurchaseVoucherFormPage({
             </div>
           ) : null}
 
-          <footer className="pv-form-footer">
-            <button
-              type="button"
-              className="admin-btn admin-btn--secondary"
-              onClick={() =>
-                requestControlledCancel(
-                  isEditMode && existingVoucher
-                    ? `/purchases/${encodeURIComponent(existingVoucher.id)}`
-                    : '/purchases',
-                )
-              }
-              disabled={isSaving}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="admin-btn admin-btn--primary"
-              disabled={isSaving || ocrState.isRunning}
-            >
-              {isSaving
-                ? isEditMode
-                  ? 'Saving Changes...'
-                  : 'Recording Purchase...'
-                : isEditMode
-                  ? 'Save Voucher Changes'
-                  : 'Save Purchase Voucher'}
-            </button>
+          <footer className="pv-form-footer pv-form-footer--sticky">
+            <div className="pv-form-footer__summary">
+              <span>
+                {lineItems.length}{' '}
+                {lineItems.length === 1 ? 'material row' : 'material rows'}
+              </span>
+              <strong>
+                Final Total: {formatInrCurrency(previewTotals.finalTotal)}
+              </strong>
+            </div>
+
+            <div className="pv-form-footer__actions">
+              <button
+                type="button"
+                className="admin-btn admin-btn--secondary"
+                onClick={() =>
+                  requestControlledCancel(
+                    isEditMode && existingVoucher
+                      ? `/purchases/${encodeURIComponent(existingVoucher.id)}`
+                      : '/purchases',
+                  )
+                }
+                disabled={isSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="admin-btn admin-btn--primary"
+                disabled={isSaving || ocrState.isRunning}
+              >
+                {isSaving
+                  ? isEditMode
+                    ? 'Saving Changes...'
+                    : 'Recording Purchase...'
+                  : isEditMode
+                    ? 'Save Voucher Changes'
+                    : 'Save Purchase Voucher'}
+              </button>
+            </div>
           </footer>
         </form>
       )}

@@ -757,7 +757,7 @@ export function extractSummarySegmentFromRow(rowText) {
 
   if (!/\b(?:gstin|gst\s*(?:no|number|reg|id)|tax\s*invoice)\b/i.test(clean)) {
     const taxTotalMatch =
-      /\b(?:total\s*(?:gst|tax)|output\s*(?:gst|tax|vat)|input\s*(?:gst|tax)|gst(?:\s*@|\s*\(|\s*amount|\s*\d|\s*[:-])|tax\s*amount|vat(?:\s*@|\s*amount|\s*[:-]))\b.*$/i.exec(
+      /\b(?:total\s*(?:gst|tax)\b|output\s*(?:gst|tax|vat)\b|input\s*(?:gst|tax)\b|gst(?:\s*@|\s*\(|\s*amount\b|\s*\d+|\s*[:-])|tax\s*amount\b|vat(?:\s*@|\s*amount\b|\s*[:-])).*$/i.exec(
         clean,
       )
     if (taxTotalMatch && !/\btaxable\b/i.test(taxTotalMatch[0])) {
