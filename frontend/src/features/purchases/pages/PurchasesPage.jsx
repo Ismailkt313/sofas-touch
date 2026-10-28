@@ -216,10 +216,7 @@ export function PurchasesPage({ currentUser, onNavigate }) {
       <header className="pv-header">
         <div className="pv-header__text">
           <h1 className="pv-header__title">Purchases</h1>
-          <p className="pv-header__subtitle">
-            Record supplier bills via local OCR or manual entry, synchronize raw
-            material stock, and track project procurement costs.
-          </p>
+          
         </div>
 
         {!authRequired ? (
