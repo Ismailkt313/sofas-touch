@@ -7,7 +7,10 @@ import {
   formatMaterialUnit,
 } from '../../raw-materials'
 import { BillAttachmentModal } from '../components/BillAttachmentModal'
-import { BillUploadOcrPanel } from '../components/BillUploadOcrPanel'
+import {
+  BillLocalPreviewPanel,
+  BillUploadOcrPanel,
+} from '../components/BillUploadOcrPanel'
 import {
   FieldSourceBadge,
   FieldSuggestionBanner,
@@ -33,7 +36,6 @@ import {
   acceptLineItemSuggestion,
   applyManualLineItemEdit,
   areFieldValuesEquivalent,
-  confirmLineItemOcrValues,
   createEmptyLineItem,
   createFieldProvenance,
   createInitialHeaderFieldMeta,
@@ -116,6 +118,8 @@ export function PurchaseVoucherFormPage({
 
   const [pendingFiles, setPendingFiles] = useState([])
   const [activePreviewFileIdx, setActivePreviewFileIdx] = useState(0)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isPreviewExpanded, setIsPreviewExpanded] = useState(false)
 
   const [rawMaterials, setRawMaterials] = useState([])
   const [projects, setProjects] = useState([])
@@ -130,9 +134,11 @@ export function PurchaseVoucherFormPage({
   const [isSaving, setIsSaving] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [confirmLeaveTarget, setConfirmLeaveTarget] = useState('')
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false)
 
   const clientRequestIdRef = useRef(makeClientRequestId())
   const fileInputRef = useRef(null)
+  const formRef = useRef(null)
   const pendingFilesRef = useRef(pendingFiles)
   const rawMaterialsRef = useRef(rawMaterials)
   const latestFormSnapshotRef = useRef({
@@ -173,6 +179,60 @@ export function PurchaseVoucherFormPage({
           URL.revokeObjectURL(entry.localObjectUrl)
         }
       })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined
+    }
+
+    let blurTimer = 0
+    const vv = window.visualViewport
+
+    const handleViewportResize = () => {
+      if (!vv || window.innerWidth > 768) {
+        setIsKeyboardOpen(false)
+        return
+      }
+      setIsKeyboardOpen(vv.height < window.innerHeight * 0.78)
+    }
+
+    const handleFocusIn = (event) => {
+      if (window.innerWidth > 768) return
+      const tag = event.target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        const inputType = String(event.target?.type || '').toLowerCase()
+        if (inputType !== 'file' && inputType !== 'checkbox') {
+          window.clearTimeout(blurTimer)
+          setIsKeyboardOpen(true)
+        }
+      }
+    }
+
+    const handleFocusOut = () => {
+      window.clearTimeout(blurTimer)
+      blurTimer = window.setTimeout(() => {
+        const activeTag = document.activeElement?.tagName
+        if (
+          activeTag !== 'INPUT' &&
+          activeTag !== 'TEXTAREA' &&
+          activeTag !== 'SELECT'
+        ) {
+          setIsKeyboardOpen(false)
+        }
+      }, 120)
+    }
+
+    vv?.addEventListener('resize', handleViewportResize)
+    document.addEventListener('focusin', handleFocusIn)
+    document.addEventListener('focusout', handleFocusOut)
+
+    return () => {
+      window.clearTimeout(blurTimer)
+      vv?.removeEventListener('resize', handleViewportResize)
+      document.removeEventListener('focusin', handleFocusIn)
+      document.removeEventListener('focusout', handleFocusOut)
     }
   }, [])
 
@@ -344,11 +404,18 @@ export function PurchaseVoucherFormPage({
   const totalAttachmentCount =
     retainedExistingAttachments.length + pendingFiles.length
 
-  const ocrActive = Boolean(
-    hasUsedOcr ||
-      ocrState.completed ||
-      Object.keys(fieldSuggestions).length > 0 ||
-      suggestedLineItems.length > 0,
+  const activePreviewEntry = pendingFiles[activePreviewFileIdx] || null
+
+  const handleTogglePreviewForFile = useCallback(
+    (idx) => {
+      if (isPreviewOpen && activePreviewFileIdx === idx) {
+        setIsPreviewOpen(false)
+        return
+      }
+      setActivePreviewFileIdx(idx)
+      setIsPreviewOpen(true)
+    },
+    [isPreviewOpen, activePreviewFileIdx],
   )
 
   const handleHeaderFieldChange = useCallback((fieldKey, nextValue) => {
@@ -379,19 +446,6 @@ export function PurchaseVoucherFormPage({
       const next = { ...prev }
       delete next[fieldKey]
       return next
-    })
-  }, [])
-
-  const handleConfirmHeaderField = useCallback((fieldKey) => {
-    setFieldMeta((prev) => {
-      const current = prev[fieldKey] || createFieldProvenance('ocr')
-      return {
-        ...prev,
-        [fieldKey]: {
-          ...current,
-          confirmed: true,
-        },
-      }
     })
   }, [])
 
@@ -476,10 +530,10 @@ export function PurchaseVoucherFormPage({
         hasRowConflicts ||
         linesMerged.suggestedLineItems.length > 0
       ) {
-        return 'Empty untouched fields were autofilled. Your edited or confirmed entries were preserved — review any inline bill suggestions below.'
+        return 'Autofilled empty fields · your manual entries were preserved.'
       }
 
-      return 'Eligible empty fields were autofilled from the bill. Please review and verify every field before saving.'
+      return 'Autofilled readable fields from bill — verify before saving.'
     },
     [],
   )
@@ -495,7 +549,7 @@ export function PurchaseVoucherFormPage({
         ...makeInitialOcrState(),
         isRunning: true,
         percent: 5,
-        message: 'Preparing bill document for local OCR...',
+        message: 'Reading bill...',
       })
 
       try {
@@ -530,7 +584,7 @@ export function PurchaseVoucherFormPage({
           setOcrState({
             ...makeInitialOcrState(),
             error:
-              'Local OCR could not read clear text from this bill. Your existing form entries and bill attachment remain intact so you can continue manually.',
+              'Could not read clear text from this bill. File stays attached — enter details manually below.',
             warnings: parsed.warnings,
             averageConfidence: extraction.averageConfidence,
           })
@@ -542,8 +596,7 @@ export function PurchaseVoucherFormPage({
         setOcrState({
           isRunning: false,
           percent: 100,
-          message:
-            'Local OCR finished. Please review and verify every field before saving.',
+          message: '',
           error: '',
           completed: true,
           tableDetected: Boolean(parsed.tableDetected),
@@ -560,7 +613,7 @@ export function PurchaseVoucherFormPage({
           ...makeInitialOcrState(),
           error:
             err?.message ||
-            'Local OCR could not read this file. Your form entries and bill attachment remain intact.',
+            'Could not read this file automatically. File stays attached — enter details below.',
         })
       }
     },
@@ -678,6 +731,8 @@ export function PurchaseVoucherFormPage({
         Math.max(0, Math.min(idx, filtered.length - 1)),
       )
       if (filtered.length === 0) {
+        setIsPreviewOpen(false)
+        setIsPreviewExpanded(false)
         setOcrState(makeInitialOcrState())
         setShowRawOcrText(false)
       }
@@ -697,14 +752,6 @@ export function PurchaseVoucherFormPage({
       delete next.lineItems
       return next
     })
-  }
-
-  const handleConfirmLineRow = (rowKey) => {
-    setLineItems((prev) =>
-      prev.map((row) =>
-        row.rowKey === rowKey ? confirmLineItemOcrValues(row) : row,
-      ),
-    )
   }
 
   const handleAcceptRowSuggestion = (rowKey, fieldKey) => {
@@ -915,31 +962,26 @@ export function PurchaseVoucherFormPage({
     }
 
     if (!Array.isArray(lineItems) || lineItems.length === 0) {
-      errors.lineItems = 'Add at least one material line item.'
+      errors.lineItems = 'Add at least one material.'
     } else {
       lineItems.forEach((row, idx) => {
         const prefix = `lineItems[${idx}]`
         if (!row.materialId) {
-          errors[`${prefix}.materialId`] =
-            `Line #${idx + 1}: select an existing Raw Material.`
+          errors[`${prefix}.materialId`] = 'Select a material.'
         }
 
         const qty = Number(row.quantity)
         if (String(row.quantity).trim() === '' || !Number.isFinite(qty)) {
-          errors[`${prefix}.quantity`] =
-            `Line #${idx + 1}: enter a valid quantity.`
+          errors[`${prefix}.quantity`] = 'Enter quantity.'
         } else if (qty <= 0) {
-          errors[`${prefix}.quantity`] =
-            `Line #${idx + 1}: quantity must be greater than zero.`
+          errors[`${prefix}.quantity`] = 'Must be > 0.'
         }
 
         const price = Number(row.unitPrice)
         if (String(row.unitPrice).trim() === '' || !Number.isFinite(price)) {
-          errors[`${prefix}.unitPrice`] =
-            `Line #${idx + 1}: enter a valid unit price.`
+          errors[`${prefix}.unitPrice`] = 'Enter unit price.'
         } else if (price <= 0) {
-          errors[`${prefix}.unitPrice`] =
-            `Line #${idx + 1}: unit price must be greater than zero.`
+          errors[`${prefix}.unitPrice`] = 'Must be > 0.'
         }
       })
     }
@@ -948,16 +990,15 @@ export function PurchaseVoucherFormPage({
       if (String(val).trim() === '') return
       const num = Number(val)
       if (!Number.isFinite(num) || num < 0) {
-        errors[key] = `${label} must be zero or a positive amount.`
+        errors[key] = `${label} must be 0 or greater.`
       }
     }
     checkCharge(headerValues.discountAmount, 'discountAmount', 'Discount')
-    checkCharge(headerValues.taxAmount, 'taxAmount', 'Tax / GST')
+    checkCharge(headerValues.taxAmount, 'taxAmount', 'Tax')
     checkCharge(headerValues.otherCharges, 'otherCharges', 'Other charges')
 
     if (previewTotals.discountExceedsSubtotal) {
-      errors.discountAmount =
-        'Discount amount cannot exceed the material items subtotal.'
+      errors.discountAmount = 'Discount cannot exceed subtotal.'
     }
 
     return errors
@@ -1080,9 +1121,15 @@ export function PurchaseVoucherFormPage({
     )
   }
 
+  const showSidePreview = Boolean(isPreviewOpen && activePreviewEntry)
+
   return (
-    <div className="pv-page">
-      <div className="pv-breadcrumb-bar">
+    <div
+      className={`pv-page pv-voucher-page${
+        isKeyboardOpen ? ' pv-page--keyboard-open' : ''
+      }`}
+    >
+      <header className="pv-form-topbar">
         <button
           type="button"
           className="pv-back-btn"
@@ -1097,23 +1144,14 @@ export function PurchaseVoucherFormPage({
               strokeLinejoin="round"
             />
           </svg>
-          <span>Back to Purchases</span>
+          <span>Purchases</span>
         </button>
-      </div>
 
-      <header className="pv-header">
-        <div className="pv-header__text">
-          <h1 className="pv-header__title">
-            {isEditMode
-              ? `Edit Purchase Voucher ${existingVoucher?.voucherNumber || ''}`
-              : 'New Purchase Voucher'}
-          </h1>
-          <p className="pv-header__subtitle">
-            {isEditMode
-              ? 'Update supplier details, material quantities, project link, or attached bills. Stock and project totals resynchronize automatically.'
-              : 'Enter purchase details directly or attach an optional supplier bill to autofill empty fields via local OCR.'}
-          </p>
-        </div>
+        <h1 className="pv-form-topbar__title">
+          {isEditMode
+            ? `Edit Voucher ${existingVoucher?.voucherNumber || ''}`.trim()
+            : 'New Purchase Voucher'}
+        </h1>
       </header>
 
       {isLoadingRefs ? (
@@ -1144,10 +1182,15 @@ export function PurchaseVoucherFormPage({
           </div>
         </section>
       ) : (
-        <form className="pv-form-layout" onSubmit={handleSubmit} noValidate>
+        <form
+          ref={formRef}
+          className="pv-voucher-form"
+          onSubmit={handleSubmit}
+          noValidate
+        >
           {submitError ? (
-            <div className="pv-alert pv-alert--error" role="alert">
-              <strong>Unable to save voucher:</strong> {submitError}
+            <div className="pv-inline-error" role="alert">
+              <span>{submitError}</span>
             </div>
           ) : null}
 
@@ -1161,7 +1204,13 @@ export function PurchaseVoucherFormPage({
             onToggleRawOcrText={() => setShowRawOcrText((prev) => !prev)}
             pendingFiles={pendingFiles}
             activePreviewFileIdx={activePreviewFileIdx}
-            onSelectPreviewFile={setActivePreviewFileIdx}
+            isPreviewOpen={isPreviewOpen}
+            isPreviewExpanded={isPreviewExpanded}
+            onTogglePreviewForFile={handleTogglePreviewForFile}
+            onTogglePreviewExpanded={() =>
+              setIsPreviewExpanded((prev) => !prev)
+            }
+            onClosePreview={() => setIsPreviewOpen(false)}
             onFilesSelected={handleFilesSelected}
             onReplacePendingFile={handleReplacePendingFile}
             onRunOcrForFile={runOcrForPendingFile}
@@ -1173,260 +1222,291 @@ export function PurchaseVoucherFormPage({
             }
           />
 
-          <section className="pv-surface pv-section-card">
-            <h2 className="pv-section-card__title">
-              Supplier &amp; Purchase Details
-            </h2>
-            <div className="pv-form-grid">
-              <div className="pv-form-field">
-                <div className="pv-label-row">
-                  <label htmlFor="pv-purchase-date" className="pv-form-label">
-                    Purchase Date <span className="pv-req">*</span>
-                  </label>
-                  <FieldSourceBadge
-                    meta={fieldMeta.purchaseDate}
-                    hasValue={Boolean(headerValues.purchaseDate)}
-                    ocrActive={ocrActive}
-                    onConfirm={() => handleConfirmHeaderField('purchaseDate')}
-                    disabled={isSaving}
-                  />
+          <div
+            className={`pv-editor-split${
+              showSidePreview ? ' pv-editor-split--with-preview' : ''
+            }`}
+          >
+            <div className="pv-voucher-sheet">
+              <section
+                className="pv-voucher-section"
+                aria-labelledby="pv-details-heading"
+              >
+                <div className="pv-section-head">
+                  <h2 id="pv-details-heading" className="pv-section-title">
+                    Purchase Details
+                  </h2>
                 </div>
-                <input
-                  id="pv-purchase-date"
-                  type="date"
-                  className={`pv-input${
-                    fieldErrors.purchaseDate ? ' pv-input--error' : ''
-                  }`}
-                  value={headerValues.purchaseDate}
-                  onChange={(e) =>
-                    handleHeaderFieldChange('purchaseDate', e.target.value)
-                  }
-                  disabled={isSaving}
-                />
-                {fieldErrors.purchaseDate ? (
-                  <p className="pv-field-error">{fieldErrors.purchaseDate}</p>
-                ) : null}
-                <FieldSuggestionBanner
-                  suggestion={fieldSuggestions.purchaseDate}
-                  labelPrefix="Bill date"
-                  formatValue={(val) => `${formatPurchaseDate(val)} (${val})`}
-                  onAccept={() => handleAcceptHeaderSuggestion('purchaseDate')}
-                  onDismiss={() =>
-                    handleDismissHeaderSuggestion('purchaseDate')
-                  }
-                  disabled={isSaving}
-                />
-              </div>
 
-              <div className="pv-form-field">
-                <div className="pv-label-row">
-                  <label htmlFor="pv-supplier-name" className="pv-form-label">
-                    Supplier Name <span className="pv-req">*</span>
-                  </label>
-                  <FieldSourceBadge
-                    meta={fieldMeta.supplierName}
-                    hasValue={Boolean(headerValues.supplierName.trim())}
-                    ocrActive={ocrActive}
-                    onConfirm={() => handleConfirmHeaderField('supplierName')}
-                    disabled={isSaving}
-                  />
-                </div>
-                <input
-                  id="pv-supplier-name"
-                  type="text"
-                  className={`pv-input${
-                    fieldErrors.supplierName ? ' pv-input--error' : ''
-                  }`}
-                  placeholder="e.g., Malabar Woods & Veneers"
-                  value={headerValues.supplierName}
-                  onChange={(e) =>
-                    handleHeaderFieldChange('supplierName', e.target.value)
-                  }
-                  maxLength={200}
-                  disabled={isSaving}
-                />
-                {fieldErrors.supplierName ? (
-                  <p className="pv-field-error">{fieldErrors.supplierName}</p>
-                ) : null}
-                <FieldSuggestionBanner
-                  suggestion={fieldSuggestions.supplierName}
-                  labelPrefix="Bill supplier"
-                  onAccept={() => handleAcceptHeaderSuggestion('supplierName')}
-                  onDismiss={() =>
-                    handleDismissHeaderSuggestion('supplierName')
-                  }
-                  disabled={isSaving}
-                />
-              </div>
+                <div className="pv-details-grid">
+                  <div className="pv-form-field">
+                    <div className="pv-label-row">
+                      <label
+                        htmlFor="pv-purchase-date"
+                        className="pv-form-label"
+                      >
+                        Purchase date <span className="pv-req">*</span>
+                      </label>
+                      <FieldSourceBadge
+                        meta={fieldMeta.purchaseDate}
+                        hasValue={Boolean(headerValues.purchaseDate)}
+                      />
+                    </div>
+                    <input
+                      id="pv-purchase-date"
+                      type="date"
+                      className={`pv-input${
+                        fieldErrors.purchaseDate ? ' pv-input--error' : ''
+                      }`}
+                      value={headerValues.purchaseDate}
+                      onChange={(e) =>
+                        handleHeaderFieldChange('purchaseDate', e.target.value)
+                      }
+                      disabled={isSaving}
+                    />
+                    {fieldErrors.purchaseDate ? (
+                      <p className="pv-field-error">
+                        {fieldErrors.purchaseDate}
+                      </p>
+                    ) : null}
+                    <FieldSuggestionBanner
+                      suggestion={fieldSuggestions.purchaseDate}
+                      labelPrefix="Bill date"
+                      formatValue={(val) => formatPurchaseDate(val)}
+                      onAccept={() =>
+                        handleAcceptHeaderSuggestion('purchaseDate')
+                      }
+                      onDismiss={() =>
+                        handleDismissHeaderSuggestion('purchaseDate')
+                      }
+                      disabled={isSaving}
+                    />
+                  </div>
 
-              <div className="pv-form-field">
-                <div className="pv-label-row">
-                  <label htmlFor="pv-invoice-number" className="pv-form-label">
-                    Supplier Invoice No <span className="pv-opt">(Optional)</span>
-                  </label>
-                  <FieldSourceBadge
-                    meta={fieldMeta.supplierInvoiceNumber}
-                    hasValue={Boolean(
-                      headerValues.supplierInvoiceNumber.trim(),
-                    )}
-                    ocrActive={ocrActive}
-                    onConfirm={() =>
-                      handleConfirmHeaderField('supplierInvoiceNumber')
-                    }
-                    disabled={isSaving}
-                  />
-                </div>
-                <input
-                  id="pv-invoice-number"
-                  type="text"
-                  className={`pv-input${
-                    fieldErrors.supplierInvoiceNumber ? ' pv-input--error' : ''
-                  }`}
-                  placeholder="e.g., INV-2026-104"
-                  value={headerValues.supplierInvoiceNumber}
-                  onChange={(e) =>
-                    handleHeaderFieldChange(
-                      'supplierInvoiceNumber',
-                      e.target.value,
-                    )
-                  }
-                  maxLength={100}
-                  disabled={isSaving}
-                />
-                {fieldErrors.supplierInvoiceNumber ? (
-                  <p className="pv-field-error">
-                    {fieldErrors.supplierInvoiceNumber}
-                  </p>
-                ) : null}
-                <FieldSuggestionBanner
-                  suggestion={fieldSuggestions.supplierInvoiceNumber}
-                  labelPrefix="Bill invoice #"
-                  onAccept={() =>
-                    handleAcceptHeaderSuggestion('supplierInvoiceNumber')
-                  }
-                  onDismiss={() =>
-                    handleDismissHeaderSuggestion('supplierInvoiceNumber')
-                  }
-                  disabled={isSaving}
-                />
-              </div>
+                  <div className="pv-form-field">
+                    <div className="pv-label-row">
+                      <label
+                        htmlFor="pv-supplier-name"
+                        className="pv-form-label"
+                      >
+                        Supplier name <span className="pv-req">*</span>
+                      </label>
+                      <FieldSourceBadge
+                        meta={fieldMeta.supplierName}
+                        hasValue={Boolean(headerValues.supplierName.trim())}
+                      />
+                    </div>
+                    <input
+                      id="pv-supplier-name"
+                      type="text"
+                      className={`pv-input${
+                        fieldErrors.supplierName ? ' pv-input--error' : ''
+                      }`}
+                      placeholder="Supplier or vendor name"
+                      value={headerValues.supplierName}
+                      onChange={(e) =>
+                        handleHeaderFieldChange('supplierName', e.target.value)
+                      }
+                      maxLength={200}
+                      disabled={isSaving}
+                    />
+                    {fieldErrors.supplierName ? (
+                      <p className="pv-field-error">
+                        {fieldErrors.supplierName}
+                      </p>
+                    ) : null}
+                    <FieldSuggestionBanner
+                      suggestion={fieldSuggestions.supplierName}
+                      labelPrefix="Bill supplier"
+                      onAccept={() =>
+                        handleAcceptHeaderSuggestion('supplierName')
+                      }
+                      onDismiss={() =>
+                        handleDismissHeaderSuggestion('supplierName')
+                      }
+                      disabled={isSaving}
+                    />
+                  </div>
 
-              <div className="pv-form-field">
-                <div className="pv-label-row">
-                  <label htmlFor="pv-project-select" className="pv-form-label">
-                    Associated Project <span className="pv-opt">(Optional)</span>
-                  </label>
-                  <FieldSourceBadge
-                    meta={fieldMeta.projectId}
-                    hasValue={Boolean(headerValues.projectId)}
-                    ocrActive={ocrActive}
-                    onConfirm={() => handleConfirmHeaderField('projectId')}
-                    disabled={isSaving}
-                  />
+                  <div className="pv-form-field">
+                    <div className="pv-label-row">
+                      <label
+                        htmlFor="pv-invoice-number"
+                        className="pv-form-label"
+                      >
+                        Supplier invoice number
+                      </label>
+                      <FieldSourceBadge
+                        meta={fieldMeta.supplierInvoiceNumber}
+                        hasValue={Boolean(
+                          headerValues.supplierInvoiceNumber.trim(),
+                        )}
+                      />
+                    </div>
+                    <input
+                      id="pv-invoice-number"
+                      type="text"
+                      className={`pv-input${
+                        fieldErrors.supplierInvoiceNumber
+                          ? ' pv-input--error'
+                          : ''
+                      }`}
+                      placeholder="Optional"
+                      value={headerValues.supplierInvoiceNumber}
+                      onChange={(e) =>
+                        handleHeaderFieldChange(
+                          'supplierInvoiceNumber',
+                          e.target.value,
+                        )
+                      }
+                      maxLength={100}
+                      disabled={isSaving}
+                    />
+                    {fieldErrors.supplierInvoiceNumber ? (
+                      <p className="pv-field-error">
+                        {fieldErrors.supplierInvoiceNumber}
+                      </p>
+                    ) : null}
+                    <FieldSuggestionBanner
+                      suggestion={fieldSuggestions.supplierInvoiceNumber}
+                      labelPrefix="Bill invoice"
+                      onAccept={() =>
+                        handleAcceptHeaderSuggestion('supplierInvoiceNumber')
+                      }
+                      onDismiss={() =>
+                        handleDismissHeaderSuggestion('supplierInvoiceNumber')
+                      }
+                      disabled={isSaving}
+                    />
+                  </div>
+
+                  <div className="pv-form-field">
+                    <div className="pv-label-row">
+                      <label
+                        htmlFor="pv-project-select"
+                        className="pv-form-label"
+                      >
+                        Associated project
+                      </label>
+                      <FieldSourceBadge
+                        meta={fieldMeta.projectId}
+                        hasValue={Boolean(headerValues.projectId)}
+                      />
+                    </div>
+                    <Dropdown
+                      id="pv-project-select"
+                      variant="form"
+                      value={headerValues.projectId}
+                      options={projectOptions}
+                      placeholder="None — General Workshop Stock"
+                      error={Boolean(fieldErrors.projectId)}
+                      disabled={isSaving}
+                      onChange={(val) =>
+                        handleHeaderFieldChange('projectId', val)
+                      }
+                      ariaLabel="Associated project"
+                    />
+                    {fieldErrors.projectId ? (
+                      <p className="pv-field-error">{fieldErrors.projectId}</p>
+                    ) : null}
+                  </div>
                 </div>
-                <Dropdown
-                  id="pv-project-select"
-                  variant="form"
-                  value={headerValues.projectId}
-                  options={projectOptions}
-                  placeholder="None — General Workshop Stock"
-                  error={Boolean(fieldErrors.projectId)}
-                  disabled={isSaving}
-                  onChange={(val) => handleHeaderFieldChange('projectId', val)}
-                  ariaLabel="Associated project"
-                />
-                {fieldErrors.projectId ? (
-                  <p className="pv-field-error">{fieldErrors.projectId}</p>
-                ) : null}
-              </div>
+              </section>
+
+              <PurchaseLineItemsEditor
+                lineItems={lineItems}
+                suggestedLineItems={suggestedLineItems}
+                uncertainLineItems={uncertainLineItems}
+                materialById={materialById}
+                materialOptions={materialOptions}
+                fieldErrors={fieldErrors}
+                isSaving={isSaving}
+                adminAccess={adminAccess}
+                onAddLineRow={handleAddLineRow}
+                onUpdateLineItem={updateLineItem}
+                onAcceptRowSuggestion={handleAcceptRowSuggestion}
+                onDismissRowSuggestion={handleDismissRowSuggestion}
+                onRemoveLineRow={handleRemoveLineRow}
+                onAddSuggestedLineItem={handleAddSuggestedLineItem}
+                onAddAllSuggestedLineItems={handleAddAllSuggestedLineItems}
+                onDismissSuggestedLineItem={handleDismissSuggestedLineItem}
+                onDismissAllSuggestedLineItems={
+                  handleDismissAllSuggestedLineItems
+                }
+                onPromoteUncertainRow={handlePromoteUncertainRow}
+                onDismissUncertainRow={handleDismissUncertainRow}
+                onDismissAllUncertainRows={handleDismissAllUncertainRows}
+                onRequestCancelToCatalog={() =>
+                  requestControlledCancel('/raw-materials')
+                }
+              />
+
+              <PurchaseTotalsSummary
+                notes={headerValues.notes}
+                onNotesChange={(val) => handleHeaderFieldChange('notes', val)}
+                previewTotals={previewTotals}
+                discountAmount={headerValues.discountAmount}
+                onDiscountChange={(val) =>
+                  handleHeaderFieldChange('discountAmount', val)
+                }
+                taxAmount={headerValues.taxAmount}
+                onTaxChange={(val) => handleHeaderFieldChange('taxAmount', val)}
+                otherCharges={headerValues.otherCharges}
+                onOtherChargesChange={(val) =>
+                  handleHeaderFieldChange('otherCharges', val)
+                }
+                fieldMeta={fieldMeta}
+                fieldSuggestions={fieldSuggestions}
+                onAcceptFieldSuggestion={handleAcceptHeaderSuggestion}
+                onDismissFieldSuggestion={handleDismissHeaderSuggestion}
+                fieldErrors={fieldErrors}
+                ocrState={ocrState}
+                isSaving={isSaving}
+              />
             </div>
-          </section>
 
-          <PurchaseLineItemsEditor
-            lineItems={lineItems}
-            suggestedLineItems={suggestedLineItems}
-            uncertainLineItems={uncertainLineItems}
-            materialById={materialById}
-            materialOptions={materialOptions}
-            fieldErrors={fieldErrors}
-            ocrActive={ocrActive}
-            isSaving={isSaving}
-            adminAccess={adminAccess}
-            onAddLineRow={handleAddLineRow}
-            onUpdateLineItem={updateLineItem}
-            onConfirmLineRow={handleConfirmLineRow}
-            onAcceptRowSuggestion={handleAcceptRowSuggestion}
-            onDismissRowSuggestion={handleDismissRowSuggestion}
-            onRemoveLineRow={handleRemoveLineRow}
-            onAddSuggestedLineItem={handleAddSuggestedLineItem}
-            onAddAllSuggestedLineItems={handleAddAllSuggestedLineItems}
-            onDismissSuggestedLineItem={handleDismissSuggestedLineItem}
-            onDismissAllSuggestedLineItems={handleDismissAllSuggestedLineItems}
-            onPromoteUncertainRow={handlePromoteUncertainRow}
-            onDismissUncertainRow={handleDismissUncertainRow}
-            onDismissAllUncertainRows={handleDismissAllUncertainRows}
-            onRequestCancelToCatalog={() =>
-              requestControlledCancel('/raw-materials')
-            }
-          />
-
-          <PurchaseTotalsSummary
-            notes={headerValues.notes}
-            onNotesChange={(val) => handleHeaderFieldChange('notes', val)}
-            previewTotals={previewTotals}
-            discountAmount={headerValues.discountAmount}
-            onDiscountChange={(val) =>
-              handleHeaderFieldChange('discountAmount', val)
-            }
-            taxAmount={headerValues.taxAmount}
-            onTaxChange={(val) => handleHeaderFieldChange('taxAmount', val)}
-            otherCharges={headerValues.otherCharges}
-            onOtherChargesChange={(val) =>
-              handleHeaderFieldChange('otherCharges', val)
-            }
-            fieldMeta={fieldMeta}
-            fieldSuggestions={fieldSuggestions}
-            ocrActive={ocrActive}
-            onConfirmField={handleConfirmHeaderField}
-            onAcceptFieldSuggestion={handleAcceptHeaderSuggestion}
-            onDismissFieldSuggestion={handleDismissHeaderSuggestion}
-            fieldErrors={fieldErrors}
-            ocrState={ocrState}
-            isSaving={isSaving}
-          />
+            {showSidePreview ? (
+              <aside className="pv-side-preview" aria-label="Bill preview">
+                <BillLocalPreviewPanel
+                  entry={activePreviewEntry}
+                  isExpanded={isPreviewExpanded}
+                  onToggleExpanded={() =>
+                    setIsPreviewExpanded((prev) => !prev)
+                  }
+                  onClose={() => setIsPreviewOpen(false)}
+                />
+              </aside>
+            ) : null}
+          </div>
 
           {isSaving && pendingFiles.length > 0 ? (
-            <div className="pv-progress-panel" role="status">
-              <div className="pv-progress-panel__top">
-                <span>
-                  Uploading bill attachment &amp; recording voucher...
-                </span>
+            <div className="pv-ocr-running" role="status">
+              <div className="pv-ocr-running__row">
+                <span>Uploading bill &amp; saving voucher...</span>
                 <strong>{uploadProgress}%</strong>
               </div>
-              <div className="pv-progress-bar">
+              <div className="pv-ocr-running__track">
                 <div
-                  className="pv-progress-bar__fill"
+                  className="pv-ocr-running__fill"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
             </div>
           ) : null}
 
-          <footer className="pv-form-footer pv-form-footer--sticky">
-            <div className="pv-form-footer__summary">
+          <footer className="pv-sticky-bar">
+            <div className="pv-sticky-bar__summary">
               <span>
                 {lineItems.length}{' '}
-                {lineItems.length === 1 ? 'material row' : 'material rows'}
+                {lineItems.length === 1 ? 'material' : 'materials'}
               </span>
-              <strong>
-                Final Total: {formatInrCurrency(previewTotals.finalTotal)}
-              </strong>
+              <strong>{formatInrCurrency(previewTotals.finalTotal)}</strong>
             </div>
 
-            <div className="pv-form-footer__actions">
+            <div className="pv-sticky-bar__actions">
               <button
                 type="button"
-                className="admin-btn admin-btn--secondary"
+                className="admin-btn admin-btn--secondary pv-sticky-bar__cancel"
                 onClick={() =>
                   requestControlledCancel(
                     isEditMode && existingVoucher
@@ -1440,15 +1520,15 @@ export function PurchaseVoucherFormPage({
               </button>
               <button
                 type="submit"
-                className="admin-btn admin-btn--primary"
+                className="admin-btn admin-btn--primary pv-sticky-bar__save"
                 disabled={isSaving || ocrState.isRunning}
               >
                 {isSaving
                   ? isEditMode
-                    ? 'Saving Changes...'
-                    : 'Recording Purchase...'
+                    ? 'Saving...'
+                    : 'Saving...'
                   : isEditMode
-                    ? 'Save Voucher Changes'
+                    ? 'Save Changes'
                     : 'Save Purchase Voucher'}
               </button>
             </div>
@@ -1468,8 +1548,8 @@ export function PurchaseVoucherFormPage({
             </div>
             <div className="admin-modal__body">
               <p className="pv-cancel-modal__notice">
-                Your unsaved purchase voucher entries and local bill previews
-                will be discarded. No stock or project totals have been changed.
+                Your unsaved entries and attached bill preview will be
+                discarded.
               </p>
             </div>
             <div className="admin-modal__footer">
@@ -1478,7 +1558,7 @@ export function PurchaseVoucherFormPage({
                 className="admin-btn admin-btn--secondary"
                 onClick={() => setConfirmLeaveTarget('')}
               >
-                Continue Editing
+                Keep Editing
               </button>
               <button
                 type="button"
@@ -1489,7 +1569,7 @@ export function PurchaseVoucherFormPage({
                   onNavigate?.(target)
                 }}
               >
-                Discard &amp; Leave
+                Discard
               </button>
             </div>
           </div>
