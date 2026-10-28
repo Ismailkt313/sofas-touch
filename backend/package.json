@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "tsx src/modules/auth/__tests__/signup.test.ts && tsx src/modules/users/__tests__/user.test.ts && tsx src/modules/projects/__tests__/project.test.ts"
+    "test": "tsx src/modules/auth/__tests__/signup.test.ts && tsx src/modules/users/__tests__/user.test.ts && tsx src/modules/projects/__tests__/project.test.ts && tsx src/modules/raw-materials/__tests__/raw-materials.test.ts"
   },
   "keywords": [],
   "author": "",

@@ -7,6 +7,7 @@ import authRouter from './modules/auth';
 import userRouter from './modules/users';
 import adminRoutes from './routes/adminRoutes';
 import projectRoutes from './routes/projectRoutes';
+import rawMaterialRoutes from './routes/rawMaterialRoutes';
 
 const app = express();
 const PORT = env.PORT;
@@ -64,6 +65,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/users', userRouter);
 app.use('/api/admin', adminRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/raw-materials', rawMaterialRoutes);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({
