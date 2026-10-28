@@ -1,7 +1,6 @@
 import {
   formatMaterialDate,
   formatMaterialQuantityOnHand,
-  formatMaterialUnit,
 } from '../services/rawMaterialService'
 import { RawMaterialRowActionsMenu } from './RawMaterialRowActionsMenu'
 import {
@@ -35,7 +34,6 @@ export function RawMaterialsTable({
         </thead>
         <tbody>
           {materials.map((material) => {
-            const formattedUnit = formatMaterialUnit(material.unit)
             const formattedQuantity = formatMaterialQuantityOnHand(
               material.quantityOnHand,
               material.unit,
@@ -58,11 +56,8 @@ export function RawMaterialsTable({
                 <td>
                   <RawMaterialCategoryTag category={material.category} />
                 </td>
-
                 <td className="rm-table__qty-cell">
-                  <span className="rm-qty-badge">
-                    {formattedQuantity}
-                  </span>
+                  <span className="rm-qty-badge">{formattedQuantity}</span>
                 </td>
                 <td className="rm-table__desc-cell">
                   {material.description ? (

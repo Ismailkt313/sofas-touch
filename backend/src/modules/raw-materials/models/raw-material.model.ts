@@ -114,7 +114,7 @@ export interface IRawMaterial {
   normalizedName: string;
   category?: RawMaterialCategory | null;
   unit: RawMaterialUnit;
-  quantityOnHand: number;
+  quantityOnHand?: number;
   description?: string;
   isActive: boolean;
   createdBy?: string;

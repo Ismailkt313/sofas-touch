@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "tsx src/modules/auth/__tests__/signup.test.ts && tsx src/modules/users/__tests__/user.test.ts && tsx src/modules/projects/__tests__/project.test.ts && tsx src/modules/raw-materials/__tests__/raw-materials.test.ts"
+    "test": "tsx src/modules/auth/__tests__/signup.test.ts && tsx src/modules/users/__tests__/user.test.ts && tsx src/modules/projects/__tests__/project.test.ts && tsx src/modules/raw-materials/__tests__/raw-materials.test.ts && tsx src/modules/purchases/__tests__/purchase-voucher.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -21,13 +21,15 @@
     "express-rate-limit": "^8.7.1",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.11.3"
+    "mongoose": "^9.11.3",
+    "multer": "^2.5.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.3.0",
     "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"

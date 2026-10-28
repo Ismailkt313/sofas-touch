@@ -205,6 +205,16 @@ export function formatMaterialDateTime(dateInput) {
   }).format(parsed)
 }
 
+export function formatMaterialStockOnHand(quantityOnHand, unit) {
+  const numeric = Number(quantityOnHand)
+  const safeQty = Number.isFinite(numeric) && numeric > 0 ? numeric : 0
+  const formattedQty = new Intl.NumberFormat('en-IN', {
+    maximumFractionDigits: 3,
+  }).format(safeQty)
+  const displayUnit = formatMaterialUnit(unit)
+  return displayUnit ? `${formattedQty} ${displayUnit}` : formattedQty
+}
+
 export function normalizeRawMaterial(raw = {}) {
   return {
     id: String(raw.id || raw._id || '').trim(),

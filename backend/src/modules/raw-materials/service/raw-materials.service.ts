@@ -12,7 +12,10 @@ import {
   normalizeMaterialDisplayName,
   normalizeMaterialNameKey,
 } from '../models/raw-material.model';
-import { DuplicateRawMaterialKeyError } from '../repository/raw-materials.repository';
+import {
+  DuplicateRawMaterialKeyError,
+  InsufficientRawMaterialStockError,
+} from '../repository/raw-materials.repository';
 import {
   FindRawMaterialsQuery,
   IRawMaterialsRepository,
@@ -99,6 +102,15 @@ export class InsufficientStockQuantityError extends Error {
   }
 }
 
+export class RawMaterialUnitConflictError extends Error {
+  public readonly statusCode = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'RawMaterialUnitConflictError';
+  }
+}
+
 export function mapRawMaterialToResponse(
   material: IRawMaterial,
 ): RawMaterialResponseDto {
@@ -139,6 +151,7 @@ export function mapRawMaterialToPurchaseReference(
 
 export class RawMaterialsService implements IRawMaterialsService {
   private readonly repository: IRawMaterialsRepository;
+  private readonly materialLocks: Map<string, Promise<unknown>> = new Map();
 
   constructor(repository: IRawMaterialsRepository) {
     this.repository = repository;
@@ -150,6 +163,57 @@ export class RawMaterialsService implements IRawMaterialsService {
       throw new InvalidRawMaterialIdError(trimmed);
     }
     return trimmed;
+  }
+
+  private async withSingleMaterialLock<T>(
+    idKey: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.materialLocks.get(idKey) || Promise.resolve();
+    let releaseLock!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    const chained = previous.then(
+      () => gate,
+      () => gate,
+    );
+    this.materialLocks.set(idKey, chained);
+
+    await previous.catch(() => undefined);
+
+    try {
+      return await operation();
+    } finally {
+      releaseLock();
+      if (this.materialLocks.get(idKey) === chained) {
+        this.materialLocks.delete(idKey);
+      }
+    }
+  }
+
+  async withMaterialStockLocks<T>(
+    materialIds: string[],
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const sortedKeys = Array.from(
+      new Set(
+        materialIds
+          .map((id) => (typeof id === 'string' ? id.trim().toLowerCase() : ''))
+          .filter(Boolean),
+      ),
+    ).sort();
+
+    const runNested = async (index: number): Promise<T> => {
+      if (index >= sortedKeys.length) {
+        return operation();
+      }
+      return this.withSingleMaterialLock(sortedKeys[index], () =>
+        runNested(index + 1),
+      );
+    };
+
+    return runNested(0);
   }
 
   async createRawMaterial(
@@ -277,6 +341,12 @@ export class RawMaterialsService implements IRawMaterialsService {
     }
 
     if (dto.unit !== undefined) {
+      const currentQty = Number(existing.quantityOnHand ?? 0);
+      if (dto.unit !== existing.unit && currentQty > 0) {
+        throw new RawMaterialUnitConflictError(
+          `Cannot change unit for '${existing.name}' from '${existing.unit}' to '${dto.unit}' while recorded purchase quantity (${currentQty} ${existing.unit}) is greater than zero.`,
+        );
+      }
       recordUpdates.unit = dto.unit;
     }
 
@@ -426,4 +496,32 @@ export class RawMaterialsService implements IRawMaterialsService {
     }
     return referenceMap;
   }
+
+  async adjustStockForPurchaseUnlocked(
+    id: string,
+    expectedUnit: RawMaterialUnit,
+    delta: number,
+  ): Promise<RawMaterialPurchaseReferenceDto> {
+    const validId = this.assertValidId(id);
+    const existing = await this.repository.findById(validId);
+
+    if (!existing) {
+      throw new RawMaterialNotFoundError(validId);
+    }
+
+    if (existing.unit !== expectedUnit) {
+      throw new RawMaterialUnitConflictError(
+        `Incompatible unit '${expectedUnit}' for material '${existing.name}'. Expected '${existing.unit}'.`,
+      );
+    }
+
+    const updated = await this.repository.adjustQuantityOnHand(validId, delta);
+    if (!updated) {
+      throw new RawMaterialNotFoundError(validId);
+    }
+
+    return mapRawMaterialToPurchaseReference(updated);
+  }
 }
+
+export { InsufficientRawMaterialStockError };

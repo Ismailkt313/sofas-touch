@@ -1,3 +1,4 @@
+import path from 'path';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -45,6 +46,14 @@ export const env = {
   },
 
   DATABASE_URL: process.env.DATABASE_URL || '',
+
+  BILL_STORAGE_DIR:
+    process.env.BILL_STORAGE_DIR ||
+    path.resolve(process.cwd(), 'storage/purchase-bills'),
+  MAX_BILL_FILE_SIZE_BYTES: parsePositiveNumber(
+    process.env.MAX_BILL_FILE_SIZE_BYTES,
+    10 * 1024 * 1024,
+  ),
 
   PROJECT_COST_WARNING_THRESHOLD_PERCENT: parsePositiveNumber(
     process.env.PROJECT_COST_WARNING_THRESHOLD_PERCENT,

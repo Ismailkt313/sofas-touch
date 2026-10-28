@@ -8,6 +8,7 @@ import userRouter from './modules/users';
 import adminRoutes from './routes/adminRoutes';
 import projectRoutes from './routes/projectRoutes';
 import rawMaterialRoutes from './routes/rawMaterialRoutes';
+import purchaseRoutes from './routes/purchaseRoutes';
 
 const app = express();
 const PORT = env.PORT;
@@ -36,7 +37,7 @@ const corsOptions: CorsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Idempotency-Key'],
   optionsSuccessStatus: 200,
 };
 
@@ -66,6 +67,7 @@ app.use('/api/users', userRouter);
 app.use('/api/admin', adminRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/raw-materials', rawMaterialRoutes);
+app.use('/api/purchases', purchaseRoutes);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({

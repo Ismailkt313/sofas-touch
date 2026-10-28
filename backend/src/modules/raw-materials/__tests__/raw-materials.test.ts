@@ -447,6 +447,15 @@ async function runTests(): Promise<void> {
         async updateById() {
           return null;
         },
+        async adjustStockQuantity() {
+          return null;
+        },
+        async incrementStockQuantity() {
+          return null;
+        },
+        async adjustQuantityOnHand() {
+          return null;
+        },
       };
       const raceService = new RawMaterialsService(simulatedRaceRepo);
       await assert.rejects(
@@ -890,7 +899,6 @@ async function runTests(): Promise<void> {
 
     console.log('9. Testing Quantity Tracking, Authorized Stock Adjustments, and Voucher Synchronization Preparation...');
     {
-      // 9a. DTO validations
       const validQty1 = validateCreateRawMaterialDto({
         name: 'Brass Studs (10mm)',
         unit: 'Box',
@@ -930,7 +938,6 @@ async function runTests(): Promise<void> {
       assert.strictEqual(nonNumericQty.isValid, false);
       assert.ok(nonNumericQty.errors?.quantityOnHand);
 
-      // Ordinary update must reject direct quantity modification
       const rejectUpdateQty = validateUpdateRawMaterialDto({
         name: 'Updated Cotton Cord',
         quantityOnHand: 50,
@@ -938,7 +945,6 @@ async function runTests(): Promise<void> {
       assert.strictEqual(rejectUpdateQty.isValid, false);
       assert.ok(rejectUpdateQty.errors?.quantityOnHand);
 
-      // AdjustStockDto validation
       const validAdjust = validateAdjustStockDto({
         quantityOnHand: 40,
         reason: 'Physical inventory audit',
@@ -963,7 +969,6 @@ async function runTests(): Promise<void> {
       assert.strictEqual(invalidAdjustEmpty.isValid, false);
       assert.ok(invalidAdjustEmpty.errors?.quantityOnHand);
 
-      // 9b. Schema level defaults and min constraint
       const schemaDocWithQty = new RawMaterialModel({
         name: 'Tufting Twine Spool',
         unit: 'Roll',
@@ -986,7 +991,6 @@ async function runTests(): Promise<void> {
       });
       await assert.rejects(() => schemaDocNegative.validate());
 
-      // 9c. HTTP API: Create material with initial quantity (Admin)
       const createWithQtyRes = await sendJsonRequest(
         baseUrl,
         'POST',
@@ -1009,7 +1013,6 @@ async function runTests(): Promise<void> {
       assert.strictEqual(goldTacks.unit, 'Box');
       const goldTacksId = goldTacks.id as string;
 
-      // 9d. HTTP API: Create material without initial quantity defaults to zero
       const createWithoutQtyRes = await sendJsonRequest(
         baseUrl,
         'POST',
@@ -1027,7 +1030,6 @@ async function runTests(): Promise<void> {
       const silverTacks = createWithoutQtyRes.body.rawMaterial as Record<string, unknown>;
       assert.strictEqual(silverTacks.quantityOnHand, 0);
 
-      // 9e. HTTP API: Detail returns quantityOnHand
       const detailRes = await sendJsonRequest(
         baseUrl,
         'GET',
@@ -1037,7 +1039,6 @@ async function runTests(): Promise<void> {
       assert.strictEqual(detailRes.status, 200);
       assert.strictEqual((detailRes.body.rawMaterial as Record<string, unknown>).quantityOnHand, 50);
 
-      // 9f. HTTP API: Ordinary update preserves saved quantity
       const ordinaryUpdateRes = await sendJsonRequest(
         baseUrl,
         'PATCH',
@@ -1052,7 +1053,6 @@ async function runTests(): Promise<void> {
       assert.strictEqual(ordinaryUpdateRes.status, 200);
       assert.strictEqual((ordinaryUpdateRes.body.rawMaterial as Record<string, unknown>).quantityOnHand, 50);
 
-      // Ordinary update rejecting direct quantity change
       const forbiddenQtyUpdate = await sendJsonRequest(
         baseUrl,
         'PATCH',
@@ -1066,7 +1066,6 @@ async function runTests(): Promise<void> {
       );
       assert.strictEqual(forbiddenQtyUpdate.status, 400);
 
-      // 9g. HTTP API: Data Entry cannot adjust stock (403 Forbidden)
       const operatorAdjustRes = await sendJsonRequest(
         baseUrl,
         'PATCH',
@@ -1078,7 +1077,6 @@ async function runTests(): Promise<void> {
       );
       assert.strictEqual(operatorAdjustRes.status, 403);
 
-      // 9h. HTTP API: Admin adjusts stock (200 OK)
       const adminAdjustRes = await sendJsonRequest(
         baseUrl,
         'PATCH',
@@ -1091,7 +1089,6 @@ async function runTests(): Promise<void> {
       assert.strictEqual(adminAdjustRes.status, 200);
       assert.strictEqual((adminAdjustRes.body.rawMaterial as Record<string, unknown>).quantityOnHand, 75);
 
-      // Stock adjustment rejecting negative value
       const adminNegativeAdjustRes = await sendJsonRequest(
         baseUrl,
         'PATCH',
@@ -1103,28 +1100,22 @@ async function runTests(): Promise<void> {
       );
       assert.strictEqual(adminNegativeAdjustRes.status, 400);
 
-      // 9i. Service-level Voucher Synchronization Preparation tests (applyStockDelta)
-      // Positive delta (purchased 25 boxes) -> increases from 75 to 100
       const afterPurchase = await rawMaterialsService.applyStockDelta(goldTacksId, 25, 'Box');
       assert.strictEqual(afterPurchase.quantityOnHand, 100);
 
-      // Unit compatibility check: if voucher has incompatible unit ('Meter' vs 'Box'), must reject
       await assert.rejects(
         () => rawMaterialsService.applyStockDelta(goldTacksId, 10, 'Meter' as any),
         (err: unknown) => err instanceof IncompatibleMaterialUnitError,
       );
 
-      // Voucher edit reversal / deletion delta (-30 boxes) -> decreases from 100 to 70
       const afterReversal = await rawMaterialsService.applyStockDelta(goldTacksId, -30, 'Box');
       assert.strictEqual(afterReversal.quantityOnHand, 70);
 
-      // Stock cannot drop below zero
       await assert.rejects(
         () => rawMaterialsService.applyStockDelta(goldTacksId, -150, 'Box'),
         (err: unknown) => err instanceof InsufficientStockQuantityError,
       );
 
-      // Final verified stock
       const finalCheck = await rawMaterialsService.getRawMaterialById(goldTacksId, 'admin');
       assert.strictEqual(finalCheck.quantityOnHand, 70);
     }

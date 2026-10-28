@@ -37,6 +37,7 @@ router.patch('/:id', requireAdmin, rawMaterialsController.update);
 
 export {
   DuplicateRawMaterialKeyError,
+  InsufficientRawMaterialStockError,
   RawMaterialsRepository,
 } from './repository/raw-materials.repository';
 export {
@@ -49,6 +50,7 @@ export {
   mapRawMaterialToResponse,
   RawMaterialAlreadyExistsError,
   RawMaterialNotFoundError,
+  RawMaterialUnitConflictError,
   RawMaterialsService,
 } from './service/raw-materials.service';
 export { RawMaterialsController };
