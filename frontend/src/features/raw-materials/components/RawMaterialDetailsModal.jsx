@@ -1,5 +1,9 @@
 import { useEffect, useId, useRef } from 'react'
-import { formatMaterialDateTime } from '../services/rawMaterialService'
+import {
+  formatMaterialDateTime,
+  formatMaterialUnit,
+  formatMaterialUnitOptionLabel,
+} from '../services/rawMaterialService'
 import {
   RawMaterialCategoryTag,
   RawMaterialStatusBadge,
@@ -126,7 +130,12 @@ export function RawMaterialDetailsModal({
                 <div className="rm-details-hero__badges">
                   <RawMaterialStatusBadge isActive={material.isActive} />
                   <RawMaterialCategoryTag category={material.category} />
-                  <span className="rm-unit-pill">{material.unit || '—'}</span>
+                  <span
+                    className="rm-unit-pill"
+                    title={material.unit || undefined}
+                  >
+                    {formatMaterialUnit(material.unit) || '—'}
+                  </span>
                 </div>
               </div>
 
@@ -136,8 +145,8 @@ export function RawMaterialDetailsModal({
                   <dd>{material.category || 'Uncategorized'}</dd>
                 </div>
                 <div className="profile-details__row">
-                  <dt>Purchase Unit</dt>
-                  <dd>{material.unit || '—'}</dd>
+                  <dt>Unit</dt>
+                  <dd>{formatMaterialUnitOptionLabel(material.unit) || '—'}</dd>
                 </div>
                 <div className="profile-details__row">
                   <dt>Status</dt>

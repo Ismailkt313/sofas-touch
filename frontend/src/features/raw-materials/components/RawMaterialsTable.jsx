@@ -1,4 +1,7 @@
-import { formatMaterialDate } from '../services/rawMaterialService'
+import {
+  formatMaterialDate,
+  formatMaterialUnit,
+} from '../services/rawMaterialService'
 import { RawMaterialRowActionsMenu } from './RawMaterialRowActionsMenu'
 import {
   RawMaterialCategoryTag,
@@ -29,55 +32,64 @@ export function RawMaterialsTable({
           </tr>
         </thead>
         <tbody>
-          {materials.map((material) => (
-            <tr
-              key={material.id}
-              className={material.isActive ? '' : 'rm-table__row--inactive'}
-            >
-              <td className="rm-table__name-cell">
-                <button
-                  type="button"
-                  className="rm-name-btn"
-                  onClick={() => onViewDetails(material)}
-                >
-                  {material.name}
-                </button>
-              </td>
-              <td>
-                <RawMaterialCategoryTag category={material.category} />
-              </td>
-              <td>
-                <span className="rm-unit-pill">{material.unit || '—'}</span>
-              </td>
-              <td className="rm-table__desc-cell">
-                {material.description ? (
-                  <span
-                    className="rm-desc-truncate"
-                    title={material.description}
+          {materials.map((material) => {
+            const formattedUnit = formatMaterialUnit(material.unit)
+
+            return (
+              <tr
+                key={material.id}
+                className={material.isActive ? '' : 'rm-table__row--inactive'}
+              >
+                <td className="rm-table__name-cell">
+                  <button
+                    type="button"
+                    className="rm-name-btn"
+                    onClick={() => onViewDetails(material)}
                   >
-                    {material.description}
+                    {material.name}
+                  </button>
+                </td>
+                <td>
+                  <RawMaterialCategoryTag category={material.category} />
+                </td>
+                <td>
+                  <span
+                    className="rm-unit-pill"
+                    title={material.unit || undefined}
+                  >
+                    {formattedUnit || '—'}
                   </span>
-                ) : (
-                  <span className="rm-desc-empty">—</span>
-                )}
-              </td>
-              <td>
-                <RawMaterialStatusBadge isActive={material.isActive} />
-              </td>
-              <td className="rm-table__date-cell">
-                {formatMaterialDate(material.updatedAt)}
-              </td>
-              <td className="rm-table__actions-cell">
-                <RawMaterialRowActionsMenu
-                  material={material}
-                  adminAccess={adminAccess}
-                  onViewDetails={onViewDetails}
-                  onEdit={onEdit}
-                  onToggleStatus={onToggleStatus}
-                />
-              </td>
-            </tr>
-          ))}
+                </td>
+                <td className="rm-table__desc-cell">
+                  {material.description ? (
+                    <span
+                      className="rm-desc-truncate"
+                      title={material.description}
+                    >
+                      {material.description}
+                    </span>
+                  ) : (
+                    <span className="rm-desc-empty">—</span>
+                  )}
+                </td>
+                <td>
+                  <RawMaterialStatusBadge isActive={material.isActive} />
+                </td>
+                <td className="rm-table__date-cell">
+                  {formatMaterialDate(material.updatedAt)}
+                </td>
+                <td className="rm-table__actions-cell">
+                  <RawMaterialRowActionsMenu
+                    material={material}
+                    adminAccess={adminAccess}
+                    onViewDetails={onViewDetails}
+                    onEdit={onEdit}
+                    onToggleStatus={onToggleStatus}
+                  />
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

@@ -365,28 +365,7 @@ export function useRawMaterialsManagement({ currentUser }) {
       if (formModalState.mode === 'create') {
         const createPayload = buildCreateMaterialPayload(formValues)
         const createdResult = await createRawMaterial(createPayload)
-        let finalMaterial = createdResult.material
-
-        if (formValues.isActive === false && finalMaterial?.id) {
-          try {
-            const statusResult = await updateRawMaterialStatus(
-              finalMaterial.id,
-              false,
-            )
-            finalMaterial = statusResult.material
-          } catch (statusErr) {
-            reloadMaterials()
-            setFormModalState((prev) => ({ ...prev, isOpen: false }))
-            setFeedbackBanner({
-              tone: 'error',
-              text:
-                statusErr instanceof Error
-                  ? `Material "${finalMaterial.name}" was created as Active, but setting Inactive failed: ${statusErr.message}`
-                  : `Material "${finalMaterial.name}" was created as Active, but could not be deactivated automatically.`,
-            })
-            return finalMaterial
-          }
-        }
+        const finalMaterial = createdResult.material
 
         setFormModalState((prev) => ({ ...prev, isOpen: false }))
         setCurrentPage(1)

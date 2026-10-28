@@ -436,6 +436,8 @@
 .rm-unit-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 2.15rem;
   padding: 0.18rem 0.52rem;
   border-radius: 6px;
   background-color: #faf6ef;
@@ -919,6 +921,13 @@
 .rm-modal__heading {
   min-width: 0;
   flex: 1;
+}
+
+.rm-modal__title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
 }
 
 .rm-modal__close {
