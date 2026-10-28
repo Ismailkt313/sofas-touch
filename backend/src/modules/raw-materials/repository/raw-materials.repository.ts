@@ -28,6 +28,27 @@ export class DuplicateRawMaterialKeyError extends Error {
   }
 }
 
+export class InsufficientRawMaterialStockError extends Error {
+  public readonly statusCode = 409;
+
+  constructor(materialName?: string) {
+    super(
+      materialName
+        ? `Insufficient recorded quantity on hand for '${materialName}' to reverse this purchase.`
+        : 'Insufficient recorded quantity on hand to reverse this purchase.',
+    );
+    this.name = 'InsufficientRawMaterialStockError';
+  }
+}
+
+function roundMaterialQuantity(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  const rounded = Math.round((value + Number.EPSILON) * 1000) / 1000;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
 function escapeRegex(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -45,13 +66,14 @@ function isMongoDuplicateKeyError(err: unknown): boolean {
 }
 
 function normalizeDocQuantity(material: IRawMaterial): IRawMaterial {
+  const numeric =
+    typeof material.quantityOnHand === 'number' &&
+    !Number.isNaN(material.quantityOnHand)
+      ? Math.max(0, material.quantityOnHand)
+      : 0;
   return {
     ...material,
-    quantityOnHand:
-      typeof material.quantityOnHand === 'number' &&
-      !Number.isNaN(material.quantityOnHand)
-        ? Math.max(0, material.quantityOnHand)
-        : 0,
+    quantityOnHand: roundMaterialQuantity(numeric),
     createdAt: material.createdAt ? new Date(material.createdAt) : undefined,
     updatedAt: material.updatedAt ? new Date(material.updatedAt) : undefined,
   };
@@ -534,5 +556,97 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
     }
 
     return null;
+  }
+
+  async adjustQuantityOnHand(
+    id: string,
+    delta: number,
+  ): Promise<IRawMaterial | null> {
+    const trimmedId = id.trim();
+    if (!isValidRawMaterialObjectId(trimmedId)) {
+      return null;
+    }
+
+    const safeDelta = roundMaterialQuantity(delta);
+    if (safeDelta === 0) {
+      return this.findById(trimmedId);
+    }
+
+    if (this.isDbConnected()) {
+      const objectId = new mongoose.Types.ObjectId(trimmedId);
+      const filter: Record<string, unknown> = { _id: objectId };
+      if (safeDelta < 0) {
+        filter.quantityOnHand = {
+          $gte: roundMaterialQuantity(Math.abs(safeDelta) - 1e-6),
+        };
+      }
+
+      const updated = await this.materialModel
+        .findOneAndUpdate(
+          filter,
+          { $inc: { quantityOnHand: safeDelta } },
+          { returnDocument: 'after' },
+        )
+        .lean()
+        .exec();
+
+      if (updated) {
+        const normalizedQty = Math.max(
+          0,
+          roundMaterialQuantity(Number(updated.quantityOnHand ?? 0)),
+        );
+        if (normalizedQty !== updated.quantityOnHand) {
+          await this.materialModel
+            .updateOne(
+              { _id: objectId },
+              { $set: { quantityOnHand: normalizedQty } },
+            )
+            .exec();
+          updated.quantityOnHand = normalizedQty;
+        }
+        return updated as unknown as IRawMaterial;
+      }
+
+      const existing = await this.materialModel
+        .findById(objectId)
+        .lean()
+        .exec();
+      if (!existing) {
+        return null;
+      }
+      throw new InsufficientRawMaterialStockError(existing.name);
+    }
+
+    let targetKey: string | null = null;
+    let existingRecord: IRawMaterial | null = null;
+
+    for (const [key, item] of this.memoryStore.entries()) {
+      if (String(item._id).toLowerCase() === trimmedId.toLowerCase()) {
+        targetKey = key;
+        existingRecord = item;
+        break;
+      }
+    }
+
+    if (!existingRecord || !targetKey) {
+      return null;
+    }
+
+    const currentQty = roundMaterialQuantity(
+      Number(existingRecord.quantityOnHand ?? 0),
+    );
+    const nextQty = roundMaterialQuantity(currentQty + safeDelta);
+    if (nextQty < -1e-6) {
+      throw new InsufficientRawMaterialStockError(existingRecord.name);
+    }
+
+    const updatedRecord: IRawMaterial = {
+      ...existingRecord,
+      quantityOnHand: Math.max(0, nextQty),
+      updatedAt: nextMonotonicDate(),
+    };
+
+    this.memoryStore.set(targetKey, updatedRecord);
+    return normalizeDocQuantity(updatedRecord);
   }
 }

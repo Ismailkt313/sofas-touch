@@ -11,6 +11,11 @@ import {
   getStoredSession,
 } from './features/auth'
 import { ProjectDetailsPage, ProjectsPage } from './features/projects'
+import {
+  PurchaseDetailsPage,
+  PurchaseVoucherFormPage,
+  PurchasesPage,
+} from './features/purchases'
 import { RawMaterialsPage } from './features/raw-materials'
 import { UserManagementPage } from './features/users'
 
@@ -45,7 +50,8 @@ function App() {
   )
 
   const navigate = useCallback((nextPath) => {
-    if (window.location.pathname !== nextPath) {
+    const currentFull = `${window.location.pathname}${window.location.search}`
+    if (currentFull !== nextPath) {
       window.history.pushState({}, '', nextPath)
       window.dispatchEvent(new Event(ROUTE_CHANGE_EVENT))
       window.scrollTo({ top: 0, behavior: 'auto' })
@@ -86,6 +92,19 @@ function App() {
     ? decodeURIComponent(projectDetailsMatch[1])
     : ''
   const isRawMaterialsRoute = isNavItemActive(pathname, '/raw-materials')
+  const isPurchasesListRoute = pathname === '/purchases'
+  const isPurchaseCreateRoute = pathname === '/purchases/new'
+  const purchaseEditMatch = pathname.match(/^\/purchases\/([^/]+)\/edit$/)
+  const purchaseEditIdentifier = purchaseEditMatch
+    ? decodeURIComponent(purchaseEditMatch[1])
+    : ''
+  const purchaseDetailsMatch =
+    !isPurchaseCreateRoute && !purchaseEditIdentifier
+      ? pathname.match(/^\/purchases\/([^/]+)$/)
+      : null
+  const purchaseDetailsIdentifier = purchaseDetailsMatch
+    ? decodeURIComponent(purchaseDetailsMatch[1])
+    : ''
   const isSignupRoute = pathname === '/signup' || pathname === '/register'
 
   useEffect(() => {
@@ -97,6 +116,14 @@ function App() {
       document.title = 'Soft Touch Sofas — Project Details'
     } else if (isProjectsListRoute) {
       document.title = 'Soft Touch Sofas — Projects'
+    } else if (isPurchaseCreateRoute) {
+      document.title = 'Soft Touch Sofas — New Purchase Voucher'
+    } else if (purchaseEditIdentifier) {
+      document.title = 'Soft Touch Sofas — Edit Purchase Voucher'
+    } else if (purchaseDetailsIdentifier) {
+      document.title = 'Soft Touch Sofas — Purchase Details'
+    } else if (isPurchasesListRoute) {
+      document.title = 'Soft Touch Sofas — Purchases'
     } else if (matchedAdminNav) {
       document.title = `Soft Touch Sofas — ${matchedAdminNav.label}`
     } else if (isSignupRoute) {
@@ -109,6 +136,10 @@ function App() {
     isUsersRoute,
     projectDetailsIdentifier,
     isProjectsListRoute,
+    isPurchaseCreateRoute,
+    purchaseEditIdentifier,
+    purchaseDetailsIdentifier,
+    isPurchasesListRoute,
     matchedAdminNav,
     isSignupRoute,
   ])
@@ -168,6 +199,31 @@ function App() {
             />
           ) : isRawMaterialsRoute ? (
             <RawMaterialsPage
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : isPurchaseCreateRoute ? (
+            <PurchaseVoucherFormPage
+              mode="create"
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : purchaseEditIdentifier ? (
+            <PurchaseVoucherFormPage
+              key={`edit-purchase-${purchaseEditIdentifier}`}
+              mode="edit"
+              voucherIdentifier={purchaseEditIdentifier}
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : purchaseDetailsIdentifier ? (
+            <PurchaseDetailsPage
+              voucherIdentifier={purchaseDetailsIdentifier}
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : isPurchasesListRoute ? (
+            <PurchasesPage
               currentUser={currentUser}
               onNavigate={navigate}
             />

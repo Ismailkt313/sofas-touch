@@ -5,6 +5,7 @@ export {
   fetchRawMaterials,
   formatMaterialQuantityWithUnit,
   formatMaterialQuantityOnHand,
+  formatMaterialStockOnHand,
   formatMaterialUnit,
   formatMaterialUnitOptionLabel,
   validateMaterialLineQuantity,

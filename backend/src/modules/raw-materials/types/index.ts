@@ -92,6 +92,10 @@ export interface IRawMaterialsRepository {
   ): Promise<IRawMaterial | null>;
   adjustStockQuantity(id: string, newQuantity: number): Promise<IRawMaterial | null>;
   incrementStockQuantity(id: string, delta: number): Promise<IRawMaterial | null>;
+  adjustQuantityOnHand(
+    id: string,
+    delta: number,
+  ): Promise<IRawMaterial | null>;
 }
 
 export interface IRawMaterialsService {
@@ -133,6 +137,15 @@ export interface IRawMaterialsService {
   getMaterialReferencesByIds(
     ids: string[],
   ): Promise<Map<string, RawMaterialPurchaseReferenceDto>>;
+  withMaterialStockLocks<T>(
+    materialIds: string[],
+    operation: () => Promise<T>,
+  ): Promise<T>;
+  adjustStockForPurchaseUnlocked(
+    id: string,
+    expectedUnit: RawMaterialUnit,
+    delta: number,
+  ): Promise<RawMaterialPurchaseReferenceDto>;
 }
 
 export interface IRawMaterialsController {

@@ -274,6 +274,8 @@ export function RawMaterialFormModal({
   }
 
   const isFormDisabled = isSubmitting || isLoadingRecord || Boolean(loadError)
+  const isUnitLockedByStock =
+    isEditMode && Number(material?.quantityOnHand || 0) > 0
 
   return (
     <div
@@ -403,11 +405,16 @@ export function RawMaterialFormModal({
                   value={values.unit}
                   options={unitOptions}
                   placeholder="Select unit"
-                  disabled={isFormDisabled}
+                  disabled={isFormDisabled || isUnitLockedByStock}
                   error={Boolean(errors.unit)}
                   onChange={(val) => updateField('unit', val)}
                   ariaLabel="Material unit"
                 />
+                {isUnitLockedByStock ? (
+                  <p className="rm-form__counter">
+                    Unit cannot be changed while stock on hand is greater than zero.
+                  </p>
+                ) : null}
                 {errors.unit ? (
                   <p id={unitErrorId} className="rm-form__error" role="alert">
                     {errors.unit}

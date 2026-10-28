@@ -12,10 +12,12 @@ import {
   InactiveRawMaterialAccessForbiddenError,
   InactiveRawMaterialSelectionError,
   IncompatibleMaterialUnitError,
+  InsufficientRawMaterialStockError,
   InsufficientStockQuantityError,
   InvalidRawMaterialIdError,
   RawMaterialAlreadyExistsError,
   RawMaterialNotFoundError,
+  RawMaterialUnitConflictError,
 } from '../service/raw-materials.service';
 import {
   IRawMaterialsController,
@@ -73,7 +75,9 @@ export class RawMaterialsController implements IRawMaterialsController {
 
     if (
       err instanceof RawMaterialAlreadyExistsError ||
-      err instanceof DuplicateRawMaterialKeyError
+      err instanceof DuplicateRawMaterialKeyError ||
+      err instanceof RawMaterialUnitConflictError ||
+      err instanceof InsufficientRawMaterialStockError
     ) {
       res.status(409).json({
         error: 'Conflict',
