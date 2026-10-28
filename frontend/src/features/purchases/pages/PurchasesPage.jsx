@@ -226,26 +226,18 @@ export function PurchasesPage({ currentUser, onNavigate }) {
           <div className="pv-header__actions">
             <button
               type="button"
-              className="admin-btn admin-btn--secondary"
-              onClick={() => onNavigate?.('/purchases/new?mode=manual')}
-            >
-              <span>Enter Manually</span>
-            </button>
-            <button
-              type="button"
               className="admin-btn admin-btn--primary"
-              onClick={() => onNavigate?.('/purchases/new?mode=upload_bill')}
+              onClick={() => onNavigate?.('/purchases/new')}
             >
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
                 <path
-                  d="M10 13.5V4.5M10 4.5L6.5 8M10 4.5L13.5 8M4 15.5H16"
+                  d="M10 4.5V15.5M4.5 10H15.5"
                   stroke="currentColor"
-                  strokeWidth="1.7"
+                  strokeWidth="1.8"
                   strokeLinecap="round"
-                  strokeLinejoin="round"
                 />
               </svg>
-              <span>Upload Bill / New Purchase</span>
+              <span>New Purchase Voucher</span>
             </button>
           </div>
         ) : null}
@@ -370,19 +362,10 @@ export function PurchasesPage({ currentUser, onNavigate }) {
                     <div className="pv-state__actions">
                       <button
                         type="button"
-                        className="admin-btn admin-btn--secondary"
-                        onClick={() => onNavigate?.('/purchases/new?mode=manual')}
-                      >
-                        Enter Manually
-                      </button>
-                      <button
-                        type="button"
                         className="admin-btn admin-btn--primary"
-                        onClick={() =>
-                          onNavigate?.('/purchases/new?mode=upload_bill')
-                        }
+                        onClick={() => onNavigate?.('/purchases/new')}
                       >
-                        Upload Supplier Bill
+                        New Purchase Voucher
                       </button>
                     </div>
                   </>
