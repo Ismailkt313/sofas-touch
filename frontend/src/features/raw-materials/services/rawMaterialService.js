@@ -12,19 +12,63 @@ export const RAW_MATERIAL_CATEGORIES = [
 ]
 
 export const RAW_MATERIAL_UNITS = [
-  'Piece',
-  'Meter',
   'Kilogram',
+  'Meter',
+  'Piece',
   'Sheet',
   'Roll',
-  'Set',
-  'Box',
   'Litre',
   'Square Feet',
   'Running Feet',
-  'Pair',
   'Yard',
+  'Set',
+  'Box',
+  'Pair',
 ]
+
+const UNIT_DISPLAY_ABBREVIATIONS = {
+  kilogram: 'kg',
+  kilograms: 'kg',
+  kg: 'kg',
+  kgs: 'kg',
+  gram: 'g',
+  grams: 'g',
+  g: 'g',
+  gm: 'g',
+  gms: 'g',
+  meter: 'm',
+  meters: 'm',
+  metre: 'm',
+  metres: 'm',
+  m: 'm',
+  mtr: 'm',
+  centimeter: 'cm',
+  centimeters: 'cm',
+  centimetre: 'cm',
+  centimetres: 'cm',
+  cm: 'cm',
+  piece: 'pcs',
+  pieces: 'pcs',
+  pcs: 'pcs',
+  pc: 'pcs',
+  litre: 'L',
+  litres: 'L',
+  liter: 'L',
+  liters: 'L',
+  l: 'L',
+  ltr: 'L',
+  'square feet': 'sq ft',
+  sqft: 'sq ft',
+  'sq ft': 'sq ft',
+  'sq. ft.': 'sq ft',
+  'running feet': 'rft',
+  rft: 'rft',
+  'running ft': 'rft',
+  yard: 'yd',
+  yards: 'yd',
+  yd: 'yd',
+  yds: 'yd',
+}
 
 export const MAX_MATERIAL_NAME_LENGTH = 150
 export const MAX_MATERIAL_DESCRIPTION_LENGTH = 1000
@@ -45,6 +89,78 @@ export function normalizeWhitespace(value) {
   return String(value || '')
     .trim()
     .replace(/\s+/g, ' ')
+}
+
+export function formatMaterialUnit(unit) {
+  if (typeof unit !== 'string') {
+    return ''
+  }
+  const trimmed = normalizeWhitespace(unit)
+  if (!trimmed) {
+    return ''
+  }
+  const mapped = UNIT_DISPLAY_ABBREVIATIONS[trimmed.toLowerCase()]
+  return mapped || trimmed
+}
+
+export function formatMaterialUnitOptionLabel(unit) {
+  if (typeof unit !== 'string') {
+    return ''
+  }
+  const trimmed = normalizeWhitespace(unit)
+  if (!trimmed) {
+    return ''
+  }
+  const abbr = formatMaterialUnit(trimmed)
+  if (abbr && abbr.toLowerCase() !== trimmed.toLowerCase()) {
+    return `${trimmed} (${abbr})`
+  }
+  return trimmed
+}
+
+export function validateMaterialLineQuantity(quantity) {
+  if (quantity === '' || quantity === null || quantity === undefined) {
+    return {
+      isValid: false,
+      value: null,
+      error: 'Quantity is required.',
+    }
+  }
+
+  const parsed = typeof quantity === 'number' ? quantity : Number(String(quantity).trim())
+  if (!Number.isFinite(parsed)) {
+    return {
+      isValid: false,
+      value: null,
+      error: 'Enter a valid numeric quantity.',
+    }
+  }
+
+  if (parsed <= 0) {
+    return {
+      isValid: false,
+      value: null,
+      error: 'Quantity must be greater than zero.',
+    }
+  }
+
+  return {
+    isValid: true,
+    value: parsed,
+    error: '',
+  }
+}
+
+export function formatMaterialQuantityWithUnit(quantity, unit) {
+  const check = validateMaterialLineQuantity(quantity)
+  if (!check.isValid || check.value === null) {
+    return ''
+  }
+  const formattedQty = new Intl.NumberFormat('en-IN', {
+    maximumFractionDigits: 3,
+  }).format(check.value)
+  const displayUnit = formatMaterialUnit(unit)
+  return displayUnit ? `${formattedQty} ${displayUnit}` : formattedQty
 }
 
 export function formatMaterialDate(dateInput) {
@@ -139,16 +255,23 @@ export function extractRawMaterialApiError(
 export function buildUnitOptions(currentUnit = '') {
   const baseOptions = RAW_MATERIAL_UNITS.map((unit) => ({
     value: unit,
-    label: unit,
+    label: formatMaterialUnitOptionLabel(unit),
   }))
-  const trimmedCurrent = typeof currentUnit === 'string' ? currentUnit.trim() : ''
+  const trimmedCurrent =
+    typeof currentUnit === 'string' ? normalizeWhitespace(currentUnit) : ''
   if (
     trimmedCurrent &&
     !RAW_MATERIAL_UNITS.some(
       (unit) => unit.toLowerCase() === trimmedCurrent.toLowerCase(),
     )
   ) {
-    return [{ value: trimmedCurrent, label: trimmedCurrent }, ...baseOptions]
+    return [
+      {
+        value: trimmedCurrent,
+        label: formatMaterialUnitOptionLabel(trimmedCurrent),
+      },
+      ...baseOptions,
+    ]
   }
   return baseOptions
 }

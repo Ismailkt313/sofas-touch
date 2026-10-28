@@ -14,13 +14,7 @@ const FIELD_DOM_IDS = {
   unit: 'rm-form-unit',
   category: 'rm-form-category',
   description: 'rm-form-description',
-  isActive: 'rm-form-status',
 }
-
-const CREATE_STATUS_OPTIONS = [
-  { value: 'active', label: 'Active' },
-  { value: 'inactive', label: 'Inactive' },
-]
 
 function buildCategoryOptions(currentCategory = '') {
   const baseOptions = [
@@ -56,7 +50,6 @@ function buildInitialValues(material, isEditMode) {
       unit: '',
       category: '',
       description: '',
-      isActive: true,
     }
   }
 
@@ -65,7 +58,6 @@ function buildInitialValues(material, isEditMode) {
     unit: material.unit || '',
     category: material.category || '',
     description: material.description || '',
-    isActive: material.isActive !== false,
   }
 }
 
@@ -81,7 +73,7 @@ function validateFormValues(values) {
 
   const cleanUnit = String(values.unit || '').trim()
   if (!cleanUnit) {
-    errors.unit = 'Purchase unit is required.'
+    errors.unit = 'Unit is required.'
   }
 
   const cleanDescription = String(values.description || '').trim()
@@ -93,7 +85,7 @@ function validateFormValues(values) {
 }
 
 function focusFirstInvalidField(validationErrors) {
-  const orderedKeys = ['name', 'unit', 'category', 'description', 'isActive']
+  const orderedKeys = ['name', 'unit', 'category', 'description']
   const firstKey = orderedKeys.find((key) => Boolean(validationErrors[key]))
   if (!firstKey || typeof document === 'undefined') {
     return
@@ -292,13 +284,18 @@ export function RawMaterialFormModal({
       >
         <div className="admin-modal__header rm-modal__header">
           <div className="rm-modal__heading">
-            <h2 id={titleId} className="admin-modal__title">
-              {isEditMode ? 'Edit Material' : 'Add Material'}
-            </h2>
+            <div className="rm-modal__title-row">
+              <h2 id={titleId} className="admin-modal__title">
+                {isEditMode ? 'Edit Material' : 'Add Material'}
+              </h2>
+              {isEditMode && material ? (
+                <RawMaterialStatusBadge isActive={material.isActive !== false} />
+              ) : null}
+            </div>
             <p id={subtitleId} className="admin-modal__subtitle">
               {isEditMode
                 ? 'Update raw material specifications used across manufacturing projects.'
-                : 'Add a raw material to the catalog for sofa and curtain procurement.'}
+                : 'Add a raw material to the catalogue for sofa and curtain procurement.'}
             </p>
           </div>
           <button
@@ -388,11 +385,11 @@ export function RawMaterialFormModal({
                   variant="form"
                   value={values.unit}
                   options={unitOptions}
-                  placeholder="Select purchase unit"
+                  placeholder="Select unit"
                   disabled={isFormDisabled}
                   error={Boolean(errors.unit)}
                   onChange={(val) => updateField('unit', val)}
-                  ariaLabel="Purchase unit"
+                  ariaLabel="Material unit"
                 />
                 {errors.unit ? (
                   <p id={unitErrorId} className="rm-form__error" role="alert">
@@ -474,44 +471,6 @@ export function RawMaterialFormModal({
                   </p>
                 ) : null}
               </div>
-
-              {isEditMode ? (
-                <div className="rm-form__field rm-form__field--full">
-                  <div className="rm-form__status-summary">
-                    <span className="rm-form__status-label">
-                      Current Status
-                    </span>
-                    <div className="rm-form__status-row">
-                      <RawMaterialStatusBadge isActive={values.isActive} />
-                      <span className="rm-form__status-note">
-                        Use Activate or Deactivate in the actions menu to change
-                        availability.
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="rm-form__field rm-form__field--full">
-                  <label
-                    htmlFor={FIELD_DOM_IDS.isActive}
-                    className="rm-form__label"
-                  >
-                    Active Status
-                  </label>
-                  <Dropdown
-                    id={FIELD_DOM_IDS.isActive}
-                    name="isActive"
-                    variant="form"
-                    value={values.isActive ? 'active' : 'inactive'}
-                    options={CREATE_STATUS_OPTIONS}
-                    disabled={isFormDisabled}
-                    onChange={(val) =>
-                      updateField('isActive', val === 'active')
-                    }
-                    ariaLabel="Active status"
-                  />
-                </div>
-              )}
             </div>
           </div>
 

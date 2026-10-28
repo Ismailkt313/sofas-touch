@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react'
+import { formatMaterialUnit } from '../services/rawMaterialService'
 
 export function ConfirmMaterialStatusModal({
   target,
@@ -44,6 +45,7 @@ export function ConfirmMaterialStatusModal({
 
   const { material, nextIsActive } = target
   const isDeactivating = !nextIsActive
+  const displayUnit = formatMaterialUnit(material.unit) || material.unit
 
   return (
     <div
@@ -99,14 +101,16 @@ export function ConfirmMaterialStatusModal({
           <p id={descId} className="rm-confirm-copy">
             {isDeactivating ? (
               <>
-                Deactivate <strong>{material.name}</strong> ({material.unit})?
-                Inactive materials cannot be selected for new purchase vouchers,
-                while existing voucher records remain intact.
+                Deactivate <strong>{material.name}</strong>
+                {displayUnit ? ` (${displayUnit})` : ''}? Inactive materials
+                cannot be selected for new purchase vouchers, while existing
+                voucher records remain intact.
               </>
             ) : (
               <>
-                Reactivate <strong>{material.name}</strong> ({material.unit}) so
-                it becomes selectable again for purchase voucher entry?
+                Reactivate <strong>{material.name}</strong>
+                {displayUnit ? ` (${displayUnit})` : ''} so it becomes
+                selectable again for purchase voucher entry?
               </>
             )}
           </p>
