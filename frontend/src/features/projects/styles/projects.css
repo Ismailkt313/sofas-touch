@@ -1064,13 +1064,13 @@
 }
 
 .projects-form-modal {
-  max-width: 580px;
+  max-width: 616px;
   width: 100%;
 }
 
 .projects-form-modal__header {
   flex-shrink: 0;
-  padding: 1rem 1.25rem 0.85rem;
+  padding: 0.95rem 1.25rem 0.8rem;
   gap: 0.75rem;
 }
 
@@ -1079,14 +1079,14 @@
 }
 
 .projects-form-modal__heading .admin-modal__title {
-  font-size: 1.225rem;
+  font-size: 1.2rem;
   line-height: 1.25;
 }
 
 .projects-form-modal__heading .admin-modal__subtitle {
-  margin: 0.18rem 0 0;
+  margin: 0.15rem 0 0;
   font-size: 0.8125rem;
-  line-height: 1.38;
+  line-height: 1.35;
 }
 
 .projects-form-modal__form {
@@ -1101,20 +1101,20 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  padding: 1rem 1.25rem;
+  gap: 0.82rem;
+  padding: 0.95rem 1.25rem 1.05rem;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
 .projects-form-modal__footer {
   flex-shrink: 0;
-  padding: 0.85rem 1.25rem;
+  padding: 0.8rem 1.25rem;
   gap: 0.6rem;
 }
 
 .projects-form-alert {
-  padding: 0.65rem 0.85rem;
+  padding: 0.62rem 0.82rem;
   border-radius: 9px;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -1130,21 +1130,27 @@
 .projects-id-info {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 0.35rem 0.65rem;
-  padding: 0.45rem 0.75rem;
-  border-radius: 9px;
-  background-color: #f8f4ed;
-  border: 1px solid #e7ddd0;
+  gap: 0.35rem 0.55rem;
 }
 
 .projects-id-info__label {
   font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-weight: 600;
+  letter-spacing: 0.025em;
   text-transform: uppercase;
   color: var(--sts-taupe);
+}
+
+.projects-id-info__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.16rem 0.58rem;
+  border-radius: 999px;
+  background-color: #f4ede2;
+  color: var(--sts-walnut);
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
 .projects-id-info__value {
@@ -1155,7 +1161,7 @@
 }
 
 .projects-id-info__note {
-  font-size: 0.8rem;
+  font-size: 0.765rem;
   color: var(--sts-charcoal-muted);
 }
 
@@ -1265,6 +1271,79 @@
   background-color: #fffafa;
 }
 
+.projects-currency-input {
+  width: 100%;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  border-radius: 10px;
+  border: 1px solid #d5c7b7;
+  background-color: #fdfbf8;
+  box-sizing: border-box;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.projects-currency-input:hover:not(.projects-currency-input--disabled) {
+  border-color: #bfa892;
+  background-color: #ffffff;
+}
+
+.projects-currency-input:focus-within {
+  border-color: var(--sts-walnut);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(74, 53, 37, 0.12);
+}
+
+.projects-currency-input--error {
+  border-color: var(--sts-error-accent);
+  background-color: #fffafa;
+}
+
+.projects-currency-input--disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  background-color: #f6f3ee;
+}
+
+.projects-currency-input__prefix {
+  padding-left: 0.8rem;
+  padding-right: 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--sts-taupe);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.projects-currency-input__field {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0 0.8rem 0 0;
+  border: none;
+  background: transparent;
+  color: var(--sts-charcoal);
+  font-family: var(--sts-font-sans);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.projects-currency-input__field::-webkit-outer-spin-button,
+.projects-currency-input__field::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.projects-currency-input__field[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .projects-form-field__error {
   margin: 0.08rem 0 0;
   font-size: 0.78125rem;
@@ -1281,11 +1360,10 @@
 
 .projects-additional-section {
   border-top: 1px solid #ece3d7;
-  padding-top: 0.65rem;
+  padding-top: 0.6rem;
 }
 
 .projects-additional-toggle {
-  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1359,6 +1437,22 @@
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+}
+
+.projects-advanced-group {
+  border-top: 1px solid #f0e8dd;
+  padding-top: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.projects-advanced-group__title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sts-taupe);
 }
 
 .project-detail-nav {
@@ -2565,33 +2659,32 @@
   }
 
   .projects-modal-body {
-    padding: 0.85rem 1rem;
-    gap: 0.75rem;
+    padding: 0.8rem 1rem 0.9rem;
+    gap: 0.72rem;
   }
 
-  .projects-id-info {
-    padding: 0.4rem 0.65rem;
-  }
-
+  .projects-id-info__badge,
   .projects-id-info__note {
-    font-size: 0.765rem;
+    font-size: 0.75rem;
   }
 
   .projects-form-grid {
     grid-template-columns: 1fr;
-    gap: 0.72rem;
+    gap: 0.7rem;
   }
 
   .projects-form-modal .projects-form-field__input,
   .projects-form-modal .projects-form-field__select,
   .projects-form-modal .projects-form-field__textarea,
+  .projects-form-modal .projects-currency-input__field,
+  .projects-form-modal .projects-currency-input__prefix,
   .projects-form-modal .sts-dropdown__trigger--form {
     font-size: 1rem;
   }
 
   .projects-form-modal__footer {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
     padding: 0.75rem 1rem;
     gap: 0.5rem;
   }
@@ -2599,7 +2692,8 @@
   .projects-form-modal__footer .admin-btn {
     width: 100%;
     min-height: 40px;
-    padding-inline: 0.75rem;
+    padding-inline: 0.7rem;
+    font-size: 0.84375rem;
     justify-content: center;
   }
 }
@@ -2617,16 +2711,20 @@
     grid-template-columns: 1fr;
   }
 
+  .projects-form-modal__header,
+  .projects-modal-body,
   .projects-form-modal__footer {
-    grid-template-columns: 1fr;
+    padding-inline: 0.82rem;
   }
 
-  .projects-form-modal__footer .admin-btn--secondary {
-    order: 2;
+  .projects-form-modal__footer {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.42rem;
   }
 
-  .projects-form-modal__footer .admin-btn--primary {
-    order: 1;
+  .projects-form-modal__footer .admin-btn {
+    padding-inline: 0.62rem;
+    font-size: 0.8125rem;
   }
 }
 
