@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef } from 'react'
-import { createPortal } from 'react-dom'
 
 export function ConfirmMaterialStatusModal({
   target,
@@ -39,16 +38,16 @@ export function ConfirmMaterialStatusModal({
     }
   }, [target, isSubmitting, onCancel])
 
-  if (!target || typeof document === 'undefined') {
+  if (!target) {
     return null
   }
 
   const { material, nextIsActive } = target
   const isDeactivating = !nextIsActive
 
-  return createPortal(
+  return (
     <div
-      className="admin-modal-backdrop"
+      className="admin-modal-backdrop rm-modal-backdrop"
       onMouseDown={(event) => {
         backdropMouseDownRef.current = event.target === event.currentTarget
       }}
@@ -64,14 +63,14 @@ export function ConfirmMaterialStatusModal({
       }}
     >
       <div
-        className="admin-modal admin-modal--compact"
+        className="admin-modal admin-modal--compact rm-modal rm-confirm-modal"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
       >
-        <div className="admin-modal__header">
-          <div>
+        <div className="admin-modal__header rm-modal__header">
+          <div className="rm-modal__heading">
             <h2 id={titleId} className="admin-modal__title">
               {isDeactivating
                 ? 'Deactivate raw material?'
@@ -80,7 +79,7 @@ export function ConfirmMaterialStatusModal({
           </div>
           <button
             type="button"
-            className="admin-modal__close"
+            className="admin-modal__close rm-modal__close"
             onClick={onCancel}
             disabled={isSubmitting}
             aria-label="Close confirmation dialog"
@@ -96,7 +95,7 @@ export function ConfirmMaterialStatusModal({
           </button>
         </div>
 
-        <div className="admin-modal__body">
+        <div className="admin-modal__body rm-modal__body">
           <p id={descId} className="rm-confirm-copy">
             {isDeactivating ? (
               <>
@@ -113,13 +112,16 @@ export function ConfirmMaterialStatusModal({
           </p>
 
           {errorMessage ? (
-            <div className="rm-inline-alert rm-inline-alert--error" role="alert">
+            <div
+              className="rm-inline-alert rm-inline-alert--error"
+              role="alert"
+            >
               {errorMessage}
             </div>
           ) : null}
         </div>
 
-        <div className="admin-modal__footer">
+        <div className="admin-modal__footer rm-modal__footer">
           <button
             ref={cancelBtnRef}
             type="button"
@@ -147,7 +149,6 @@ export function ConfirmMaterialStatusModal({
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </div>
   )
 }

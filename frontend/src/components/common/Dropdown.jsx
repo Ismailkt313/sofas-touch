@@ -9,73 +9,144 @@ import {
 import { createPortal } from 'react-dom'
 import './dropdown.css'
 
-/**
- * Computes viewport-aware coordinates for the floating dropdown menu.
- */
-function computeDropdownCoords(triggerEl) {
+const DROPDOWN_OPEN_EVENT = 'sts:dropdown-open'
+const MAX_MENU_HEIGHT = 260
+const MENU_OFFSET_GAP = 4
+const VIEWPORT_MARGIN = 8
+const ESTIMATED_OPTION_HEIGHT = 38
+const MENU_VERTICAL_PADDING = 12
+
+function isTriggerClippedByScrollParent(triggerEl, rect) {
+  if (!triggerEl || typeof window === 'undefined') {
+    return false
+  }
+
+  let parent = triggerEl.parentElement
+  while (parent && parent !== document.body && parent !== document.documentElement) {
+    const style = window.getComputedStyle(parent)
+    const overflowY = style.overflowY
+    const overflowX = style.overflowX
+    const clipsVertically =
+      overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'hidden'
+    const clipsHorizontally =
+      overflowX === 'auto' || overflowX === 'scroll' || overflowX === 'hidden'
+
+    if (clipsVertically || clipsHorizontally) {
+      const parentRect = parent.getBoundingClientRect()
+      if (parentRect.width === 0 && parentRect.height === 0) {
+        parent = parent.parentElement
+        continue
+      }
+      if (
+        clipsVertically &&
+        (rect.bottom <= parentRect.top + 4 || rect.top >= parentRect.bottom - 4)
+      ) {
+        return true
+      }
+      if (
+        clipsHorizontally &&
+        (rect.right <= parentRect.left + 4 || rect.left >= parentRect.right - 4)
+      ) {
+        return true
+      }
+    }
+
+    parent = parent.parentElement
+  }
+
+  return false
+}
+
+function computeDropdownCoords(triggerEl, optionCount, measuredMenuHeight = 0) {
   if (!triggerEl || typeof window === 'undefined') {
     return null
   }
 
   const rect = triggerEl.getBoundingClientRect()
+  const viewportHeight = window.innerHeight
+  const viewportWidth = window.innerWidth
+
   if (
-    rect.bottom < 0 ||
-    rect.top > window.innerHeight ||
-    rect.right < 0 ||
-    rect.left > window.innerWidth
+    rect.width === 0 &&
+    rect.height === 0 &&
+    rect.top === 0 &&
+    rect.left === 0
+  ) {
+    return {
+      top: MENU_OFFSET_GAP,
+      bottom: null,
+      left: VIEWPORT_MARGIN,
+      width: 200,
+      maxHeight: MAX_MENU_HEIGHT,
+      openUpward: false,
+    }
+  }
+
+  if (
+    rect.bottom <= 0 ||
+    rect.top >= viewportHeight ||
+    rect.right <= 0 ||
+    rect.left >= viewportWidth ||
+    isTriggerClippedByScrollParent(triggerEl, rect)
   ) {
     return null
   }
 
-  const viewportHeight = window.innerHeight
-  const viewportWidth = window.innerWidth
-  const spaceBelow = viewportHeight - rect.bottom
-  const spaceAbove = rect.top
-  const estimatedHeight = 220
-  const margin = 8
+  const spaceBelow = viewportHeight - rect.bottom - MENU_OFFSET_GAP - VIEWPORT_MARGIN
+  const spaceAbove = rect.top - MENU_OFFSET_GAP - VIEWPORT_MARGIN
 
-  const openUpward = spaceBelow < estimatedHeight && spaceAbove > spaceBelow
+  const estimatedContentHeight = Math.max(
+    46,
+    Math.max(1, optionCount) * ESTIMATED_OPTION_HEIGHT + MENU_VERTICAL_PADDING,
+  )
+  const desiredHeight = Math.min(
+    MAX_MENU_HEIGHT,
+    measuredMenuHeight > 0 ? measuredMenuHeight : estimatedContentHeight,
+  )
 
-  const top = openUpward
-    ? Math.max(margin, rect.top - Math.min(estimatedHeight, spaceAbove - margin) - 4)
-    : rect.bottom + 4
+  const openUpward = spaceBelow < desiredHeight && spaceAbove > spaceBelow
 
-  const width = Math.max(rect.width, 160)
+  const availableVerticalSpace = openUpward ? spaceAbove : spaceBelow
+  const maxHeight = Math.max(
+    72,
+    Math.min(MAX_MENU_HEIGHT, Math.floor(availableVerticalSpace)),
+  )
+
+  const maxAllowedWidth = Math.max(120, viewportWidth - VIEWPORT_MARGIN * 2)
+  const width = Math.min(Math.max(rect.width, 160), maxAllowedWidth)
+
   let left = rect.left
-
-  if (left + width > viewportWidth - margin) {
-    left = viewportWidth - width - margin
+  if (left + width > viewportWidth - VIEWPORT_MARGIN) {
+    left = viewportWidth - width - VIEWPORT_MARGIN
   }
-  if (left < margin) {
-    left = margin
+  if (left < VIEWPORT_MARGIN) {
+    left = VIEWPORT_MARGIN
+  }
+
+  if (openUpward) {
+    return {
+      top: null,
+      bottom: Math.max(
+        VIEWPORT_MARGIN,
+        Math.round(viewportHeight - rect.top + MENU_OFFSET_GAP),
+      ),
+      left: Math.round(left),
+      width: Math.round(width),
+      maxHeight,
+      openUpward: true,
+    }
   }
 
   return {
-    top: Math.round(top),
+    top: Math.max(VIEWPORT_MARGIN, Math.round(rect.bottom + MENU_OFFSET_GAP)),
+    bottom: null,
     left: Math.round(left),
     width: Math.round(width),
-    openUpward,
+    maxHeight,
+    openUpward: false,
   }
 }
 
-/**
- * Reusable, accessible, luxury-styled Dropdown component for Soft Touch Sofas.
- *
- * @param {Object} props
- * @param {string} [props.id] - Element ID for label association
- * @param {string} [props.name] - Field name for forms
- * @param {any} props.value - Currently selected value
- * @param {Array<string|{value: any, label: string, description?: string, disabled?: boolean}>} props.options
- * @param {Function} props.onChange - Callback: (value, syntheticEvent) => void
- * @param {string} [props.placeholder='Select an option']
- * @param {boolean} [props.disabled=false]
- * @param {boolean|string} [props.error=false] - Error state
- * @param {string} [props.variant='default'] - 'default' | 'filter' | 'form'
- * @param {string} [props.size] - 'sm' | 'md' | 'lg'
- * @param {string} [props.className] - Extra class name on wrapper
- * @param {boolean} [props.portal=true] - Render menu via portal to body
- * @param {string} [props.ariaLabel]
- */
 export function Dropdown({
   id,
   name,
@@ -101,7 +172,6 @@ export function Dropdown({
   const dropdownId = id || `sts-dropdown-${autoId}`
   const listboxId = `sts-listbox-${autoId}`
 
-  // Normalize options into uniform { value, label, description, disabled }
   const normalizedOptions = useMemo(() => {
     if (!Array.isArray(options)) return []
     return options.map((opt) => {
@@ -122,7 +192,6 @@ export function Dropdown({
     })
   }, [options])
 
-  // Find currently selected option
   const selectedOption = useMemo(() => {
     return (
       normalizedOptions.find((opt) => String(opt.value) === String(value)) ||
@@ -140,23 +209,77 @@ export function Dropdown({
     }
   }, [])
 
-  // Update coords on open, scroll, resize
   const updateCoords = useCallback(() => {
-    if (!triggerRef.current) return
-    const next = computeDropdownCoords(triggerRef.current)
-    if (next) {
-      setCoords(next)
-    } else {
-      setIsOpen(false)
+    if (!portal) {
+      setCoords({
+        top: null,
+        bottom: null,
+        left: 0,
+        width: 0,
+        maxHeight: MAX_MENU_HEIGHT,
+        openUpward: false,
+      })
+      return true
     }
-  }, [])
+
+    if (!triggerRef.current) return false
+
+    const measuredHeight = menuRef.current ? menuRef.current.scrollHeight : 0
+    const next = computeDropdownCoords(
+      triggerRef.current,
+      normalizedOptions.length,
+      measuredHeight,
+    )
+
+    if (next) {
+      setCoords((prev) => {
+        if (
+          prev &&
+          prev.top === next.top &&
+          prev.bottom === next.bottom &&
+          prev.left === next.left &&
+          prev.width === next.width &&
+          prev.maxHeight === next.maxHeight &&
+          prev.openUpward === next.openUpward
+        ) {
+          return prev
+        }
+        return next
+      })
+      return true
+    }
+
+    setIsOpen(false)
+    return false
+  }, [portal, normalizedOptions.length])
+
+  const handleMenuRef = useCallback(
+    (node) => {
+      menuRef.current = node
+      if (node && portal) {
+        updateCoords()
+      }
+    },
+    [portal, updateCoords],
+  )
 
   useEffect(() => {
     if (!isOpen) return undefined
 
-    updateCoords()
+    const handleOtherDropdownOpen = (event) => {
+      if (event?.detail?.id && event.detail.id !== dropdownId) {
+        closeDropdown(false)
+      }
+    }
 
-    const handleScrollOrResize = () => {
+    const handleScroll = (event) => {
+      if (event?.target && menuRef.current?.contains(event.target)) {
+        return
+      }
+      updateCoords()
+    }
+
+    const handleResize = () => {
       updateCoords()
     }
 
@@ -173,28 +296,46 @@ export function Dropdown({
     const handleWindowKeyDown = (event) => {
       if (event.key === 'Escape') {
         event.preventDefault()
+        event.stopPropagation()
         closeDropdown(true)
       } else if (event.key === 'Tab') {
         closeDropdown(false)
       }
     }
 
-    window.addEventListener('scroll', handleScrollOrResize, true)
-    window.addEventListener('resize', handleScrollOrResize)
+    window.addEventListener(DROPDOWN_OPEN_EVENT, handleOtherDropdownOpen)
+    window.addEventListener('scroll', handleScroll, true)
+    window.addEventListener('resize', handleResize)
     document.addEventListener('mousedown', handlePointerDown)
     document.addEventListener('touchstart', handlePointerDown, {
       passive: true,
     })
-    document.addEventListener('keydown', handleWindowKeyDown)
+    document.addEventListener('keydown', handleWindowKeyDown, true)
 
     return () => {
-      window.removeEventListener('scroll', handleScrollOrResize, true)
-      window.removeEventListener('resize', handleScrollOrResize)
+      window.removeEventListener(DROPDOWN_OPEN_EVENT, handleOtherDropdownOpen)
+      window.removeEventListener('scroll', handleScroll, true)
+      window.removeEventListener('resize', handleResize)
       document.removeEventListener('mousedown', handlePointerDown)
       document.removeEventListener('touchstart', handlePointerDown)
-      document.removeEventListener('keydown', handleWindowKeyDown)
+      document.removeEventListener('keydown', handleWindowKeyDown, true)
     }
-  }, [isOpen, updateCoords, closeDropdown])
+  }, [isOpen, dropdownId, updateCoords, closeDropdown])
+
+  const openDropdown = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent(DROPDOWN_OPEN_EVENT, { detail: { id: dropdownId } }),
+      )
+    }
+    const positioned = updateCoords()
+    if (!positioned) return
+    setIsOpen(true)
+    const selectedIdx = normalizedOptions.findIndex(
+      (opt) => String(opt.value) === String(value),
+    )
+    setHighlightedIndex(selectedIdx >= 0 ? selectedIdx : 0)
+  }
 
   const handleToggle = () => {
     if (disabled) return
@@ -202,12 +343,7 @@ export function Dropdown({
       closeDropdown(false)
       return
     }
-    updateCoords()
-    setIsOpen(true)
-    const selectedIdx = normalizedOptions.findIndex(
-      (opt) => String(opt.value) === String(value),
-    )
-    setHighlightedIndex(selectedIdx >= 0 ? selectedIdx : 0)
+    openDropdown()
   }
 
   const handleSelect = (opt) => {
@@ -244,7 +380,7 @@ export function Dropdown({
         event.key === ' '
       ) {
         event.preventDefault()
-        handleToggle()
+        openDropdown()
       }
       return
     }
@@ -306,7 +442,6 @@ export function Dropdown({
         break
       }
       default: {
-        // Alphanumeric type-ahead jump
         if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
           const char = event.key.toLowerCase()
           const matchIdx = normalizedOptions.findIndex(
@@ -321,18 +456,29 @@ export function Dropdown({
     }
   }
 
-  const menuContent = isOpen && coords ? (
+  const menuStyle = portal
+    ? {
+        top: coords?.top !== null && coords?.top !== undefined ? `${coords.top}px` : 'auto',
+        bottom:
+          coords?.bottom !== null && coords?.bottom !== undefined
+            ? `${coords.bottom}px`
+            : 'auto',
+        left: `${coords?.left ?? 0}px`,
+        width: `${coords?.width ?? 160}px`,
+        maxHeight: `${coords?.maxHeight ?? MAX_MENU_HEIGHT}px`,
+      }
+    : undefined
+
+  const menuContent = isOpen && (portal ? Boolean(coords) : true) ? (
     <div
-      ref={menuRef}
+      ref={handleMenuRef}
       id={listboxId}
       role="listbox"
       aria-label={ariaLabel || placeholder}
-      className="sts-dropdown__menu"
-      style={{
-        top: `${coords.top}px`,
-        left: `${coords.left}px`,
-        width: `${coords.width}px`,
-      }}
+      className={`sts-dropdown__menu${
+        !portal ? ' sts-dropdown__menu--inline' : ''
+      }${coords?.openUpward ? ' sts-dropdown__menu--upward' : ''}`}
+      style={menuStyle}
     >
       {normalizedOptions.length === 0 ? (
         <div className="sts-dropdown__empty">No options available</div>
@@ -403,7 +549,7 @@ export function Dropdown({
         role="combobox"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        aria-controls={listboxId}
+        aria-controls={isOpen ? listboxId : undefined}
         aria-label={ariaLabel}
         disabled={disabled}
         onClick={handleToggle}
@@ -437,7 +583,6 @@ export function Dropdown({
         </svg>
       </button>
 
-      {/* Hidden native select for form serialization and test runner compatibility */}
       <select
         tabIndex={-1}
         aria-hidden="true"
