@@ -7,6 +7,17 @@ import {
 
 const MAX_NAME_LENGTH = 200
 const MAX_DESCRIPTION_LENGTH = 2000
+const BLOCKED_NUMBER_KEYS = new Set(['-', '+', 'e', 'E'])
+
+const FIELD_DOM_IDS = {
+  name: 'project-form-name',
+  clientName: 'project-form-client',
+  category: 'project-form-category',
+  contractValue: 'project-form-contract',
+  status: 'project-form-status',
+  description: 'project-form-description',
+  costAlertThresholdPercent: 'project-form-threshold',
+}
 
 function buildInitialFormValues(project, isEditMode) {
   if (!isEditMode || !project) {
@@ -102,6 +113,27 @@ function validateProjectFormValues(values, isEditMode) {
   return errors
 }
 
+function focusFirstInvalidField(validationErrors) {
+  const orderedKeys = [
+    'name',
+    'clientName',
+    'category',
+    'contractValue',
+    'status',
+    'description',
+    'costAlertThresholdPercent',
+  ]
+  const firstKey = orderedKeys.find((key) => Boolean(validationErrors[key]))
+  if (!firstKey || typeof document === 'undefined') {
+    return
+  }
+  const targetId = FIELD_DOM_IDS[firstKey]
+  window.requestAnimationFrame(() => {
+    const el = document.getElementById(targetId)
+    el?.focus?.()
+  })
+}
+
 export function ProjectFormModal({
   mode = 'create',
   project = null,
@@ -119,10 +151,18 @@ export function ProjectFormModal({
   const [isAdditionalOpen, setIsAdditionalOpen] = useState(false)
 
   const submittingLockRef = useRef(false)
+  const backdropMouseDownRef = useRef(false)
   const nameInputRef = useRef(null)
   const titleId = useId()
   const subtitleId = useId()
   const additionalPanelId = useId()
+  const nameErrorId = useId()
+  const clientErrorId = useId()
+  const categoryErrorId = useId()
+  const contractErrorId = useId()
+  const statusErrorId = useId()
+  const notesErrorId = useId()
+  const thresholdErrorId = useId()
 
   useEffect(() => {
     if (!isOpen) {
@@ -134,9 +174,16 @@ export function ProjectFormModal({
     nameInputRef.current?.focus()
 
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && !submittingLockRef.current) {
-        onClose()
+      if (event.key !== 'Escape' || submittingLockRef.current) {
+        return
       }
+      if (
+        event.defaultPrevented ||
+        document.querySelector('.sts-dropdown__menu')
+      ) {
+        return
+      }
+      onClose()
     }
 
     document.addEventListener('keydown', handleKeyDown)
@@ -175,6 +222,26 @@ export function ProjectFormModal({
     updateFieldValue(name, value)
   }
 
+  const handleBlur = (event) => {
+    const { name } = event.target
+    if (!name) {
+      return
+    }
+    const validationErrors = validateProjectFormValues(values, isEditMode)
+    if (validationErrors[name]) {
+      setErrors((prev) => ({
+        ...prev,
+        [name]: validationErrors[name],
+      }))
+    }
+  }
+
+  const handleUnsignedNumberKeyDown = (event) => {
+    if (BLOCKED_NUMBER_KEYS.has(event.key)) {
+      event.preventDefault()
+    }
+  }
+
   const handleFormSubmit = async (event) => {
     event.preventDefault()
     if (submittingLockRef.current || isSubmitting) {
@@ -192,6 +259,7 @@ export function ProjectFormModal({
       ) {
         setIsAdditionalOpen(true)
       }
+      focusFirstInvalidField(validationErrors)
       return
     }
 
@@ -232,6 +300,7 @@ export function ProjectFormModal({
         ) {
           setIsAdditionalOpen(true)
         }
+        focusFirstInvalidField(err.fieldErrors)
       }
       setSubmitError(
         err instanceof Error
@@ -253,10 +322,18 @@ export function ProjectFormModal({
   return (
     <div
       className="admin-modal-backdrop"
+      onMouseDown={(event) => {
+        backdropMouseDownRef.current = event.target === event.currentTarget
+      }}
       onClick={(event) => {
-        if (event.target === event.currentTarget && !isSubmitting) {
+        if (
+          backdropMouseDownRef.current &&
+          event.target === event.currentTarget &&
+          !isSubmitting
+        ) {
           onClose()
         }
+        backdropMouseDownRef.current = false
       }}
     >
       <div
@@ -274,7 +351,7 @@ export function ProjectFormModal({
             <p id={subtitleId} className="admin-modal__subtitle">
               {isEditMode
                 ? `Update core details or scope notes for ${project.projectId}.`
-                : 'Enter essential details to register a new manufacturing project.'}
+                : 'Enter essential project details below.'}
             </p>
           </div>
 
@@ -311,7 +388,7 @@ export function ProjectFormModal({
               </div>
             ) : null}
 
-            <div className="projects-id-info" aria-label="Project ID information">
+            <div className="projects-id-info" aria-label="Project ID">
               <span className="projects-id-info__label">Project ID</span>
               {isEditMode ? (
                 <span className="projects-id-info__value">
@@ -319,8 +396,8 @@ export function ProjectFormModal({
                   <span className="projects-id-info__note">Immutable</span>
                 </span>
               ) : (
-                <span className="projects-id-info__note">
-                  Auto-generated on save (e.g. PRJ-0001)
+                <span className="projects-id-info__badge">
+                  Auto-assigned on save (PRJ-XXXX)
                 </span>
               )}
             </div>
@@ -349,12 +426,18 @@ export function ProjectFormModal({
                   placeholder="e.g. Belgravia Modular Sectional"
                   value={values.name}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   disabled={isSubmitting}
                   required
                   aria-invalid={Boolean(errors.name)}
+                  aria-describedby={errors.name ? nameErrorId : undefined}
                 />
                 {errors.name ? (
-                  <p className="projects-form-field__error" role="alert">
+                  <p
+                    id={nameErrorId}
+                    className="projects-form-field__error"
+                    role="alert"
+                  >
                     {errors.name}
                   </p>
                 ) : null}
@@ -380,12 +463,20 @@ export function ProjectFormModal({
                   placeholder="e.g. Harrington Estates"
                   value={values.clientName}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   disabled={isSubmitting}
                   required
                   aria-invalid={Boolean(errors.clientName)}
+                  aria-describedby={
+                    errors.clientName ? clientErrorId : undefined
+                  }
                 />
                 {errors.clientName ? (
-                  <p className="projects-form-field__error" role="alert">
+                  <p
+                    id={clientErrorId}
+                    className="projects-form-field__error"
+                    role="alert"
+                  >
                     {errors.clientName}
                   </p>
                 ) : null}
@@ -409,7 +500,11 @@ export function ProjectFormModal({
                   error={Boolean(errors.category)}
                 />
                 {errors.category ? (
-                  <p className="projects-form-field__error" role="alert">
+                  <p
+                    id={categoryErrorId}
+                    className="projects-form-field__error"
+                    role="alert"
+                  >
                     {errors.category}
                   </p>
                 ) : null}
@@ -420,29 +515,49 @@ export function ProjectFormModal({
                   htmlFor="project-form-contract"
                   className="projects-form-field__label"
                 >
-                  Fixed Contract Value (INR) <span aria-hidden="true">*</span>
+                  Fixed Contract Value <span aria-hidden="true">*</span>
                 </label>
-                <input
-                  id="project-form-contract"
-                  name="contractValue"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  className={`projects-form-field__input${
+                <div
+                  className={`projects-currency-input${
                     errors.contractValue
-                      ? ' projects-form-field__input--error'
+                      ? ' projects-currency-input--error'
                       : ''
-                  }`}
-                  placeholder="0.00"
-                  value={values.contractValue}
-                  onChange={handleChange}
-                  disabled={isSubmitting}
-                  required
-                  aria-invalid={Boolean(errors.contractValue)}
-                />
+                  }${isSubmitting ? ' projects-currency-input--disabled' : ''}`}
+                >
+                  <span
+                    className="projects-currency-input__prefix"
+                    aria-hidden="true"
+                  >
+                    ₹
+                  </span>
+                  <input
+                    id="project-form-contract"
+                    name="contractValue"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    className="projects-currency-input__field"
+                    placeholder="0.00"
+                    value={values.contractValue}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    onKeyDown={handleUnsignedNumberKeyDown}
+                    onWheel={(event) => event.currentTarget.blur()}
+                    disabled={isSubmitting}
+                    required
+                    aria-invalid={Boolean(errors.contractValue)}
+                    aria-describedby={
+                      errors.contractValue ? contractErrorId : undefined
+                    }
+                  />
+                </div>
                 {errors.contractValue ? (
-                  <p className="projects-form-field__error" role="alert">
+                  <p
+                    id={contractErrorId}
+                    className="projects-form-field__error"
+                    role="alert"
+                  >
                     {errors.contractValue}
                   </p>
                 ) : null}
@@ -467,7 +582,11 @@ export function ProjectFormModal({
                     error={Boolean(errors.status)}
                   />
                   {errors.status ? (
-                    <p className="projects-form-field__error" role="alert">
+                    <p
+                      id={statusErrorId}
+                      className="projects-form-field__error"
+                      role="alert"
+                    >
                       {errors.status}
                     </p>
                   ) : null}
@@ -541,52 +660,79 @@ export function ProjectFormModal({
                       placeholder="Scope summary, upholstery specifications, delivery instructions, or site notes..."
                       value={values.description}
                       onChange={handleChange}
+                      onBlur={handleBlur}
                       disabled={isSubmitting}
                       aria-invalid={Boolean(errors.description)}
+                      aria-describedby={
+                        errors.description ? notesErrorId : undefined
+                      }
                     />
                     {errors.description ? (
-                      <p className="projects-form-field__error" role="alert">
+                      <p
+                        id={notesErrorId}
+                        className="projects-form-field__error"
+                        role="alert"
+                      >
                         {errors.description}
                       </p>
                     ) : null}
                   </div>
 
                   {isEditMode ? (
-                    <div className="projects-form-field">
-                      <label
-                        htmlFor="project-form-threshold"
-                        className="projects-form-field__label"
-                      >
-                        Cost Warning Threshold (%)
-                      </label>
-                      <input
-                        id="project-form-threshold"
-                        name="costAlertThresholdPercent"
-                        type="number"
-                        min="1"
-                        max="99"
-                        step="1"
-                        className={`projects-form-field__input${
-                          errors.costAlertThresholdPercent
-                            ? ' projects-form-field__input--error'
-                            : ''
-                        }`}
-                        placeholder="80"
-                        value={values.costAlertThresholdPercent}
-                        onChange={handleChange}
-                        disabled={isSubmitting}
-                        aria-invalid={Boolean(errors.costAlertThresholdPercent)}
-                      />
-                      {errors.costAlertThresholdPercent ? (
-                        <p className="projects-form-field__error" role="alert">
-                          {errors.costAlertThresholdPercent}
-                        </p>
-                      ) : (
-                        <p className="projects-form-field__hint">
-                          Per-project warning threshold override (critical alert
-                          remains at 100%).
-                        </p>
-                      )}
+                    <div className="projects-advanced-group">
+                      <span className="projects-advanced-group__title">
+                        Advanced Settings
+                      </span>
+                      <div className="projects-form-field">
+                        <label
+                          htmlFor="project-form-threshold"
+                          className="projects-form-field__label"
+                        >
+                          Cost Warning Threshold (%)
+                        </label>
+                        <input
+                          id="project-form-threshold"
+                          name="costAlertThresholdPercent"
+                          type="number"
+                          min="1"
+                          max="99"
+                          step="1"
+                          className={`projects-form-field__input${
+                            errors.costAlertThresholdPercent
+                              ? ' projects-form-field__input--error'
+                              : ''
+                          }`}
+                          placeholder="80"
+                          value={values.costAlertThresholdPercent}
+                          onChange={handleChange}
+                          onBlur={handleBlur}
+                          onKeyDown={handleUnsignedNumberKeyDown}
+                          onWheel={(event) => event.currentTarget.blur()}
+                          disabled={isSubmitting}
+                          aria-invalid={Boolean(
+                            errors.costAlertThresholdPercent,
+                          )}
+                          aria-describedby={
+                            errors.costAlertThresholdPercent
+                              ? thresholdErrorId
+                              : undefined
+                          }
+                        />
+                        {errors.costAlertThresholdPercent ? (
+                          <p
+                            id={thresholdErrorId}
+                            className="projects-form-field__error"
+                            role="alert"
+                          >
+                            {errors.costAlertThresholdPercent}
+                          </p>
+                        ) : (
+                          <p className="projects-form-field__hint">
+                            Per-project warning threshold override (critical
+                            alert remains at 100%).
+                          </p>
+                        )}
+                      </div>
                     </div>
                   ) : null}
                 </div>
