@@ -28,6 +28,11 @@ router.patch(
   requireAdmin,
   rawMaterialsController.updateStatus,
 );
+router.patch(
+  '/:id/stock',
+  requireAdmin,
+  rawMaterialsController.adjustStock,
+);
 router.patch('/:id', requireAdmin, rawMaterialsController.update);
 
 export {
@@ -37,6 +42,8 @@ export {
 export {
   InactiveRawMaterialAccessForbiddenError,
   InactiveRawMaterialSelectionError,
+  IncompatibleMaterialUnitError,
+  InsufficientStockQuantityError,
   InvalidRawMaterialIdError,
   mapRawMaterialToPurchaseReference,
   mapRawMaterialToResponse,

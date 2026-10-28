@@ -13,6 +13,7 @@ export interface CreateRawMaterialDto {
   name: string;
   category: RawMaterialCategory | null;
   unit: RawMaterialUnit;
+  quantityOnHand?: number;
   description: string;
 }
 
@@ -32,6 +33,8 @@ const ALLOWED_CREATE_FIELDS = new Set([
   'name',
   'category',
   'unit',
+  'quantityOnHand',
+  'initialQuantity',
   'description',
 ]);
 
@@ -102,6 +105,21 @@ export function validateCreateRawMaterialDto(
     }
   }
 
+  let quantityOnHand = 0;
+  const rawQty = raw.quantityOnHand !== undefined ? raw.quantityOnHand : raw.initialQuantity;
+  if (rawQty !== undefined && rawQty !== null && rawQty !== '') {
+    if (typeof rawQty !== 'number' && typeof rawQty !== 'string') {
+      errors.quantityOnHand = 'Initial quantity must be a non-negative number.';
+    } else {
+      const parsed = typeof rawQty === 'number' ? rawQty : Number(String(rawQty).trim());
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        errors.quantityOnHand = 'Initial quantity must be a non-negative number.';
+      } else {
+        quantityOnHand = parsed;
+      }
+    }
+  }
+
   let description = '';
   if (raw.description !== undefined && raw.description !== null) {
     if (typeof raw.description !== 'string') {
@@ -123,6 +141,7 @@ export function validateCreateRawMaterialDto(
       name,
       category,
       unit,
+      quantityOnHand,
       description,
     },
   };

@@ -114,6 +114,7 @@ export interface IRawMaterial {
   normalizedName: string;
   category?: RawMaterialCategory | null;
   unit: RawMaterialUnit;
+  quantityOnHand: number;
   description?: string;
   isActive: boolean;
   createdBy?: string;
@@ -148,6 +149,12 @@ const RawMaterialSchema = new Schema<IRawMaterial>(
       required: true,
       trim: true,
     },
+    quantityOnHand: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: [0, 'Quantity on hand cannot be negative.'],
+    },
     description: {
       type: String,
       trim: true,
@@ -178,6 +185,9 @@ RawMaterialSchema.pre('validate', function () {
   if (typeof this.name === 'string' && this.name.trim()) {
     this.name = normalizeMaterialDisplayName(this.name);
     this.normalizedName = normalizeMaterialNameKey(this.name);
+  }
+  if (this.quantityOnHand === undefined || this.quantityOnHand === null || Number.isNaN(this.quantityOnHand)) {
+    this.quantityOnHand = 0;
   }
 });
 

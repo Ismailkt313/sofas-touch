@@ -4,7 +4,9 @@ export {
   RAW_MATERIAL_UNITS,
   fetchRawMaterials,
   formatMaterialQuantityWithUnit,
+  formatMaterialQuantityOnHand,
   formatMaterialUnit,
   formatMaterialUnitOptionLabel,
   validateMaterialLineQuantity,
+  adjustRawMaterialStock,
 } from './services/rawMaterialService'

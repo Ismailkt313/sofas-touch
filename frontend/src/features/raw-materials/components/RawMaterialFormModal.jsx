@@ -5,6 +5,7 @@ import {
   MAX_MATERIAL_NAME_LENGTH,
   RAW_MATERIAL_CATEGORIES,
   buildUnitOptions,
+  formatMaterialQuantityOnHand,
   normalizeWhitespace,
 } from '../services/rawMaterialService'
 import { RawMaterialStatusBadge } from './RawMaterialStatusBadge'
@@ -12,6 +13,7 @@ import { RawMaterialStatusBadge } from './RawMaterialStatusBadge'
 const FIELD_DOM_IDS = {
   name: 'rm-form-name',
   unit: 'rm-form-unit',
+  initialQuantity: 'rm-form-quantity',
   category: 'rm-form-category',
   description: 'rm-form-description',
 }
@@ -48,6 +50,7 @@ function buildInitialValues(material, isEditMode) {
     return {
       name: '',
       unit: '',
+      initialQuantity: '',
       category: '',
       description: '',
     }
@@ -56,12 +59,15 @@ function buildInitialValues(material, isEditMode) {
   return {
     name: material.name || '',
     unit: material.unit || '',
+    initialQuantity: '',
     category: material.category || '',
     description: material.description || '',
+    quantityOnHand:
+      typeof material.quantityOnHand === 'number' ? material.quantityOnHand : 0,
   }
 }
 
-function validateFormValues(values) {
+function validateFormValues(values, isEditMode) {
   const errors = {}
 
   const cleanName = normalizeWhitespace(values.name)
@@ -76,6 +82,16 @@ function validateFormValues(values) {
     errors.unit = 'Unit is required.'
   }
 
+  if (!isEditMode) {
+    const rawQty = values.initialQuantity
+    if (rawQty !== undefined && rawQty !== null && String(rawQty).trim() !== '') {
+      const parsed = Number(String(rawQty).trim())
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        errors.initialQuantity = 'Initial quantity must be a non-negative number.'
+      }
+    }
+  }
+
   const cleanDescription = String(values.description || '').trim()
   if (cleanDescription.length > MAX_MATERIAL_DESCRIPTION_LENGTH) {
     errors.description = `Description cannot exceed ${MAX_MATERIAL_DESCRIPTION_LENGTH} characters.`
@@ -85,7 +101,7 @@ function validateFormValues(values) {
 }
 
 function focusFirstInvalidField(validationErrors) {
-  const orderedKeys = ['name', 'unit', 'category', 'description']
+  const orderedKeys = ['name', 'unit', 'initialQuantity', 'category', 'description']
   const firstKey = orderedKeys.find((key) => Boolean(validationErrors[key]))
   if (!firstKey || typeof document === 'undefined') {
     return
@@ -122,6 +138,7 @@ export function RawMaterialFormModal({
   const subtitleId = useId()
   const nameErrorId = useId()
   const unitErrorId = useId()
+  const quantityErrorId = useId()
   const categoryErrorId = useId()
   const descriptionErrorId = useId()
 
@@ -185,7 +202,7 @@ export function RawMaterialFormModal({
     }
 
     if (errors[fieldName]) {
-      const revalidated = validateFormValues(nextValues)
+      const revalidated = validateFormValues(nextValues, isEditMode)
       setErrors((prev) => ({
         ...prev,
         [fieldName]: revalidated[fieldName] || '',
@@ -198,7 +215,7 @@ export function RawMaterialFormModal({
     if (!name) {
       return
     }
-    const validationErrors = validateFormValues(values)
+    const validationErrors = validateFormValues(values, isEditMode)
     if (validationErrors[name]) {
       setErrors((prev) => ({
         ...prev,
@@ -219,7 +236,7 @@ export function RawMaterialFormModal({
     }
 
     setSubmitError('')
-    const validationErrors = validateFormValues(values)
+    const validationErrors = validateFormValues(values, isEditMode)
     setErrors(validationErrors)
 
     if (Object.keys(validationErrors).length > 0) {
@@ -295,7 +312,7 @@ export function RawMaterialFormModal({
             <p id={subtitleId} className="admin-modal__subtitle">
               {isEditMode
                 ? 'Update raw material specifications used across manufacturing projects.'
-                : 'Add a raw material to the catalogue for sofa and curtain procurement.'}
+                : 'Add a raw material with initial quantity tracking to the catalogue.'}
             </p>
           </div>
           <button
@@ -398,6 +415,47 @@ export function RawMaterialFormModal({
                 ) : null}
               </div>
 
+              {!isEditMode ? (
+                <div className="rm-form__field">
+                  <label
+                    htmlFor={FIELD_DOM_IDS.initialQuantity}
+                    className="rm-form__label"
+                  >
+                    Initial Quantity <span className="rm-form__opt">(Optional, defaults to 0)</span>
+                  </label>
+                  <input
+                    id={FIELD_DOM_IDS.initialQuantity}
+                    name="initialQuantity"
+                    type="number"
+                    min="0"
+                    step="any"
+                    className={`rm-form__input${
+                      errors.initialQuantity ? ' rm-form__input--error' : ''
+                    }`}
+                    placeholder="0"
+                    value={values.initialQuantity}
+                    onChange={(event) =>
+                      updateField('initialQuantity', event.target.value)
+                    }
+                    onBlur={handleInputBlur}
+                    disabled={isFormDisabled}
+                    aria-invalid={Boolean(errors.initialQuantity)}
+                    aria-describedby={
+                      errors.initialQuantity ? quantityErrorId : undefined
+                    }
+                  />
+                  {errors.initialQuantity ? (
+                    <p
+                      id={quantityErrorId}
+                      className="rm-form__error"
+                      role="alert"
+                    >
+                      {errors.initialQuantity}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="rm-form__field">
                 <label
                   htmlFor={FIELD_DOM_IDS.category}
@@ -427,6 +485,25 @@ export function RawMaterialFormModal({
                   </p>
                 ) : null}
               </div>
+
+              {isEditMode ? (
+                <div className="rm-form__field rm-form__field--stock-info">
+                  <label className="rm-form__label">
+                    Quantity on Hand <span className="rm-form__opt">(Tracked)</span>
+                  </label>
+                  <div className="rm-form__read-only-box">
+                    <span className="rm-form__stock-badge">
+                      {formatMaterialQuantityOnHand(
+                        material?.quantityOnHand,
+                        material?.unit || values.unit,
+                      )}
+                    </span>
+                    <span className="rm-form__stock-note">
+                      Stock quantities are updated automatically via Purchase Vouchers and authorized adjustments.
+                    </span>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="rm-form__field rm-form__field--full">
                 <div className="rm-form__label-row">

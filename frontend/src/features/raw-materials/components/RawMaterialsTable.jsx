@@ -1,5 +1,6 @@
 import {
   formatMaterialDate,
+  formatMaterialQuantityOnHand,
   formatMaterialUnit,
 } from '../services/rawMaterialService'
 import { RawMaterialRowActionsMenu } from './RawMaterialRowActionsMenu'
@@ -22,10 +23,11 @@ export function RawMaterialsTable({
           <tr>
             <th scope="col">Material Name</th>
             <th scope="col">Category</th>
-            <th scope="col">Unit</th>
+            <th scope="col">Quantity on Hand</th>
             <th scope="col">Description</th>
             <th scope="col">Status</th>
             <th scope="col">Last Updated</th>
+            <th scope="col">details</th>
             <th scope="col" className="rm-table__actions-col">
               Actions
             </th>
@@ -34,6 +36,10 @@ export function RawMaterialsTable({
         <tbody>
           {materials.map((material) => {
             const formattedUnit = formatMaterialUnit(material.unit)
+            const formattedQuantity = formatMaterialQuantityOnHand(
+              material.quantityOnHand,
+              material.unit,
+            )
 
             return (
               <tr
@@ -52,12 +58,10 @@ export function RawMaterialsTable({
                 <td>
                   <RawMaterialCategoryTag category={material.category} />
                 </td>
-                <td>
-                  <span
-                    className="rm-unit-pill"
-                    title={material.unit || undefined}
-                  >
-                    {formattedUnit || '—'}
+
+                <td className="rm-table__qty-cell">
+                  <span className="rm-qty-badge">
+                    {formattedQuantity}
                   </span>
                 </td>
                 <td className="rm-table__desc-cell">
@@ -78,6 +82,15 @@ export function RawMaterialsTable({
                 <td className="rm-table__date-cell">
                   {formatMaterialDate(material.updatedAt)}
                 </td>
+                <td>
+      <button
+        type="button"
+        className="rm-row-actions__view-btn"
+        onClick={() => onViewDetails?.(material)}
+      >
+        View Details
+      </button>
+    </td>
                 <td className="rm-table__actions-cell">
                   <RawMaterialRowActionsMenu
                     material={material}

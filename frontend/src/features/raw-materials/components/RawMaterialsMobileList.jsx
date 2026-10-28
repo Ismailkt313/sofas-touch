@@ -1,5 +1,6 @@
 import {
   formatMaterialDate,
+  formatMaterialQuantityOnHand,
   formatMaterialUnit,
 } from '../services/rawMaterialService'
 import { RawMaterialRowActionsMenu } from './RawMaterialRowActionsMenu'
@@ -23,6 +24,10 @@ export function RawMaterialsMobileList({
     >
       {materials.map((material) => {
         const formattedUnit = formatMaterialUnit(material.unit)
+        const formattedQuantity = formatMaterialQuantityOnHand(
+          material.quantityOnHand,
+          material.unit,
+        )
 
         return (
           <article
@@ -58,6 +63,9 @@ export function RawMaterialsMobileList({
                 title={material.unit || undefined}
               >
                 {formattedUnit || '—'}
+              </span>
+              <span className="rm-qty-badge rm-qty-badge--mobile">
+                Stock: {formattedQuantity}
               </span>
               <RawMaterialStatusBadge isActive={material.isActive} />
             </div>

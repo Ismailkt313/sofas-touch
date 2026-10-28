@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from '../../../types/auth';
 import { validateCreateRawMaterialDto } from '../dto/create-raw-material.dto';
 import { validateGetRawMaterialsDto } from '../dto/get-raw-materials.dto';
 import {
+  validateAdjustStockDto,
   validateUpdateRawMaterialDto,
   validateUpdateRawMaterialStatusDto,
 } from '../dto/update-raw-material.dto';
@@ -10,6 +11,8 @@ import { DuplicateRawMaterialKeyError } from '../repository/raw-materials.reposi
 import {
   InactiveRawMaterialAccessForbiddenError,
   InactiveRawMaterialSelectionError,
+  IncompatibleMaterialUnitError,
+  InsufficientStockQuantityError,
   InvalidRawMaterialIdError,
   RawMaterialAlreadyExistsError,
   RawMaterialNotFoundError,
@@ -41,7 +44,9 @@ export class RawMaterialsController implements IRawMaterialsController {
   private handleKnownErrors(err: unknown, res: Response): boolean {
     if (
       err instanceof InvalidRawMaterialIdError ||
-      err instanceof InactiveRawMaterialSelectionError
+      err instanceof InactiveRawMaterialSelectionError ||
+      err instanceof IncompatibleMaterialUnitError ||
+      err instanceof InsufficientStockQuantityError
     ) {
       res.status(400).json({
         error: 'Bad Request',
@@ -258,6 +263,47 @@ export class RawMaterialsController implements IRawMaterialsController {
         message: rawMaterial.isActive
           ? 'Raw material activated successfully.'
           : 'Raw material deactivated successfully.',
+        rawMaterial,
+      });
+    } catch (err: unknown) {
+      if (!this.handleKnownErrors(err, res)) {
+        next(err);
+      }
+    }
+  };
+
+  adjustStock = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const id = extractParam(req.params.id);
+      if (!id) {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: 'Raw material ID is required.',
+        });
+        return;
+      }
+
+      const validation = validateAdjustStockDto(req.body);
+      if (!validation.isValid || !validation.value) {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: 'Validation failed.',
+          errors: validation.errors,
+        });
+        return;
+      }
+
+      const rawMaterial = await this.rawMaterialsService.adjustStockQuantity(
+        id,
+        validation.value,
+      );
+
+      res.status(200).json({
+        message: 'Stock quantity adjusted successfully.',
         rawMaterial,
       });
     } catch (err: unknown) {

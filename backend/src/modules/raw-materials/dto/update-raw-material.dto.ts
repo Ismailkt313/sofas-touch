@@ -20,6 +20,11 @@ export interface UpdateRawMaterialStatusDto {
   isActive: boolean;
 }
 
+export interface AdjustRawMaterialStockDto {
+  quantityOnHand: number;
+  reason?: string;
+}
+
 const SYSTEM_MANAGED_FIELDS = new Set([
   '_id',
   'id',
@@ -31,6 +36,7 @@ const SYSTEM_MANAGED_FIELDS = new Set([
 ]);
 
 const STATUS_FIELDS = new Set(['isActive', 'status']);
+const QUANTITY_FIELDS = new Set(['quantityOnHand', 'initialQuantity', 'quantity']);
 
 const ALLOWED_UPDATE_FIELDS = new Set([
   'name',
@@ -58,6 +64,8 @@ export function validateUpdateRawMaterialDto(
       errors[key] = `'${key}' is system-managed and cannot be modified.`;
     } else if (STATUS_FIELDS.has(key)) {
       errors[key] = `'${key}' cannot be modified here. Use PATCH /api/raw-materials/:id/status instead.`;
+    } else if (QUANTITY_FIELDS.has(key)) {
+      errors[key] = `'${key}' cannot be modified directly via material update. Use the authorized stock adjustment endpoint instead.`;
     } else if (!ALLOWED_UPDATE_FIELDS.has(key)) {
       errors[key] = `'${key}' is not a permitted raw material update field.`;
     }
@@ -213,6 +221,71 @@ export function validateUpdateRawMaterialStatusDto(
     isValid: true,
     value: {
       isActive: resolvedStatus,
+    },
+  };
+}
+
+const ALLOWED_ADJUST_STOCK_FIELDS = new Set([
+  'quantityOnHand',
+  'quantity',
+  'reason',
+]);
+
+export function validateAdjustStockDto(
+  body: unknown,
+): ValidationResult<AdjustRawMaterialStockDto> {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return {
+      isValid: false,
+      errors: { body: 'Request body must be a JSON object.' },
+    };
+  }
+
+  const raw = body as Record<string, unknown>;
+  const errors: Record<string, string> = {};
+
+  for (const key of Object.keys(raw)) {
+    if (!ALLOWED_ADJUST_STOCK_FIELDS.has(key)) {
+      errors[key] = `'${key}' is not permitted for stock adjustments. Provide 'quantityOnHand' (or 'quantity') and optional 'reason'.`;
+    }
+  }
+
+  const rawQty = raw.quantityOnHand !== undefined ? raw.quantityOnHand : raw.quantity;
+  let quantityOnHand: number | undefined;
+
+  if (rawQty === undefined || rawQty === null || rawQty === '') {
+    errors.quantityOnHand = 'Stock quantity is required.';
+  } else if (typeof rawQty !== 'number' && typeof rawQty !== 'string') {
+    errors.quantityOnHand = 'Stock quantity must be a non-negative number.';
+  } else {
+    const parsed = typeof rawQty === 'number' ? rawQty : Number(String(rawQty).trim());
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      errors.quantityOnHand = 'Stock quantity must be a non-negative number.';
+    } else {
+      quantityOnHand = parsed;
+    }
+  }
+
+  let reason: string | undefined;
+  if (raw.reason !== undefined && raw.reason !== null) {
+    if (typeof raw.reason !== 'string') {
+      errors.reason = 'Reason must be a string.';
+    } else if (raw.reason.trim().length > 500) {
+      errors.reason = 'Reason cannot exceed 500 characters.';
+    } else {
+      reason = raw.reason.trim();
+    }
+  }
+
+  if (Object.keys(errors).length > 0 || quantityOnHand === undefined) {
+    return { isValid: false, errors };
+  }
+
+  return {
+    isValid: true,
+    value: {
+      quantityOnHand,
+      ...(reason ? { reason } : {}),
     },
   };
 }

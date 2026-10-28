@@ -121,31 +121,11 @@ export function RawMaterialRowActionsMenu({
     setIsOpen(true)
   }
 
-  if (!adminAccess && !compact) {
-    return (
-      <div className="rm-row-actions">
-        <button
-          type="button"
-          className="rm-row-actions__view-btn"
-          onClick={() => onViewDetails?.(material)}
-        >
-          View Details
-        </button>
-      </div>
-    )
-  }
+ 
 
   return (
     <div className="rm-row-actions">
-      {!compact ? (
-        <button
-          type="button"
-          className="rm-row-actions__view-btn"
-          onClick={() => onViewDetails?.(material)}
-        >
-          View Details
-        </button>
-      ) : null}
+     
 
       <button
         ref={triggerRef}

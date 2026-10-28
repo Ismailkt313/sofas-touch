@@ -1604,3 +1604,65 @@
     padding: 0.7rem 0.72rem;
   }
 }
+
+
+/* Stock on Hand & Quantity Tracking */
+.rm-qty-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  background-color: #f5ede2;
+  border: 1px solid #dfd0bc;
+  color: var(--sts-charcoal);
+  font-family: var(--sts-font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rm-qty-badge--mobile {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
+}
+
+.rm-table__qty-cell {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.rm-form__field--stock-info {
+  grid-column: 1 / -1;
+}
+
+.rm-form__read-only-box {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  background-color: #f7f2ea;
+  border: 1px solid #e0d2bf;
+  flex-wrap: wrap;
+}
+
+.rm-form__stock-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  border-radius: 6px;
+  background-color: #ffffff;
+  border: 1px solid #d5c3ab;
+  color: var(--sts-charcoal);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.rm-form__stock-note {
+  font-size: 0.78rem;
+  color: var(--sts-charcoal-muted);
+  line-height: 1.35;
+  flex: 1 1 200px;
+}

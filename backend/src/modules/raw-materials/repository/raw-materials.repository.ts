@@ -44,9 +44,14 @@ function isMongoDuplicateKeyError(err: unknown): boolean {
   );
 }
 
-function cloneMaterial(material: IRawMaterial): IRawMaterial {
+function normalizeDocQuantity(material: IRawMaterial): IRawMaterial {
   return {
     ...material,
+    quantityOnHand:
+      typeof material.quantityOnHand === 'number' &&
+      !Number.isNaN(material.quantityOnHand)
+        ? Math.max(0, material.quantityOnHand)
+        : 0,
     createdAt: material.createdAt ? new Date(material.createdAt) : undefined,
     updatedAt: material.updatedAt ? new Date(material.updatedAt) : undefined,
   };
@@ -96,6 +101,10 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
   async create(input: CreateRawMaterialRecordInput): Promise<IRawMaterial> {
     const cleanName = normalizeMaterialDisplayName(input.name);
     const normalizedName = normalizeMaterialNameKey(cleanName);
+    const quantityOnHand =
+      typeof input.quantityOnHand === 'number' && !Number.isNaN(input.quantityOnHand)
+        ? Math.max(0, input.quantityOnHand)
+        : 0;
 
     if (this.isDbConnected()) {
       await this.ensureDbIndexes();
@@ -105,12 +114,13 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
           normalizedName,
           category: input.category ?? null,
           unit: input.unit,
+          quantityOnHand,
           description: input.description || '',
           isActive: input.isActive,
           createdBy: input.createdBy || '',
         });
         const saved = await doc.save();
-        return saved.toObject() as unknown as IRawMaterial;
+        return normalizeDocQuantity(saved.toObject() as unknown as IRawMaterial);
       } catch (err: unknown) {
         if (isMongoDuplicateKeyError(err)) {
           throw new DuplicateRawMaterialKeyError(cleanName);
@@ -133,6 +143,7 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
       normalizedName,
       category: input.category ?? null,
       unit: input.unit,
+      quantityOnHand,
       description: input.description || '',
       isActive: input.isActive,
       createdBy: input.createdBy || '',
@@ -141,7 +152,7 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
     };
 
     this.memoryStore.set(generatedId, record);
-    return cloneMaterial(record);
+    return normalizeDocQuantity(record);
   }
 
   async findMaterials(
@@ -183,7 +194,7 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
       const totalPages = Math.max(1, Math.ceil(total / limit));
 
       return {
-        items: docs as unknown as IRawMaterial[],
+        items: (docs as unknown as IRawMaterial[]).map(normalizeDocQuantity),
         total,
         page,
         limit,
@@ -224,7 +235,7 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
 
     const total = items.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));
-    const pagedItems = items.slice(skip, skip + limit).map(cloneMaterial);
+    const pagedItems = items.slice(skip, skip + limit).map(normalizeDocQuantity);
 
     return {
       items: pagedItems,
@@ -246,17 +257,17 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
         .findById(new mongoose.Types.ObjectId(trimmedId))
         .lean()
         .exec();
-      return doc ? (doc as unknown as IRawMaterial) : null;
+      return doc ? normalizeDocQuantity(doc as unknown as IRawMaterial) : null;
     }
 
     const found = this.memoryStore.get(trimmedId.toLowerCase());
     if (found) {
-      return cloneMaterial(found);
+      return normalizeDocQuantity(found);
     }
 
     for (const item of this.memoryStore.values()) {
       if (String(item._id).toLowerCase() === trimmedId.toLowerCase()) {
-        return cloneMaterial(item);
+        return normalizeDocQuantity(item);
       }
     }
 
@@ -282,14 +293,14 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
         .find({ _id: { $in: objectIds } })
         .lean()
         .exec();
-      return docs as unknown as IRawMaterial[];
+      return (docs as unknown as IRawMaterial[]).map(normalizeDocQuantity);
     }
 
     const idSet = new Set(validIds.map((id) => id.toLowerCase()));
     const results: IRawMaterial[] = [];
     for (const item of this.memoryStore.values()) {
       if (idSet.has(String(item._id).toLowerCase())) {
-        results.push(cloneMaterial(item));
+        results.push(normalizeDocQuantity(item));
       }
     }
     return results;
@@ -306,12 +317,12 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
         .findOne({ normalizedName: key })
         .lean()
         .exec();
-      return doc ? (doc as unknown as IRawMaterial) : null;
+      return doc ? normalizeDocQuantity(doc as unknown as IRawMaterial) : null;
     }
 
     for (const item of this.memoryStore.values()) {
       if (item.normalizedName === key) {
-        return cloneMaterial(item);
+        return normalizeDocQuantity(item);
       }
     }
     return null;
@@ -345,6 +356,10 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
       sanitizedSet.unit = updates.unit;
     }
 
+    if (updates.quantityOnHand !== undefined) {
+      sanitizedSet.quantityOnHand = Math.max(0, updates.quantityOnHand);
+    }
+
     if (updates.description !== undefined) {
       sanitizedSet.description = updates.description;
     }
@@ -365,7 +380,7 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
           .lean()
           .exec();
 
-        return updated ? (updated as unknown as IRawMaterial) : null;
+        return updated ? normalizeDocQuantity(updated as unknown as IRawMaterial) : null;
       } catch (err: unknown) {
         if (isMongoDuplicateKeyError(err)) {
           throw new DuplicateRawMaterialKeyError(
@@ -422,6 +437,9 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
       ...(sanitizedSet.unit !== undefined
         ? { unit: sanitizedSet.unit as IRawMaterial['unit'] }
         : {}),
+      ...(sanitizedSet.quantityOnHand !== undefined
+        ? { quantityOnHand: sanitizedSet.quantityOnHand as number }
+        : {}),
       ...(sanitizedSet.description !== undefined
         ? { description: sanitizedSet.description as string }
         : {}),
@@ -432,6 +450,89 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
     };
 
     this.memoryStore.set(targetKey, updatedRecord);
-    return cloneMaterial(updatedRecord);
+    return normalizeDocQuantity(updatedRecord);
+  }
+
+  async adjustStockQuantity(id: string, newQuantity: number): Promise<IRawMaterial | null> {
+    const trimmedId = id.trim();
+    if (!isValidRawMaterialObjectId(trimmedId)) {
+      return null;
+    }
+
+    const safeQuantity = Math.max(0, newQuantity);
+
+    if (this.isDbConnected()) {
+      const updated = await this.materialModel
+        .findOneAndUpdate(
+          { _id: new mongoose.Types.ObjectId(trimmedId) },
+          { $set: { quantityOnHand: safeQuantity } },
+          { returnDocument: 'after', runValidators: true },
+        )
+        .lean()
+        .exec();
+
+      return updated ? normalizeDocQuantity(updated as unknown as IRawMaterial) : null;
+    }
+
+    for (const [key, item] of this.memoryStore.entries()) {
+      if (String(item._id).toLowerCase() === trimmedId.toLowerCase()) {
+        const updated: IRawMaterial = {
+          ...item,
+          quantityOnHand: safeQuantity,
+          updatedAt: nextMonotonicDate(),
+        };
+        this.memoryStore.set(key, updated);
+        return normalizeDocQuantity(updated);
+      }
+    }
+
+    return null;
+  }
+
+  async incrementStockQuantity(id: string, delta: number): Promise<IRawMaterial | null> {
+    const trimmedId = id.trim();
+    if (!isValidRawMaterialObjectId(trimmedId)) {
+      return null;
+    }
+
+    if (this.isDbConnected()) {
+      const query: Record<string, unknown> = {
+        _id: new mongoose.Types.ObjectId(trimmedId),
+      };
+
+      if (delta < 0) {
+        query.quantityOnHand = { $gte: Math.abs(delta) };
+      }
+
+      const updated = await this.materialModel
+        .findOneAndUpdate(
+          query,
+          { $inc: { quantityOnHand: delta } },
+          { returnDocument: 'after', runValidators: true },
+        )
+        .lean()
+        .exec();
+
+      return updated ? normalizeDocQuantity(updated as unknown as IRawMaterial) : null;
+    }
+
+    for (const [key, item] of this.memoryStore.entries()) {
+      if (String(item._id).toLowerCase() === trimmedId.toLowerCase()) {
+        const currentQty = typeof item.quantityOnHand === 'number' ? item.quantityOnHand : 0;
+        const nextQty = currentQty + delta;
+        if (nextQty < 0) {
+          return null;
+        }
+        const updated: IRawMaterial = {
+          ...item,
+          quantityOnHand: nextQty,
+          updatedAt: nextMonotonicDate(),
+        };
+        this.memoryStore.set(key, updated);
+        return normalizeDocQuantity(updated);
+      }
+    }
+
+    return null;
   }
 }

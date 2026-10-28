@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from '../../../types/auth';
 import { CreateRawMaterialDto } from '../dto/create-raw-material.dto';
 import { GetRawMaterialsDto } from '../dto/get-raw-materials.dto';
 import {
+  AdjustRawMaterialStockDto,
   UpdateRawMaterialDto,
   UpdateRawMaterialStatusDto,
 } from '../dto/update-raw-material.dto';
@@ -33,6 +34,7 @@ export interface RawMaterialResponseDto {
   name: string;
   category: RawMaterialCategory | null;
   unit: RawMaterialUnit;
+  quantityOnHand: number;
   description: string;
   isActive: boolean;
   createdBy?: string;
@@ -45,6 +47,7 @@ export interface RawMaterialPurchaseReferenceDto {
   name: string;
   unit: RawMaterialUnit;
   category: RawMaterialCategory | null;
+  quantityOnHand: number;
   isActive: boolean;
 }
 
@@ -53,6 +56,7 @@ export interface CreateRawMaterialRecordInput {
   normalizedName: string;
   category: RawMaterialCategory | null;
   unit: RawMaterialUnit;
+  quantityOnHand?: number;
   description: string;
   isActive: boolean;
   createdBy: string;
@@ -63,6 +67,7 @@ export interface UpdateRawMaterialRecordInput {
   normalizedName?: string;
   category?: RawMaterialCategory | null;
   unit?: RawMaterialUnit;
+  quantityOnHand?: number;
   description?: string;
   isActive?: boolean;
 }
@@ -85,6 +90,8 @@ export interface IRawMaterialsRepository {
     id: string,
     updates: UpdateRawMaterialRecordInput,
   ): Promise<IRawMaterial | null>;
+  adjustStockQuantity(id: string, newQuantity: number): Promise<IRawMaterial | null>;
+  incrementStockQuantity(id: string, delta: number): Promise<IRawMaterial | null>;
 }
 
 export interface IRawMaterialsService {
@@ -107,6 +114,15 @@ export interface IRawMaterialsService {
   updateRawMaterialStatus(
     id: string,
     dto: UpdateRawMaterialStatusDto,
+  ): Promise<RawMaterialResponseDto>;
+  adjustStockQuantity(
+    id: string,
+    dto: AdjustRawMaterialStockDto,
+  ): Promise<RawMaterialResponseDto>;
+  applyStockDelta(
+    id: string,
+    delta: number,
+    expectedUnit?: RawMaterialUnit,
   ): Promise<RawMaterialResponseDto>;
   getSelectableMaterialForPurchase(
     id: string,
@@ -141,6 +157,11 @@ export interface IRawMaterialsController {
     next: NextFunction,
   ): Promise<void>;
   updateStatus(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void>;
+  adjustStock(
     req: AuthenticatedRequest,
     res: Response,
     next: NextFunction,

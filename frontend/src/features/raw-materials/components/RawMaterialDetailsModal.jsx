@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from 'react'
 import {
   formatMaterialDateTime,
+  formatMaterialQuantityOnHand,
   formatMaterialUnit,
   formatMaterialUnitOptionLabel,
 } from '../services/rawMaterialService'
@@ -82,7 +83,7 @@ export function RawMaterialDetailsModal({
               Material Details
             </h2>
             <p className="admin-modal__subtitle">
-              Saved specification and purchase unit details.
+              Saved specifications, stock on hand, and purchase unit details.
             </p>
           </div>
           <button
@@ -136,17 +137,34 @@ export function RawMaterialDetailsModal({
                   >
                     {formatMaterialUnit(material.unit) || '—'}
                   </span>
+                  <span className="rm-qty-badge">
+                    {formatMaterialQuantityOnHand(
+                      material.quantityOnHand,
+                      material.unit,
+                    )}
+                  </span>
                 </div>
               </div>
 
               <dl className="profile-details rm-details-list">
                 <div className="profile-details__row">
-                  <dt>Category</dt>
-                  <dd>{material.category || 'Uncategorized'}</dd>
+                  <dt>Quantity on Hand</dt>
+                  <dd>
+                    <strong>
+                      {formatMaterialQuantityOnHand(
+                        material.quantityOnHand,
+                        material.unit,
+                      )}
+                    </strong>
+                  </dd>
                 </div>
                 <div className="profile-details__row">
                   <dt>Unit</dt>
                   <dd>{formatMaterialUnitOptionLabel(material.unit) || '—'}</dd>
+                </div>
+                <div className="profile-details__row">
+                  <dt>Category</dt>
+                  <dd>{material.category || 'Uncategorized'}</dd>
                 </div>
                 <div className="profile-details__row">
                   <dt>Status</dt>

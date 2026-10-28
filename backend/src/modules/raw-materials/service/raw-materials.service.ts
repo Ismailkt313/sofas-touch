@@ -1,11 +1,13 @@
 import { CreateRawMaterialDto } from '../dto/create-raw-material.dto';
 import { GetRawMaterialsDto } from '../dto/get-raw-materials.dto';
 import {
+  AdjustRawMaterialStockDto,
   UpdateRawMaterialDto,
   UpdateRawMaterialStatusDto,
 } from '../dto/update-raw-material.dto';
 import {
   IRawMaterial,
+  RawMaterialUnit,
   isValidRawMaterialObjectId,
   normalizeMaterialDisplayName,
   normalizeMaterialNameKey,
@@ -75,6 +77,28 @@ export class InactiveRawMaterialSelectionError extends Error {
   }
 }
 
+export class IncompatibleMaterialUnitError extends Error {
+  public readonly statusCode = 400;
+
+  constructor(materialName: string, materialUnit: string, voucherUnit: string) {
+    super(
+      `Cannot apply purchase quantity with unit '${voucherUnit}' to material '${materialName}' which uses '${materialUnit}'.`,
+    );
+    this.name = 'IncompatibleMaterialUnitError';
+  }
+}
+
+export class InsufficientStockQuantityError extends Error {
+  public readonly statusCode = 400;
+
+  constructor(materialName: string, currentStock: number, requestedReduction: number) {
+    super(
+      `Cannot reduce stock by ${requestedReduction} for material '${materialName}'. Current stock is only ${currentStock}.`,
+    );
+    this.name = 'InsufficientStockQuantityError';
+  }
+}
+
 export function mapRawMaterialToResponse(
   material: IRawMaterial,
 ): RawMaterialResponseDto {
@@ -83,6 +107,11 @@ export function mapRawMaterialToResponse(
     name: material.name,
     category: material.category ?? null,
     unit: material.unit,
+    quantityOnHand:
+      typeof material.quantityOnHand === 'number' &&
+      !Number.isNaN(material.quantityOnHand)
+        ? Math.max(0, material.quantityOnHand)
+        : 0,
     description: material.description || '',
     isActive: Boolean(material.isActive),
     createdBy: material.createdBy || undefined,
@@ -99,6 +128,11 @@ export function mapRawMaterialToPurchaseReference(
     name: material.name,
     unit: material.unit,
     category: material.category ?? null,
+    quantityOnHand:
+      typeof material.quantityOnHand === 'number' &&
+      !Number.isNaN(material.quantityOnHand)
+        ? Math.max(0, material.quantityOnHand)
+        : 0,
     isActive: Boolean(material.isActive),
   };
 }
@@ -136,6 +170,7 @@ export class RawMaterialsService implements IRawMaterialsService {
         normalizedName,
         category: dto.category ?? null,
         unit: dto.unit,
+        quantityOnHand: dto.quantityOnHand ?? 0,
         description: dto.description || '',
         isActive: true,
         createdBy,
@@ -280,6 +315,74 @@ export class RawMaterialsService implements IRawMaterialsService {
 
     if (!updated) {
       throw new RawMaterialNotFoundError(validId);
+    }
+
+    return mapRawMaterialToResponse(updated);
+  }
+
+  async adjustStockQuantity(
+    id: string,
+    dto: AdjustRawMaterialStockDto,
+  ): Promise<RawMaterialResponseDto> {
+    const validId = this.assertValidId(id);
+    const existing = await this.repository.findById(validId);
+
+    if (!existing) {
+      throw new RawMaterialNotFoundError(validId);
+    }
+
+    const updated = await this.repository.adjustStockQuantity(
+      validId,
+      dto.quantityOnHand,
+    );
+
+    if (!updated) {
+      throw new RawMaterialNotFoundError(validId);
+    }
+
+    return mapRawMaterialToResponse(updated);
+  }
+
+  async applyStockDelta(
+    id: string,
+    delta: number,
+    expectedUnit?: RawMaterialUnit,
+  ): Promise<RawMaterialResponseDto> {
+    const validId = this.assertValidId(id);
+    const material = await this.repository.findById(validId);
+
+    if (!material) {
+      throw new RawMaterialNotFoundError(validId);
+    }
+
+    if (expectedUnit && material.unit !== expectedUnit) {
+      throw new IncompatibleMaterialUnitError(
+        material.name,
+        material.unit,
+        expectedUnit,
+      );
+    }
+
+    const currentQty =
+      typeof material.quantityOnHand === 'number' && !Number.isNaN(material.quantityOnHand)
+        ? material.quantityOnHand
+        : 0;
+
+    if (delta < 0 && currentQty + delta < 0) {
+      throw new InsufficientStockQuantityError(
+        material.name,
+        currentQty,
+        Math.abs(delta),
+      );
+    }
+
+    const updated = await this.repository.incrementStockQuantity(validId, delta);
+    if (!updated) {
+      throw new InsufficientStockQuantityError(
+        material.name,
+        currentQty,
+        Math.abs(delta),
+      );
     }
 
     return mapRawMaterialToResponse(updated);

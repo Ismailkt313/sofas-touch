@@ -20,6 +20,9 @@ import {
   validateGetRawMaterialsDto,
   validateUpdateRawMaterialDto,
   validateUpdateRawMaterialStatusDto,
+  validateAdjustStockDto,
+  IncompatibleMaterialUnitError,
+  InsufficientStockQuantityError,
 } from '../index';
 
 interface HttpJsonResponse {
@@ -885,10 +888,257 @@ async function runTests(): Promise<void> {
     }
     console.log('✓ Mongoose schema validation, pre-validate hook, and unique index definition passed.');
 
+    console.log('9. Testing Quantity Tracking, Authorized Stock Adjustments, and Voucher Synchronization Preparation...');
+    {
+      // 9a. DTO validations
+      const validQty1 = validateCreateRawMaterialDto({
+        name: 'Brass Studs (10mm)',
+        unit: 'Box',
+        quantityOnHand: 25,
+      });
+      assert.strictEqual(validQty1.isValid, true);
+      assert.strictEqual(validQty1.value?.quantityOnHand, 25);
+
+      const validQty2 = validateCreateRawMaterialDto({
+        name: 'Jute Webbing (50mm)',
+        unit: 'Roll',
+        initialQuantity: '15.5',
+      });
+      assert.strictEqual(validQty2.isValid, true);
+      assert.strictEqual(validQty2.value?.quantityOnHand, 15.5);
+
+      const defaultQty = validateCreateRawMaterialDto({
+        name: 'Cotton Cord (4mm)',
+        unit: 'Meter',
+      });
+      assert.strictEqual(defaultQty.isValid, true);
+      assert.strictEqual(defaultQty.value?.quantityOnHand, 0);
+
+      const negativeQty = validateCreateRawMaterialDto({
+        name: 'Invalid Negative Studs',
+        unit: 'Box',
+        quantityOnHand: -5,
+      });
+      assert.strictEqual(negativeQty.isValid, false);
+      assert.ok(negativeQty.errors?.quantityOnHand);
+
+      const nonNumericQty = validateCreateRawMaterialDto({
+        name: 'Invalid Text Studs',
+        unit: 'Box',
+        initialQuantity: 'not-a-number',
+      });
+      assert.strictEqual(nonNumericQty.isValid, false);
+      assert.ok(nonNumericQty.errors?.quantityOnHand);
+
+      // Ordinary update must reject direct quantity modification
+      const rejectUpdateQty = validateUpdateRawMaterialDto({
+        name: 'Updated Cotton Cord',
+        quantityOnHand: 50,
+      });
+      assert.strictEqual(rejectUpdateQty.isValid, false);
+      assert.ok(rejectUpdateQty.errors?.quantityOnHand);
+
+      // AdjustStockDto validation
+      const validAdjust = validateAdjustStockDto({
+        quantityOnHand: 40,
+        reason: 'Physical inventory audit',
+      });
+      assert.strictEqual(validAdjust.isValid, true);
+      assert.strictEqual(validAdjust.value?.quantityOnHand, 40);
+      assert.strictEqual(validAdjust.value?.reason, 'Physical inventory audit');
+
+      const validAdjustZero = validateAdjustStockDto({
+        quantity: 0,
+      });
+      assert.strictEqual(validAdjustZero.isValid, true);
+      assert.strictEqual(validAdjustZero.value?.quantityOnHand, 0);
+
+      const invalidAdjustNegative = validateAdjustStockDto({
+        quantityOnHand: -10,
+      });
+      assert.strictEqual(invalidAdjustNegative.isValid, false);
+      assert.ok(invalidAdjustNegative.errors?.quantityOnHand);
+
+      const invalidAdjustEmpty = validateAdjustStockDto({});
+      assert.strictEqual(invalidAdjustEmpty.isValid, false);
+      assert.ok(invalidAdjustEmpty.errors?.quantityOnHand);
+
+      // 9b. Schema level defaults and min constraint
+      const schemaDocWithQty = new RawMaterialModel({
+        name: 'Tufting Twine Spool',
+        unit: 'Roll',
+        quantityOnHand: 12,
+      });
+      await schemaDocWithQty.validate();
+      assert.strictEqual(schemaDocWithQty.quantityOnHand, 12);
+
+      const schemaDocDefaultQty = new RawMaterialModel({
+        name: 'Upholstery Needles (Pack)',
+        unit: 'Piece',
+      });
+      await schemaDocDefaultQty.validate();
+      assert.strictEqual(schemaDocDefaultQty.quantityOnHand, 0);
+
+      const schemaDocNegative = new RawMaterialModel({
+        name: 'Negative Stock Material',
+        unit: 'Piece',
+        quantityOnHand: -2,
+      });
+      await assert.rejects(() => schemaDocNegative.validate());
+
+      // 9c. HTTP API: Create material with initial quantity (Admin)
+      const createWithQtyRes = await sendJsonRequest(
+        baseUrl,
+        'POST',
+        '/api/raw-materials',
+        {
+          token: tokens.adminToken,
+          body: {
+            name: 'Gold Plated Tacks',
+            category: 'Hardware',
+            unit: 'Box',
+            quantityOnHand: 50,
+            description: 'Decorative finish tacks',
+          },
+        },
+      );
+      assert.strictEqual(createWithQtyRes.status, 201);
+      const goldTacks = createWithQtyRes.body.rawMaterial as Record<string, unknown>;
+      assert.strictEqual(goldTacks.name, 'Gold Plated Tacks');
+      assert.strictEqual(goldTacks.quantityOnHand, 50);
+      assert.strictEqual(goldTacks.unit, 'Box');
+      const goldTacksId = goldTacks.id as string;
+
+      // 9d. HTTP API: Create material without initial quantity defaults to zero
+      const createWithoutQtyRes = await sendJsonRequest(
+        baseUrl,
+        'POST',
+        '/api/raw-materials',
+        {
+          token: tokens.adminToken,
+          body: {
+            name: 'Silver Plated Tacks',
+            category: 'Hardware',
+            unit: 'Box',
+          },
+        },
+      );
+      assert.strictEqual(createWithoutQtyRes.status, 201);
+      const silverTacks = createWithoutQtyRes.body.rawMaterial as Record<string, unknown>;
+      assert.strictEqual(silverTacks.quantityOnHand, 0);
+
+      // 9e. HTTP API: Detail returns quantityOnHand
+      const detailRes = await sendJsonRequest(
+        baseUrl,
+        'GET',
+        `/api/raw-materials/${goldTacksId}`,
+        { token: tokens.adminToken },
+      );
+      assert.strictEqual(detailRes.status, 200);
+      assert.strictEqual((detailRes.body.rawMaterial as Record<string, unknown>).quantityOnHand, 50);
+
+      // 9f. HTTP API: Ordinary update preserves saved quantity
+      const ordinaryUpdateRes = await sendJsonRequest(
+        baseUrl,
+        'PATCH',
+        `/api/raw-materials/${goldTacksId}`,
+        {
+          token: tokens.adminToken,
+          body: {
+            description: 'Updated description - premium gold tacks',
+          },
+        },
+      );
+      assert.strictEqual(ordinaryUpdateRes.status, 200);
+      assert.strictEqual((ordinaryUpdateRes.body.rawMaterial as Record<string, unknown>).quantityOnHand, 50);
+
+      // Ordinary update rejecting direct quantity change
+      const forbiddenQtyUpdate = await sendJsonRequest(
+        baseUrl,
+        'PATCH',
+        `/api/raw-materials/${goldTacksId}`,
+        {
+          token: tokens.adminToken,
+          body: {
+            quantityOnHand: 999,
+          },
+        },
+      );
+      assert.strictEqual(forbiddenQtyUpdate.status, 400);
+
+      // 9g. HTTP API: Data Entry cannot adjust stock (403 Forbidden)
+      const operatorAdjustRes = await sendJsonRequest(
+        baseUrl,
+        'PATCH',
+        `/api/raw-materials/${goldTacksId}/stock`,
+        {
+          token: tokens.dataEntryToken,
+          body: { quantityOnHand: 100 },
+        },
+      );
+      assert.strictEqual(operatorAdjustRes.status, 403);
+
+      // 9h. HTTP API: Admin adjusts stock (200 OK)
+      const adminAdjustRes = await sendJsonRequest(
+        baseUrl,
+        'PATCH',
+        `/api/raw-materials/${goldTacksId}/stock`,
+        {
+          token: tokens.adminToken,
+          body: { quantityOnHand: 75, reason: 'Physical stock reconciliation' },
+        },
+      );
+      assert.strictEqual(adminAdjustRes.status, 200);
+      assert.strictEqual((adminAdjustRes.body.rawMaterial as Record<string, unknown>).quantityOnHand, 75);
+
+      // Stock adjustment rejecting negative value
+      const adminNegativeAdjustRes = await sendJsonRequest(
+        baseUrl,
+        'PATCH',
+        `/api/raw-materials/${goldTacksId}/stock`,
+        {
+          token: tokens.adminToken,
+          body: { quantityOnHand: -20 },
+        },
+      );
+      assert.strictEqual(adminNegativeAdjustRes.status, 400);
+
+      // 9i. Service-level Voucher Synchronization Preparation tests (applyStockDelta)
+      // Positive delta (purchased 25 boxes) -> increases from 75 to 100
+      const afterPurchase = await rawMaterialsService.applyStockDelta(goldTacksId, 25, 'Box');
+      assert.strictEqual(afterPurchase.quantityOnHand, 100);
+
+      // Unit compatibility check: if voucher has incompatible unit ('Meter' vs 'Box'), must reject
+      await assert.rejects(
+        () => rawMaterialsService.applyStockDelta(goldTacksId, 10, 'Meter' as any),
+        (err: unknown) => err instanceof IncompatibleMaterialUnitError,
+      );
+
+      // Voucher edit reversal / deletion delta (-30 boxes) -> decreases from 100 to 70
+      const afterReversal = await rawMaterialsService.applyStockDelta(goldTacksId, -30, 'Box');
+      assert.strictEqual(afterReversal.quantityOnHand, 70);
+
+      // Stock cannot drop below zero
+      await assert.rejects(
+        () => rawMaterialsService.applyStockDelta(goldTacksId, -150, 'Box'),
+        (err: unknown) => err instanceof InsufficientStockQuantityError,
+      );
+
+      // Final verified stock
+      const finalCheck = await rawMaterialsService.getRawMaterialById(goldTacksId, 'admin');
+      assert.strictEqual(finalCheck.quantityOnHand, 70);
+    }
+    console.log('✓ Quantity tracking, authorized stock adjustments, and voucher synchronization preparation passed.');
+
     console.log('=== ALL RAW MATERIALS MANAGEMENT TESTS PASSED ===');
   } finally {
     await clearRawMaterialsState();
+    if (typeof (server as any).closeAllConnections === 'function') {
+      (server as any).closeAllConnections();
+    }
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    await mongoose.disconnect().catch(() => null);
+    process.exit(0);
   }
 }
 

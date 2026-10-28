@@ -163,6 +163,16 @@ export function formatMaterialQuantityWithUnit(quantity, unit) {
   return displayUnit ? `${formattedQty} ${displayUnit}` : formattedQty
 }
 
+export function formatMaterialQuantityOnHand(quantity, unit) {
+  const num = typeof quantity === 'number' ? quantity : Number(String(quantity || 0).trim())
+  const validNum = Number.isFinite(num) && num >= 0 ? num : 0
+  const formattedQty = new Intl.NumberFormat('en-IN', {
+    maximumFractionDigits: 3,
+  }).format(validNum)
+  const displayUnit = formatMaterialUnit(unit)
+  return displayUnit ? `${formattedQty} ${displayUnit}` : formattedQty
+}
+
 export function formatMaterialDate(dateInput) {
   if (!dateInput) {
     return '—'
@@ -204,6 +214,12 @@ export function normalizeRawMaterial(raw = {}) {
         ? raw.category.trim()
         : null,
     unit: typeof raw.unit === 'string' ? raw.unit.trim() : '',
+    quantityOnHand:
+      typeof raw.quantityOnHand === 'number' && Number.isFinite(raw.quantityOnHand)
+        ? Math.max(0, raw.quantityOnHand)
+        : Number.isFinite(Number(raw.quantityOnHand))
+          ? Math.max(0, Number(raw.quantityOnHand))
+          : 0,
     description:
       typeof raw.description === 'string' ? raw.description.trim() : '',
     isActive: raw.isActive !== undefined ? Boolean(raw.isActive) : true,
@@ -280,6 +296,20 @@ export function buildCreateMaterialPayload(formValues) {
   const payload = {
     name: normalizeWhitespace(formValues.name),
     unit: String(formValues.unit || '').trim(),
+  }
+
+  const rawQty =
+    formValues.initialQuantity !== undefined &&
+    formValues.initialQuantity !== null &&
+    String(formValues.initialQuantity).trim() !== ''
+      ? formValues.initialQuantity
+      : formValues.quantityOnHand
+
+  if (rawQty !== undefined && rawQty !== null && String(rawQty).trim() !== '') {
+    const parsedQty = Number(String(rawQty).trim())
+    payload.quantityOnHand = Number.isFinite(parsedQty) && parsedQty >= 0 ? parsedQty : 0
+  } else {
+    payload.quantityOnHand = 0
   }
 
   const cleanCategory =
@@ -480,6 +510,31 @@ export async function updateRawMaterialStatus(id, isActive) {
       isActive
         ? 'Unable to activate raw material.'
         : 'Unable to deactivate raw material.',
+    )
+  }
+}
+
+export async function adjustRawMaterialStock(id, quantityOnHand, reason = '') {
+  const cleanId = String(id || '').trim()
+  try {
+    const payload = { quantityOnHand: Number(quantityOnHand) }
+    if (reason && typeof reason === 'string' && reason.trim()) {
+      payload.reason = reason.trim()
+    }
+    const response = await api.patch(
+      `/api/raw-materials/${encodeURIComponent(cleanId)}/stock`,
+      payload,
+    )
+    const rawMaterial = response.data?.rawMaterial || response.data
+    return {
+      material: normalizeRawMaterial(rawMaterial),
+      message:
+        response.data?.message || 'Stock quantity adjusted successfully.',
+    }
+  } catch (error) {
+    throw extractRawMaterialApiError(
+      error,
+      'Unable to adjust stock quantity.',
     )
   }
 }
