@@ -11,6 +11,7 @@ import {
   getStoredSession,
 } from './features/auth'
 import { ProjectDetailsPage, ProjectsPage } from './features/projects'
+import { RawMaterialsPage } from './features/raw-materials'
 import { UserManagementPage } from './features/users'
 
 const ROUTE_CHANGE_EVENT = 'sts:routechange'
@@ -84,6 +85,7 @@ function App() {
   const projectDetailsIdentifier = projectDetailsMatch
     ? decodeURIComponent(projectDetailsMatch[1])
     : ''
+  const isRawMaterialsRoute = isNavItemActive(pathname, '/raw-materials')
   const isSignupRoute = pathname === '/signup' || pathname === '/register'
 
   useEffect(() => {
@@ -161,6 +163,11 @@ function App() {
             />
           ) : isProjectsListRoute ? (
             <ProjectsPage
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : isRawMaterialsRoute ? (
+            <RawMaterialsPage
               currentUser={currentUser}
               onNavigate={navigate}
             />
