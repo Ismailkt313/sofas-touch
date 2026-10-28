@@ -388,19 +388,6 @@ export function ProjectFormModal({
               </div>
             ) : null}
 
-            <div className="projects-id-info" aria-label="Project ID">
-              <span className="projects-id-info__label">Project ID</span>
-              {isEditMode ? (
-                <span className="projects-id-info__value">
-                  <span className="project-code-pill">{project.projectId}</span>
-                  <span className="projects-id-info__note">Immutable</span>
-                </span>
-              ) : (
-                <span className="projects-id-info__badge">
-                  Auto-assigned on save (PRJ-XXXX)
-                </span>
-              )}
-            </div>
 
             <div className="projects-form-grid">
               <div
