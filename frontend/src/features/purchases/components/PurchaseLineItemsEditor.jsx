@@ -1,34 +1,11 @@
 import { useState } from 'react'
 import { Dropdown } from '../../../components/common'
-import {
-  RAW_MATERIAL_UNITS,
-  formatMaterialUnit,
-  formatMaterialUnitOptionLabel,
-} from '../../raw-materials'
+import { formatMaterialUnit } from '../../raw-materials'
 import { FieldSourceBadge, FieldSuggestionBanner } from './FieldProvenanceControl'
 import {
   calculateLineTotalPreview,
   formatInrCurrency,
 } from '../services/purchaseService'
-
-const DETECTED_UNIT_OPTIONS = [
-  { value: '', label: 'Unspecified bill unit' },
-  ...RAW_MATERIAL_UNITS.map((u) => ({
-    value: u,
-    label: formatMaterialUnitOptionLabel(u),
-  })),
-]
-
-function hasUnconfirmedOcrCell(row) {
-  const fm = row?.fieldMeta || {}
-  return ['materialId', 'quantity', 'unitPrice', 'extractedDescription', 'detectedUnit'].some(
-    (k) =>
-      String(row?.[k] ?? '').trim() !== '' &&
-      fm[k]?.source === 'ocr' &&
-      !fm[k]?.confirmed &&
-      !fm[k]?.touched,
-  )
-}
 
 export function PurchaseLineItemsEditor({
   lineItems,
@@ -37,12 +14,10 @@ export function PurchaseLineItemsEditor({
   materialById,
   materialOptions,
   fieldErrors,
-  ocrActive = false,
   isSaving,
   adminAccess,
   onAddLineRow,
   onUpdateLineItem,
-  onConfirmLineRow,
   onAcceptRowSuggestion,
   onDismissRowSuggestion,
   onRemoveLineRow,
@@ -55,32 +30,28 @@ export function PurchaseLineItemsEditor({
   onDismissAllUncertainRows,
   onRequestCancelToCatalog,
 }) {
-  const [editingOcrRefMap, setEditingOcrRefMap] = useState({})
+  const [openNotesMap, setOpenNotesMap] = useState({})
 
-  const toggleEditOcrRef = (rowKey) => {
-    setEditingOcrRefMap((prev) => ({
+  const toggleNoteOpen = (rowKey) => {
+    setOpenNotesMap((prev) => ({
       ...prev,
       [rowKey]: !prev[rowKey],
     }))
   }
 
   return (
-    <section className="pv-surface pv-section-card">
-      <div className="pv-section-card__header">
-        <div>
-          <h2 className="pv-section-card__title">Material Line Items</h2>
-          <p className="pv-section-card__subtitle">
-            Select an existing Raw Material to lock in its supported unit and
-            update stock on hand when saved.
-          </p>
-        </div>
+    <section className="pv-voucher-section" aria-labelledby="pv-materials-heading">
+      <div className="pv-section-head">
+        <h2 id="pv-materials-heading" className="pv-section-title">
+          Materials
+        </h2>
         <button
           type="button"
-          className="admin-btn admin-btn--secondary"
+          className="pv-add-row-btn"
           onClick={onAddLineRow}
           disabled={isSaving}
         >
-          + Add Material Row
+          + Add Material
         </button>
       </div>
 
@@ -88,7 +59,16 @@ export function PurchaseLineItemsEditor({
         <p className="pv-field-error">{fieldErrors.lineItems}</p>
       ) : null}
 
-      <div className="pv-lines-list">
+      <div className="pv-mat-table-head" aria-hidden="true">
+        <span>Material</span>
+        <span>Qty</span>
+        <span>Unit</span>
+        <span>Unit price (₹)</span>
+        <span className="pv-mat-table-head__right">Line total</span>
+        <span />
+      </div>
+
+      <div className="pv-mat-list">
         {lineItems.map((row, idx) => {
           const selectedMat = materialById.get(row.materialId)
           const lineTotal = calculateLineTotalPreview(
@@ -101,211 +81,94 @@ export function PurchaseLineItemsEditor({
           const needsMaterialReview =
             Boolean(row.extractedDescription || row.needsReview) &&
             !row.materialId
+
+          const selectedShortUnit = selectedMat
+            ? formatMaterialUnit(selectedMat.unit) || selectedMat.unit
+            : ''
+          const detectedShortUnit = row.detectedUnit
+            ? formatMaterialUnit(row.detectedUnit) || row.detectedUnit
+            : ''
           const hasUnitMismatch =
-            Boolean(selectedMat && row.detectedUnit) &&
-            String(
-              formatMaterialUnit(selectedMat.unit) || selectedMat.unit || '',
-            ).toLowerCase() !==
-              String(
-                formatMaterialUnit(row.detectedUnit) || row.detectedUnit || '',
-              ).toLowerCase()
-          const isEditingOcrRef = Boolean(editingOcrRefMap[row.rowKey])
+            Boolean(selectedShortUnit && detectedShortUnit) &&
+            selectedShortUnit.toLowerCase() !== detectedShortUnit.toLowerCase()
+
+          const unitDisplay = selectedShortUnit || detectedShortUnit || '—'
           const fm = row.fieldMeta || {}
           const rowSugs = row.rowSuggestions || {}
-          const canConfirmRow = hasUnconfirmedOcrCell(row)
+          const hasRemarksText = Boolean(String(row.remarks || '').trim())
+          const isNoteOpen = hasRemarksText || Boolean(openNotesMap[row.rowKey])
 
           return (
             <div
               key={row.rowKey}
-              className={`pv-line-card${
+              className={`pv-mat-row${
                 needsMaterialReview || hasUnitMismatch
-                  ? ' pv-line-card--review'
+                  ? ' pv-mat-row--review'
                   : ''
               }`}
             >
-              <div className="pv-line-card__top">
-                <div className="pv-line-card__left-tags">
-                  <span className="pv-line-card__index">Item #{idx + 1}</span>
-
-                  {row.extractedDescription ? (
-                    <span className="pv-ocr-detected-pill">
-                      Bill: &ldquo;{row.extractedDescription}&rdquo;
-                      {row.detectedUnit
-                        ? ` (${formatMaterialUnit(row.detectedUnit) || row.detectedUnit})`
-                        : ''}
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="pv-line-card__top-actions">
-                  {canConfirmRow ? (
-                    <button
-                      type="button"
-                      className="pv-prov-confirm-btn"
-                      onClick={() => onConfirmLineRow?.(row.rowKey)}
-                      disabled={isSaving}
-                    >
-                      Confirm Row
-                    </button>
-                  ) : null}
-
-                  {row.extractedDescription || row.detectedUnit ? (
-                    <button
-                      type="button"
-                      className="pv-text-btn pv-text-btn--sm"
-                      onClick={() => toggleEditOcrRef(row.rowKey)}
-                      disabled={isSaving}
-                    >
-                      {isEditingOcrRef ? 'Done Bill Ref' : 'Edit Bill Ref'}
-                    </button>
-                  ) : null}
-
+              <div className="pv-mat-row__mobile-head">
+                <span className="pv-mat-row__num">#{idx + 1}</span>
+                <div className="pv-mat-row__mobile-right">
+                  <span className="pv-mat-row__mobile-total">
+                    {formatInrCurrency(lineTotal)}
+                  </span>
                   <button
                     type="button"
-                    className="pv-line-remove-btn"
+                    className="pv-row-icon-remove"
                     onClick={() => onRemoveLineRow(row.rowKey)}
                     disabled={isSaving}
-                    aria-label={`Remove line item ${idx + 1}`}
+                    aria-label={
+                      lineItems.length > 1
+                        ? `Remove material row ${idx + 1}`
+                        : `Clear material row ${idx + 1}`
+                    }
+                    title={lineItems.length > 1 ? 'Remove row' : 'Clear row'}
                   >
-                    {lineItems.length > 1 ? 'Remove' : 'Clear'}
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path
+                        d="M4 4L12 12M12 4L4 12"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                      />
+                    </svg>
                   </button>
                 </div>
               </div>
 
-              {isEditingOcrRef ? (
-                <div className="pv-ocr-ref-edit-grid">
-                  <div className="pv-form-field">
-                    <div className="pv-label-row">
-                      <label className="pv-form-label">
-                        Extracted Bill Description
-                      </label>
-                      <FieldSourceBadge
-                        meta={fm.extractedDescription}
-                        hasValue={Boolean(row.extractedDescription)}
-                        ocrActive={ocrActive}
-                        disabled={isSaving}
-                      />
-                    </div>
-                    <input
-                      type="text"
-                      className="pv-input pv-input--compact"
-                      value={row.extractedDescription || ''}
-                      onChange={(e) =>
-                        onUpdateLineItem(
-                          row.rowKey,
-                          'extractedDescription',
-                          e.target.value,
-                        )
-                      }
-                      disabled={isSaving}
-                      aria-label={`Line item ${idx + 1} extracted description`}
-                    />
-                  </div>
-                  <div className="pv-form-field">
-                    <div className="pv-label-row">
-                      <label className="pv-form-label">Detected Bill Unit</label>
-                      <FieldSourceBadge
-                        meta={fm.detectedUnit}
-                        hasValue={Boolean(row.detectedUnit)}
-                        ocrActive={ocrActive}
-                        disabled={isSaving}
-                      />
-                    </div>
-                    <select
-                      className="pv-input pv-input--compact"
-                      value={row.detectedUnit || ''}
-                      onChange={(e) =>
-                        onUpdateLineItem(
-                          row.rowKey,
-                          'detectedUnit',
-                          e.target.value,
-                        )
-                      }
-                      disabled={isSaving}
-                      aria-label={`Line item ${idx + 1} detected unit`}
-                    >
-                      {DETECTED_UNIT_OPTIONS.map((opt) => (
-                        <option key={opt.value || 'none'} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              ) : null}
-
-              {rowSugs.extractedDescription ? (
-                <FieldSuggestionBanner
-                  suggestion={rowSugs.extractedDescription}
-                  labelPrefix="Bill description"
-                  onAccept={() =>
-                    onAcceptRowSuggestion?.(row.rowKey, 'extractedDescription')
-                  }
-                  onDismiss={() =>
-                    onDismissRowSuggestion?.(row.rowKey, 'extractedDescription')
-                  }
-                  disabled={isSaving}
-                />
-              ) : null}
-
-              {!row.materialId &&
-              Array.isArray(row.suggestions) &&
-              row.suggestions.length > 0 ? (
-                <div className="pv-suggestions-row">
-                  <span className="pv-suggestions-row__label">
-                    Likely catalog match (click to confirm):
-                  </span>
-                  {row.suggestions.map((sug) => (
-                    <button
-                      key={sug.id}
-                      type="button"
-                      className="pv-suggestion-chip"
-                      onClick={() =>
-                        onUpdateLineItem(row.rowKey, 'materialId', sug.id)
-                      }
-                    >
-                      {sug.name} ({formatMaterialUnit(sug.unit)})
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
-              <div className="pv-line-card__grid">
-                <div className="pv-form-field pv-line-card__mat-col">
-                  <div className="pv-label-row">
-                    <label className="pv-form-label">
-                      Raw Material <span className="pv-req">*</span>
-                    </label>
+              <div className="pv-mat-row__fields">
+                <div className="pv-mat-cell pv-mat-cell--material">
+                  <div className="pv-mat-cell-label-row">
+                    <span className="pv-mat-cell-label">Material</span>
                     <FieldSourceBadge
                       meta={fm.materialId}
                       hasValue={Boolean(row.materialId)}
-                      ocrActive={ocrActive}
-                      disabled={isSaving}
                     />
                   </div>
                   <Dropdown
                     variant="form"
                     value={row.materialId}
                     options={materialOptions}
-                    placeholder="Select raw material..."
+                    placeholder="Select material..."
                     error={Boolean(matErr || needsMaterialReview)}
                     disabled={isSaving}
                     onChange={(val) =>
                       onUpdateLineItem(row.rowKey, 'materialId', val)
                     }
-                    ariaLabel={`Line item ${idx + 1} raw material`}
+                    ariaLabel={`Material row ${idx + 1}`}
                   />
                   {matErr ? (
                     <p className="pv-field-error">{matErr}</p>
                   ) : needsMaterialReview ? (
                     <p className="pv-field-review-hint">
-                      Confirm the matching Raw Material for this bill line.
+                      Select matching catalog material
                     </p>
                   ) : null}
                   {rowSugs.materialId ? (
                     <FieldSuggestionBanner
                       suggestion={rowSugs.materialId}
-                      labelPrefix="Bill material match"
+                      labelPrefix="Bill match"
                       formatValue={(id) =>
                         materialById.get(id)?.name || String(id)
                       }
@@ -320,73 +183,29 @@ export function PurchaseLineItemsEditor({
                   ) : null}
                 </div>
 
-                <div className="pv-form-field pv-line-card__unit-col">
-                  <label className="pv-form-label">Unit</label>
-                  <div
-                    className={`pv-readonly-unit${
-                      hasUnitMismatch ? ' pv-readonly-unit--mismatch' : ''
-                    }`}
-                    title={
-                      selectedMat
-                        ? formatMaterialUnitOptionLabel(selectedMat.unit)
-                        : row.detectedUnit
-                          ? `Bill unit: ${formatMaterialUnitOptionLabel(row.detectedUnit)}`
-                          : 'Select a material to auto-fill unit'
-                    }
-                  >
-                    {selectedMat
-                      ? formatMaterialUnitOptionLabel(selectedMat.unit)
-                      : row.detectedUnit
-                        ? `Bill: ${formatMaterialUnit(row.detectedUnit) || row.detectedUnit}`
-                        : 'Auto-filled'}
-                  </div>
-                  {hasUnitMismatch ? (
-                    <p className="pv-field-review-hint">
-                      Bill unit ({formatMaterialUnit(row.detectedUnit)}) differs
-                      from catalog unit ({formatMaterialUnit(selectedMat.unit)})
-                      — verify quantity.
-                    </p>
-                  ) : null}
-                  {rowSugs.detectedUnit ? (
-                    <FieldSuggestionBanner
-                      suggestion={rowSugs.detectedUnit}
-                      labelPrefix="Bill unit"
-                      formatValue={(u) => formatMaterialUnit(u) || u}
-                      onAccept={() =>
-                        onAcceptRowSuggestion?.(row.rowKey, 'detectedUnit')
-                      }
-                      onDismiss={() =>
-                        onDismissRowSuggestion?.(row.rowKey, 'detectedUnit')
-                      }
-                      disabled={isSaving}
-                    />
-                  ) : null}
-                </div>
-
-                <div className="pv-form-field">
-                  <div className="pv-label-row">
-                    <label className="pv-form-label">
-                      Quantity <span className="pv-req">*</span>
-                    </label>
+                <div className="pv-mat-cell pv-mat-cell--qty">
+                  <div className="pv-mat-cell-label-row">
+                    <span className="pv-mat-cell-label">Qty</span>
                     <FieldSourceBadge
                       meta={fm.quantity}
                       hasValue={String(row.quantity ?? '').trim() !== ''}
-                      ocrActive={ocrActive}
-                      disabled={isSaving}
                     />
                   </div>
                   <input
                     type="number"
+                    inputMode="decimal"
                     step="any"
                     min="0.001"
-                    className={`pv-input${qtyErr ? ' pv-input--error' : ''}`}
+                    className={`pv-input pv-input--dense${
+                      qtyErr ? ' pv-input--error' : ''
+                    }`}
                     placeholder="0"
                     value={row.quantity}
                     onChange={(e) =>
                       onUpdateLineItem(row.rowKey, 'quantity', e.target.value)
                     }
                     disabled={isSaving}
-                    aria-label={`Line item ${idx + 1} quantity`}
+                    aria-label={`Row ${idx + 1} quantity`}
                   />
                   {qtyErr ? <p className="pv-field-error">{qtyErr}</p> : null}
                   {rowSugs.quantity ? (
@@ -404,30 +223,47 @@ export function PurchaseLineItemsEditor({
                   ) : null}
                 </div>
 
-                <div className="pv-form-field">
-                  <div className="pv-label-row">
-                    <label className="pv-form-label">
-                      Unit Price (₹) <span className="pv-req">*</span>
-                    </label>
+                <div className="pv-mat-cell pv-mat-cell--unit">
+                  <span className="pv-mat-cell-label">Unit</span>
+                  <div
+                    className={`pv-unit-chip${
+                      hasUnitMismatch ? ' pv-unit-chip--mismatch' : ''
+                    }`}
+                    title={
+                      selectedMat
+                        ? selectedMat.unit
+                        : row.detectedUnit
+                          ? `Bill unit: ${row.detectedUnit}`
+                          : 'Unit set from material'
+                    }
+                  >
+                    {unitDisplay}
+                  </div>
+                </div>
+
+                <div className="pv-mat-cell pv-mat-cell--price">
+                  <div className="pv-mat-cell-label-row">
+                    <span className="pv-mat-cell-label">Unit price</span>
                     <FieldSourceBadge
                       meta={fm.unitPrice}
                       hasValue={String(row.unitPrice ?? '').trim() !== ''}
-                      ocrActive={ocrActive}
-                      disabled={isSaving}
                     />
                   </div>
                   <input
                     type="number"
+                    inputMode="decimal"
                     step="0.01"
                     min="0.01"
-                    className={`pv-input${priceErr ? ' pv-input--error' : ''}`}
+                    className={`pv-input pv-input--dense${
+                      priceErr ? ' pv-input--error' : ''
+                    }`}
                     placeholder="0.00"
                     value={row.unitPrice}
                     onChange={(e) =>
                       onUpdateLineItem(row.rowKey, 'unitPrice', e.target.value)
                     }
                     disabled={isSaving}
-                    aria-label={`Line item ${idx + 1} unit price`}
+                    aria-label={`Row ${idx + 1} unit price`}
                   />
                   {priceErr ? (
                     <p className="pv-field-error">{priceErr}</p>
@@ -448,28 +284,119 @@ export function PurchaseLineItemsEditor({
                   ) : null}
                 </div>
 
-                <div className="pv-form-field pv-line-card__total-col">
-                  <label className="pv-form-label">Line Total</label>
-                  <div className="pv-readonly-total">
+                <div className="pv-mat-cell pv-mat-cell--total">
+                  <div className="pv-line-total-text">
                     {formatInrCurrency(lineTotal)}
                   </div>
                 </div>
+
+                <div className="pv-mat-cell pv-mat-cell--remove">
+                  <button
+                    type="button"
+                    className="pv-row-icon-remove"
+                    onClick={() => onRemoveLineRow(row.rowKey)}
+                    disabled={isSaving}
+                    aria-label={
+                      lineItems.length > 1
+                        ? `Remove material row ${idx + 1}`
+                        : `Clear material row ${idx + 1}`
+                    }
+                    title={lineItems.length > 1 ? 'Remove row' : 'Clear row'}
+                  >
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path
+                        d="M4 4L12 12M12 4L4 12"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
 
-              <div className="pv-line-card__remarks">
-                <input
-                  type="text"
-                  className="pv-input pv-input--compact"
-                  placeholder="Line item note / shade / batch code (optional)"
-                  value={row.remarks}
-                  onChange={(e) =>
-                    onUpdateLineItem(row.rowKey, 'remarks', e.target.value)
-                  }
-                  maxLength={300}
-                  disabled={isSaving}
-                  aria-label={`Line item ${idx + 1} remarks`}
-                />
-              </div>
+              {row.extractedDescription ||
+              hasUnitMismatch ||
+              (!row.materialId &&
+                Array.isArray(row.suggestions) &&
+                row.suggestions.length > 0) ||
+              !isNoteOpen ? (
+                <div className="pv-mat-row__subbar">
+                  <div className="pv-mat-row__submeta">
+                    {row.extractedDescription ? (
+                      <span className="pv-bill-line-caption">
+                        Bill: &ldquo;{row.extractedDescription}&rdquo;
+                      </span>
+                    ) : null}
+
+                    {hasUnitMismatch ? (
+                      <span className="pv-unit-mismatch-caption">
+                        Bill unit ({detectedShortUnit}) differs from catalog (
+                        {selectedShortUnit})
+                      </span>
+                    ) : null}
+
+                    {!row.materialId &&
+                    Array.isArray(row.suggestions) &&
+                    row.suggestions.length > 0 ? (
+                      <div className="pv-suggestions-row">
+                        <span className="pv-suggestions-row__label">
+                          Suggested:
+                        </span>
+                        {row.suggestions.map((sug) => (
+                          <button
+                            key={sug.id}
+                            type="button"
+                            className="pv-suggestion-chip"
+                            onClick={() =>
+                              onUpdateLineItem(row.rowKey, 'materialId', sug.id)
+                            }
+                          >
+                            {sug.name} ({formatMaterialUnit(sug.unit)})
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {!isNoteOpen ? (
+                    <button
+                      type="button"
+                      className="pv-note-toggle"
+                      onClick={() => toggleNoteOpen(row.rowKey)}
+                      disabled={isSaving}
+                    >
+                      + Note
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {isNoteOpen ? (
+                <div className="pv-mat-row__note">
+                  <input
+                    type="text"
+                    className="pv-input pv-input--compact"
+                    placeholder="Optional line note (shade, batch, dimensions)"
+                    value={row.remarks}
+                    onChange={(e) =>
+                      onUpdateLineItem(row.rowKey, 'remarks', e.target.value)
+                    }
+                    maxLength={300}
+                    disabled={isSaving}
+                    aria-label={`Row ${idx + 1} note`}
+                  />
+                  {!hasRemarksText ? (
+                    <button
+                      type="button"
+                      className="pv-note-toggle"
+                      onClick={() => toggleNoteOpen(row.rowKey)}
+                    >
+                      Hide
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           )
         })}
@@ -477,41 +404,35 @@ export function PurchaseLineItemsEditor({
 
       {suggestedLineItems.length > 0 ? (
         <div
-          className="pv-suggested-items-panel"
+          className="pv-compact-tray"
           role="region"
-          aria-label="Suggested bill items"
+          aria-label="Additional bill items"
         >
-          <div className="pv-uncertain-panel__header">
-            <div>
-              <h3 className="pv-uncertain-panel__title">
-                Additional Bill Items Detected ({suggestedLineItems.length})
-              </h3>
-              <p className="pv-uncertain-panel__subtitle">
-                Your existing material rows were preserved. Add any of these
-                validated bill items if they belong on this voucher.
-              </p>
-            </div>
-            <div className="pv-alert__actions">
+          <div className="pv-compact-tray__head">
+            <span className="pv-compact-tray__title">
+              Additional bill items ({suggestedLineItems.length})
+            </span>
+            <div className="pv-compact-tray__head-actions">
               <button
                 type="button"
-                className="pv-action-btn"
+                className="pv-link-btn"
                 onClick={onAddAllSuggestedLineItems}
                 disabled={isSaving}
               >
-                + Add All
+                + Add all
               </button>
               <button
                 type="button"
-                className="pv-text-btn"
+                className="pv-link-btn pv-link-btn--muted"
                 onClick={onDismissAllSuggestedLineItems}
                 disabled={isSaving}
               >
-                Dismiss All
+                Dismiss
               </button>
             </div>
           </div>
 
-          <div className="pv-uncertain-list">
+          <div className="pv-compact-tray__list">
             {suggestedLineItems.map((sug) => {
               const matchedMat = sug.materialId
                 ? materialById.get(sug.materialId)
@@ -521,44 +442,32 @@ export function PurchaseLineItemsEditor({
                 sug.unitPrice,
               )
               return (
-                <div key={sug.suggestionKey} className="pv-uncertain-item">
-                  <div className="pv-uncertain-item__main">
-                    <div className="pv-uncertain-item__text">
-                      <strong>{sug.extractedDescription}</strong>
-                      {matchedMat ? (
-                        <span className="pv-uncertain-item__raw">
-                          Catalog match: {matchedMat.name} (
-                          {formatMaterialUnit(matchedMat.unit)})
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="pv-uncertain-item__meta">
-                      <span>Qty: {sug.quantity}</span>
-                      {sug.detectedUnit ? (
-                        <span>
-                          Unit:{' '}
-                          {formatMaterialUnit(sug.detectedUnit) ||
-                            sug.detectedUnit}
-                        </span>
-                      ) : null}
-                      <span>
-                        Rate: {formatInrCurrency(Number(sug.unitPrice))}
-                      </span>
-                      <span>Total: {formatInrCurrency(sugTotal)}</span>
-                    </div>
+                <div key={sug.suggestionKey} className="pv-compact-tray__item">
+                  <div className="pv-compact-tray__info">
+                    <strong>{sug.extractedDescription}</strong>
+                    <span>
+                      {matchedMat ? `${matchedMat.name} · ` : ''}
+                      {sug.quantity}{' '}
+                      {sug.detectedUnit
+                        ? formatMaterialUnit(sug.detectedUnit) ||
+                          sug.detectedUnit
+                        : ''}{' '}
+                      × {formatInrCurrency(Number(sug.unitPrice))} ={' '}
+                      {formatInrCurrency(sugTotal)}
+                    </span>
                   </div>
-                  <div className="pv-uncertain-item__actions">
+                  <div className="pv-compact-tray__btns">
                     <button
                       type="button"
-                      className="pv-action-btn"
+                      className="pv-mini-btn"
                       onClick={() => onAddSuggestedLineItem?.(sug.suggestionKey)}
                       disabled={isSaving}
                     >
-                      + Add to Voucher
+                      + Add
                     </button>
                     <button
                       type="button"
-                      className="pv-action-btn pv-action-btn--danger"
+                      className="pv-mini-btn pv-mini-btn--danger"
                       onClick={() =>
                         onDismissSuggestedLineItem?.(sug.suggestionKey)
                       }
@@ -576,99 +485,60 @@ export function PurchaseLineItemsEditor({
 
       {uncertainLineItems.length > 0 ? (
         <div
-          className="pv-uncertain-panel"
+          className="pv-compact-tray pv-compact-tray--warn"
           role="region"
           aria-label="Unverified bill rows"
         >
-          <div className="pv-uncertain-panel__header">
-            <div>
-              <h3 className="pv-uncertain-panel__title">
-                Unverified Bill Rows Excluded from Totals (
-                {uncertainLineItems.length})
-              </h3>
-              <p className="pv-uncertain-panel__subtitle">
-                These OCR rows had missing columns, unreadable units, or
-                mismatched quantity × rate math. They are excluded from
-                financial totals until you manually verify or dismiss them.
-              </p>
-            </div>
+          <div className="pv-compact-tray__head">
+            <span className="pv-compact-tray__title">
+              Unverified bill rows excluded from totals (
+              {uncertainLineItems.length})
+            </span>
             <button
               type="button"
-              className="pv-text-btn"
+              className="pv-link-btn pv-link-btn--muted"
               onClick={onDismissAllUncertainRows}
               disabled={isSaving}
             >
-              Dismiss All
+              Dismiss all
             </button>
           </div>
 
-          <div className="pv-uncertain-list">
+          <div className="pv-compact-tray__list">
             {uncertainLineItems.map((uRow) => (
-              <div key={uRow.uncertainKey} className="pv-uncertain-item">
-                <div className="pv-uncertain-item__main">
-                  <div className="pv-uncertain-item__text">
-                    <strong>
-                      {uRow.extractedDescription || uRow.rawRowText}
-                    </strong>
-                    {uRow.extractedDescription &&
-                    uRow.rawRowText &&
-                    uRow.extractedDescription !== uRow.rawRowText ? (
-                      <span className="pv-uncertain-item__raw">
-                        Raw OCR: {uRow.rawRowText}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <div className="pv-uncertain-item__meta">
-                    {uRow.quantity ? (
-                      <span>Qty read: {uRow.quantity}</span>
-                    ) : (
-                      <span>Qty: unclear</span>
-                    )}
-                    {uRow.detectedUnit ? (
-                      <span>
-                        Unit read:{' '}
-                        {formatMaterialUnit(uRow.detectedUnit) ||
-                          uRow.detectedUnit}
-                      </span>
-                    ) : (
-                      <span>Unit: unclear</span>
-                    )}
-                    {uRow.unitPrice ? (
-                      <span>Rate read: ₹{uRow.unitPrice}</span>
-                    ) : (
-                      <span>Rate: unclear</span>
-                    )}
-                    {uRow.lineAmount !== null &&
-                    uRow.lineAmount !== undefined ? (
-                      <span>
-                        Amount read: {formatInrCurrency(uRow.lineAmount)}
-                      </span>
-                    ) : null}
-                  </div>
-
+              <div key={uRow.uncertainKey} className="pv-compact-tray__item">
+                <div className="pv-compact-tray__info">
+                  <strong>
+                    {uRow.extractedDescription || uRow.rawRowText}
+                  </strong>
+                  <span>
+                    Qty: {uRow.quantity || 'unclear'} · Unit:{' '}
+                    {uRow.detectedUnit
+                      ? formatMaterialUnit(uRow.detectedUnit) ||
+                        uRow.detectedUnit
+                      : 'unclear'}{' '}
+                    · Rate: {uRow.unitPrice ? `₹${uRow.unitPrice}` : 'unclear'}
+                  </span>
                   {Array.isArray(uRow.validationReasons) &&
                   uRow.validationReasons.length > 0 ? (
-                    <ul className="pv-uncertain-item__reasons">
-                      {uRow.validationReasons.map((reason, rIdx) => (
-                        <li key={rIdx}>{reason}</li>
-                      ))}
-                    </ul>
+                    <span className="pv-compact-tray__reason">
+                      {uRow.validationReasons[0]}
+                    </span>
                   ) : null}
                 </div>
 
-                <div className="pv-uncertain-item__actions">
+                <div className="pv-compact-tray__btns">
                   <button
                     type="button"
-                    className="pv-action-btn"
+                    className="pv-mini-btn"
                     onClick={() => onPromoteUncertainRow(uRow.uncertainKey)}
                     disabled={isSaving}
                   >
-                    Add for Manual Entry
+                    Add row
                   </button>
                   <button
                     type="button"
-                    className="pv-action-btn pv-action-btn--danger"
+                    className="pv-mini-btn pv-mini-btn--danger"
                     onClick={() => onDismissUncertainRow(uRow.uncertainKey)}
                     disabled={isSaving}
                   >
@@ -681,26 +551,18 @@ export function PurchaseLineItemsEditor({
         </div>
       ) : null}
 
-      <div className="pv-missing-material-callout">
-        <div>
-          <strong>Need a material not listed in the catalog?</strong>
-          <p>
-            Unrecognized bill items are never auto-created as Raw Materials.{' '}
-            {adminAccess
-              ? 'Cancel this draft to add the new material with its canonical unit in Raw Materials first.'
-              : 'Please ask an Administrator to register the material in Raw Materials before recording this voucher.'}
-          </p>
-        </div>
-        {adminAccess ? (
+      {adminAccess ? (
+        <div className="pv-catalog-caption">
+          <span>Material not in catalog?</span>{' '}
           <button
             type="button"
-            className="admin-btn admin-btn--secondary"
+            className="pv-link-btn"
             onClick={onRequestCancelToCatalog}
           >
-            Cancel &amp; Go to Raw Materials
+            Open Raw Materials
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </section>
   )
 }

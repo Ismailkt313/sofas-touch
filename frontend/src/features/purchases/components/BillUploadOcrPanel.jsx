@@ -1,9 +1,69 @@
 import { useRef, useState } from 'react'
-import { BillAttachmentCard } from './BillAttachmentCard'
 import {
   MAX_BILL_ATTACHMENTS,
   formatFileSize,
 } from '../services/purchaseService'
+
+export function BillLocalPreviewPanel({
+  entry,
+  isExpanded = false,
+  onToggleExpanded,
+  onClose,
+  className = '',
+}) {
+  if (!entry) {
+    return null
+  }
+
+  const previewSrc = entry.isPdf
+    ? entry.renderedPdfPreviewUrl
+    : entry.localObjectUrl
+
+  return (
+    <div
+      className={`pv-bill-preview${
+        isExpanded ? ' pv-bill-preview--expanded' : ''
+      }${className ? ` ${className}` : ''}`}
+    >
+      <div className="pv-bill-preview__bar">
+        <span className="pv-bill-preview__name" title={entry.file.name}>
+          {entry.file.name}
+        </span>
+        <div className="pv-bill-preview__controls">
+          {previewSrc && onToggleExpanded ? (
+            <button
+              type="button"
+              className="pv-link-btn"
+              onClick={onToggleExpanded}
+            >
+              {isExpanded ? 'Smaller' : 'Larger'}
+            </button>
+          ) : null}
+          {onClose ? (
+            <button type="button" className="pv-link-btn" onClick={onClose}>
+              Hide
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="pv-bill-preview__stage">
+        {previewSrc ? (
+          <img
+            src={previewSrc}
+            alt={`Bill preview of ${entry.file.name}`}
+            className="pv-bill-preview__img"
+          />
+        ) : (
+          <p className="pv-bill-preview__pdf-empty">
+            PDF attached ({formatFileSize(entry.file.size)}). Use{' '}
+            <strong>Re-read</strong> to render a page preview.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export function BillUploadOcrPanel({
   isSaving,
@@ -15,7 +75,11 @@ export function BillUploadOcrPanel({
   onToggleRawOcrText,
   pendingFiles,
   activePreviewFileIdx,
-  onSelectPreviewFile,
+  isPreviewOpen = false,
+  isPreviewExpanded = false,
+  onTogglePreviewForFile,
+  onTogglePreviewExpanded,
+  onClosePreview,
   onFilesSelected,
   onReplacePendingFile,
   onRunOcrForFile,
@@ -26,15 +90,16 @@ export function BillUploadOcrPanel({
 }) {
   const replaceInputRef = useRef(null)
   const [replacingLocalId, setReplacingLocalId] = useState('')
-  const [isPreviewVisible, setIsPreviewVisible] = useState(true)
-  const [isPreviewExpanded, setIsPreviewExpanded] = useState(false)
-  const [showAllWarnings, setShowAllWarnings] = useState(false)
+  const [showWarnings, setShowWarnings] = useState(false)
 
   const activePreviewEntry = pendingFiles[activePreviewFileIdx] || null
   const confidenceRounded = Math.round(Number(ocrState.averageConfidence) || 0)
   const isLowConfidence = confidenceRounded > 0 && confidenceRounded < 65
   const warnings = Array.isArray(ocrState.warnings) ? ocrState.warnings : []
-  const visibleWarnings = showAllWarnings ? warnings : warnings.slice(0, 2)
+  const hasWarnTone =
+    warnings.length > 0 || isLowConfidence || !ocrState.tableDetected
+  const hasAnyFiles =
+    pendingFiles.length > 0 || retainedExistingAttachments.length > 0
 
   const triggerReplaceFor = (localId) => {
     if (isSaving || ocrState.isRunning) return
@@ -54,7 +119,12 @@ export function BillUploadOcrPanel({
   }
 
   return (
-    <section className="pv-surface pv-section-card pv-bill-panel">
+    <section
+      className={`pv-upload-strip${
+        hasAnyFiles ? ' pv-upload-strip--populated' : ''
+      }`}
+      aria-label="Bill attachment"
+    >
       <input
         ref={fileInputRef}
         type="file"
@@ -76,72 +146,188 @@ export function BillUploadOcrPanel({
         disabled={isSaving || ocrState.isRunning}
       />
 
-      {pendingFiles.length === 0 && retainedExistingAttachments.length === 0 ? (
-        <div className="pv-compact-upload-bar">
-          <div className="pv-compact-upload-bar__info">
-            <div className="pv-compact-upload-bar__icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none">
+      {!hasAnyFiles ? (
+        <div className="pv-upload-strip__empty">
+          <div className="pv-upload-strip__lead">
+            <span className="pv-upload-strip__icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none">
                 <path
-                  d="M12 16V6M12 6L8.25 9.75M12 6L15.75 9.75M5 18.5H19"
+                  d="M5.5 2.75H12L15.25 6V16.25C15.25 16.8023 14.8023 17.25 14.25 17.25H5.75C5.19772 17.25 4.75 16.8023 4.75 16.25V3.5C4.75 3.08579 5.08579 2.75 5.5 2.75Z"
                   stroke="currentColor"
-                  strokeWidth="1.8"
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M11.75 2.75V6.25H15.25M7.5 10.25H12.5M7.5 13H10.75"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               </svg>
-            </div>
-            <div>
-              <h2 className="pv-compact-upload-bar__title">
-                Supplier Bill <span className="pv-opt">(Optional — Local OCR)</span>
-              </h2>
-              <p className="pv-compact-upload-bar__desc">
-                Upload an invoice image or PDF (max 10 MB) to preview and
-                autofill empty fields, or enter details manually below.
-              </p>
+            </span>
+
+            <div className="pv-upload-strip__copy">
+              <span className="pv-upload-strip__label">
+                Attach bill <span className="pv-opt">(optional)</span>
+              </span>
+              <span className="pv-upload-strip__sub">
+                Upload an image or PDF to autofill details
+              </span>
             </div>
           </div>
 
-          <label
-            htmlFor="pv-bill-file-input"
-            className="admin-btn admin-btn--secondary pv-upload-trigger"
-          >
-            <span>Upload Bill</span>
+          <label htmlFor="pv-bill-file-input" className="pv-upload-btn">
+            Upload
           </label>
         </div>
       ) : (
-        <div className="pv-section-card__header pv-bill-panel__header">
-          <div>
-            <h2 className="pv-section-card__title">
-              Supplier Bill <span className="pv-opt">(Optional)</span>
-            </h2>
-            <p className="pv-section-card__subtitle">
-              Edited and confirmed fields are protected whenever OCR runs or a
-              bill is replaced.
-            </p>
+        <div className="pv-upload-strip__files-wrap">
+          <div className="pv-uploaded-list">
+            {retainedExistingAttachments.map((att) => {
+              const isPdf =
+                String(att.mimeType || '').toLowerCase() === 'application/pdf'
+              return (
+                <div
+                  key={att.attachmentId}
+                  className="pv-uploaded-file-row"
+                >
+                  <button
+                    type="button"
+                    className="pv-uploaded-file-row__file"
+                    onClick={() => onOpenExistingAttachmentPreview?.(att)}
+                  >
+                    <span
+                      className="pv-uploaded-thumb pv-uploaded-thumb--badge"
+                      aria-hidden="true"
+                    >
+                      {isPdf ? 'PDF' : 'BILL'}
+                    </span>
+                    <span className="pv-uploaded-file-row__meta">
+                      <span
+                        className="pv-uploaded-file-row__name"
+                        title={att.originalName}
+                      >
+                        {att.originalName}
+                      </span>
+                      <span className="pv-uploaded-file-row__size">
+                        Saved · {formatFileSize(att.sizeBytes)}
+                      </span>
+                    </span>
+                  </button>
+
+                  <div className="pv-uploaded-file-row__actions">
+                    <button
+                      type="button"
+                      className="pv-mini-btn"
+                      onClick={() => onOpenExistingAttachmentPreview?.(att)}
+                    >
+                      Preview
+                    </button>
+                    <button
+                      type="button"
+                      className="pv-mini-btn pv-mini-btn--danger"
+                      disabled={isSaving}
+                      onClick={() =>
+                        onMarkExistingAttachmentRemoved?.(att.attachmentId)
+                      }
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+
+            {pendingFiles.map((entry, idx) => {
+              const thumbSrc = entry.isPdf
+                ? entry.renderedPdfPreviewUrl
+                : entry.localObjectUrl
+              const isThisPreviewOpen =
+                isPreviewOpen && idx === activePreviewFileIdx
+
+              return (
+                <div
+                  key={entry.localId}
+                  className={`pv-uploaded-file-row${
+                    isThisPreviewOpen ? ' pv-uploaded-file-row--active' : ''
+                  }`}
+                >
+                  <button
+                    type="button"
+                    className="pv-uploaded-file-row__file"
+                    onClick={() => onTogglePreviewForFile?.(idx)}
+                  >
+                    {thumbSrc ? (
+                      <img
+                        src={thumbSrc}
+                        alt=""
+                        className="pv-uploaded-thumb"
+                      />
+                    ) : (
+                      <span
+                        className="pv-uploaded-thumb pv-uploaded-thumb--badge"
+                        aria-hidden="true"
+                      >
+                        {entry.isPdf ? 'PDF' : 'IMG'}
+                      </span>
+                    )}
+
+                    <span className="pv-uploaded-file-row__meta">
+                      <span
+                        className="pv-uploaded-file-row__name"
+                        title={entry.file.name}
+                      >
+                        {entry.file.name}
+                      </span>
+                      <span className="pv-uploaded-file-row__size">
+                        {formatFileSize(entry.file.size)}
+                      </span>
+                    </span>
+                  </button>
+
+                  <div className="pv-uploaded-file-row__actions">
+                    <button
+                      type="button"
+                      className="pv-mini-btn"
+                      onClick={() => onTogglePreviewForFile?.(idx)}
+                    >
+                      {isThisPreviewOpen ? 'Hide' : 'Preview'}
+                    </button>
+                    <button
+                      type="button"
+                      className="pv-mini-btn"
+                      disabled={ocrState.isRunning || isSaving}
+                      onClick={() => triggerReplaceFor(entry.localId)}
+                    >
+                      Replace
+                    </button>
+                    <button
+                      type="button"
+                      className="pv-mini-btn pv-mini-btn--danger"
+                      disabled={isSaving}
+                      onClick={() => onRemovePendingFile(entry.localId)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
 
-          <div className="pv-bill-panel__top-btns">
-            {pendingFiles.length > 0 ? (
-              <button
-                type="button"
-                className="pv-text-btn"
-                onClick={() => setIsPreviewVisible((prev) => !prev)}
+          {totalAttachmentCount < MAX_BILL_ATTACHMENTS ? (
+            <div className="pv-upload-strip__more">
+              <label
+                htmlFor="pv-bill-file-input"
+                className={`pv-link-btn${
+                  isSaving ? ' pv-upload-trigger--disabled' : ''
+                }`}
               >
-                {isPreviewVisible ? 'Hide Preview' : 'Show Preview'}
-              </button>
-            ) : null}
-
-            <label
-              htmlFor="pv-bill-file-input"
-              className={`admin-btn admin-btn--secondary pv-upload-trigger${
-                totalAttachmentCount >= MAX_BILL_ATTACHMENTS
-                  ? ' pv-upload-trigger--disabled'
-                  : ''
-              }`}
-            >
-              <span>+ Add File</span>
-            </label>
-          </div>
+                + Attach another page
+              </label>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -152,287 +338,119 @@ export function BillUploadOcrPanel({
       ) : null}
 
       {ocrState.isRunning ? (
-        <div className="pv-progress-panel" role="status" aria-live="polite">
-          <div className="pv-progress-panel__top">
-            <span>{ocrState.message}</span>
+        <div className="pv-ocr-running" role="status" aria-live="polite">
+          <div className="pv-ocr-running__row">
+            <span className="pv-ocr-running__label">
+              <span className="pv-ocr-spinner" aria-hidden="true" />
+              <span>{ocrState.message || 'Reading bill...'}</span>
+            </span>
             <strong>{ocrState.percent}%</strong>
           </div>
-          <div className="pv-progress-bar">
+          <div className="pv-ocr-running__track">
             <div
-              className="pv-progress-bar__fill"
+              className="pv-ocr-running__fill"
               style={{ width: `${ocrState.percent}%` }}
             />
           </div>
         </div>
       ) : null}
 
-      {ocrState.completed ? (
-        <div className="pv-alert pv-alert--review pv-alert--compact" role="status">
-          <div className="pv-alert__header">
-            <div className="pv-alert__title-group">
-              <strong>OCR Review Needed Before Saving</strong>
-              {confidenceRounded > 0 ? (
-                <span
-                  className={`pv-ocr-badge${
-                    isLowConfidence
-                      ? ' pv-ocr-badge--warn'
-                      : ' pv-ocr-badge--ok'
-                  }`}
-                >
-                  Confidence: {confidenceRounded}%
-                </span>
-              ) : null}
-              <span
-                className={`pv-ocr-badge${
-                  ocrState.tableDetected
-                    ? ' pv-ocr-badge--ok'
-                    : ' pv-ocr-badge--warn'
-                }`}
-              >
-                {ocrState.tableDetected
-                  ? 'Table Detected'
-                  : 'Table Header Unclear'}
-              </span>
-            </div>
-
-            <div className="pv-alert__actions">
-              {activePreviewEntry ? (
-                <button
-                  type="button"
-                  className="pv-text-btn"
-                  disabled={ocrState.isRunning || isSaving}
-                  onClick={() =>
-                    onRunOcrForFile(activePreviewEntry, { isReprocess: true })
-                  }
-                >
-                  Reprocess OCR
-                </button>
-              ) : null}
-              {ocrState.rawText ? (
-                <button
-                  type="button"
-                  className="pv-text-btn"
-                  onClick={onToggleRawOcrText}
-                >
-                  {showRawOcrText ? 'Hide OCR Text' : 'Raw OCR Text'}
-                </button>
-              ) : null}
-            </div>
+      {!ocrState.isRunning && ocrState.completed ? (
+        <div
+          className={`pv-ocr-status${
+            hasWarnTone ? ' pv-ocr-status--warn' : ' pv-ocr-status--ok'
+          }`}
+          role="status"
+        >
+          <div className="pv-ocr-status__main">
+            <span className="pv-ocr-status__dot" aria-hidden="true" />
+            <span className="pv-ocr-status__msg">
+              {ocrState.summaryNote ||
+                'Autofilled readable fields from bill — verify before saving.'}
+            </span>
           </div>
 
-          <p className="pv-alert__body">
-            {ocrState.summaryNote ||
-              'Empty fields were autofilled from the bill while your manual and confirmed entries were preserved. Verify all values before saving.'}
-          </p>
+          <div className="pv-ocr-status__links">
+            {warnings.length > 0 ? (
+              <button
+                type="button"
+                className="pv-link-btn"
+                onClick={() => setShowWarnings((prev) => !prev)}
+              >
+                {showWarnings
+                  ? 'Hide warnings'
+                  : `Warnings (${warnings.length})`}
+              </button>
+            ) : null}
+            {activePreviewEntry ? (
+              <button
+                type="button"
+                className="pv-link-btn"
+                disabled={isSaving}
+                onClick={() =>
+                  onRunOcrForFile(activePreviewEntry, { isReprocess: true })
+                }
+              >
+                Re-read
+              </button>
+            ) : null}
+          </div>
 
-          {warnings.length > 0 ? (
-            <div className="pv-alert__warnings-wrap">
-              <ul className="pv-alert__list">
-                {visibleWarnings.map((warn, i) => (
-                  <li key={i}>{warn}</li>
+          {showWarnings && warnings.length > 0 ? (
+            <div className="pv-ocr-warnings-drawer">
+              <ul className="pv-ocr-warnings-list">
+                {warnings.map((warn, idx) => (
+                  <li key={idx}>{warn}</li>
                 ))}
               </ul>
-              {warnings.length > 2 ? (
-                <button
-                  type="button"
-                  className="pv-text-btn pv-text-btn--sm"
-                  onClick={() => setShowAllWarnings((prev) => !prev)}
-                >
-                  {showAllWarnings
-                    ? 'Show fewer notices'
-                    : `Show ${warnings.length - 2} more notice${
-                        warnings.length - 2 === 1 ? '' : 's'
-                      }`}
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
-          {showRawOcrText && ocrState.rawText ? (
-            <pre className="pv-ocr-raw-box">{ocrState.rawText}</pre>
-          ) : null}
-        </div>
-      ) : null}
-
-      {ocrState.error ? (
-        <div className="pv-alert pv-alert--warning pv-alert--compact" role="alert">
-          <div className="pv-alert__header">
-            <strong>Local OCR Notice: {ocrState.error}</strong>
-            <div className="pv-alert__actions">
-              {activePreviewEntry ? (
-                <button
-                  type="button"
-                  className="pv-text-btn"
-                  disabled={ocrState.isRunning || isSaving}
-                  onClick={() =>
-                    onRunOcrForFile(activePreviewEntry, { isReprocess: true })
-                  }
-                >
-                  Retry OCR
-                </button>
-              ) : null}
               {ocrState.rawText ? (
                 <button
                   type="button"
-                  className="pv-text-btn"
+                  className="pv-link-btn"
                   onClick={onToggleRawOcrText}
                 >
-                  {showRawOcrText ? 'Hide OCR Text' : 'Raw OCR Text'}
+                  {showRawOcrText ? 'Hide raw OCR text' : 'View raw OCR text'}
                 </button>
               ) : null}
+              {showRawOcrText && ocrState.rawText ? (
+                <pre className="pv-ocr-raw-box">{ocrState.rawText}</pre>
+              ) : null}
             </div>
-          </div>
-          {showRawOcrText && ocrState.rawText ? (
-            <pre className="pv-ocr-raw-box">{ocrState.rawText}</pre>
           ) : null}
         </div>
       ) : null}
 
-      {pendingFiles.length > 0 ? (
-        <div
-          className={`pv-upload-workspace${
-            !isPreviewVisible ? ' pv-upload-workspace--collapsed' : ''
-          }`}
-        >
-          <div className="pv-pending-files-list">
-            {pendingFiles.map((entry, idx) => (
-              <div
-                key={entry.localId}
-                className={`pv-pending-file-item${
-                  idx === activePreviewFileIdx
-                    ? ' pv-pending-file-item--active'
-                    : ''
-                }`}
+      {!ocrState.isRunning && ocrState.error ? (
+        <div className="pv-ocr-status pv-ocr-status--warn" role="alert">
+          <div className="pv-ocr-status__main">
+            <span className="pv-ocr-status__dot" aria-hidden="true" />
+            <span className="pv-ocr-status__msg">{ocrState.error}</span>
+          </div>
+          {activePreviewEntry ? (
+            <div className="pv-ocr-status__links">
+              <button
+                type="button"
+                className="pv-link-btn"
+                disabled={isSaving}
+                onClick={() =>
+                  onRunOcrForFile(activePreviewEntry, { isReprocess: true })
+                }
               >
-                <button
-                  type="button"
-                  className="pv-pending-file-item__select"
-                  onClick={() => {
-                    onSelectPreviewFile(idx)
-                    setIsPreviewVisible(true)
-                  }}
-                >
-                  <span className="pv-pending-file-item__name">
-                    {entry.file.name}
-                  </span>
-                  <span className="pv-pending-file-item__size">
-                    {entry.isPdf ? 'PDF' : 'Image'} ·{' '}
-                    {formatFileSize(entry.file.size)}
-                  </span>
-                </button>
-
-                <div className="pv-pending-file-item__btns">
-                  <button
-                    type="button"
-                    className="pv-action-btn"
-                    disabled={ocrState.isRunning || isSaving}
-                    onClick={() =>
-                      onRunOcrForFile(entry, {
-                        isReprocess: Boolean(entry.ocrProcessedOnce),
-                      })
-                    }
-                  >
-                    {ocrState.isRunning
-                      ? 'Reading...'
-                      : entry.ocrProcessedOnce
-                        ? 'Reprocess OCR'
-                        : 'Run OCR'}
-                  </button>
-                  <button
-                    type="button"
-                    className="pv-action-btn"
-                    disabled={ocrState.isRunning || isSaving}
-                    onClick={() => triggerReplaceFor(entry.localId)}
-                  >
-                    Replace
-                  </button>
-                  <button
-                    type="button"
-                    className="pv-action-btn pv-action-btn--danger"
-                    disabled={isSaving}
-                    onClick={() => onRemovePendingFile(entry.localId)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {isPreviewVisible && activePreviewEntry ? (
-            <div
-              className={`pv-local-preview-box${
-                isPreviewExpanded ? ' pv-local-preview-box--expanded' : ''
-              }`}
-            >
-              <div className="pv-local-preview-box__head">
-                <span>
-                  Bill Preview: <strong>{activePreviewEntry.file.name}</strong>
-                </span>
-                <button
-                  type="button"
-                  className="pv-text-btn pv-text-btn--sm"
-                  onClick={() => setIsPreviewExpanded((prev) => !prev)}
-                >
-                  {isPreviewExpanded ? 'Compact Size' : 'Expand Size'}
-                </button>
-              </div>
-              <div className="pv-local-preview-box__body">
-                {activePreviewEntry.isPdf ? (
-                  activePreviewEntry.renderedPdfPreviewUrl ? (
-                    <img
-                      src={activePreviewEntry.renderedPdfPreviewUrl}
-                      alt={`Rendered page 1 of ${activePreviewEntry.file.name}`}
-                      className="pv-local-preview-img"
-                    />
-                  ) : (
-                    <div className="pv-local-pdf-note">
-                      <p>
-                        PDF attached (
-                        {formatFileSize(activePreviewEntry.file.size)}). Click{' '}
-                        <strong>Run OCR</strong> to render a local page preview
-                        and extract text.
-                      </p>
-                    </div>
-                  )
-                ) : (
-                  <img
-                    src={activePreviewEntry.localObjectUrl}
-                    alt={`Preview of ${activePreviewEntry.file.name}`}
-                    className="pv-local-preview-img"
-                  />
-                )}
-              </div>
+                Retry
+              </button>
             </div>
           ) : null}
         </div>
       ) : null}
 
-      {retainedExistingAttachments.length > 0 ? (
-        <div className="pv-existing-att-block">
-          <h3 className="pv-subsection-title">
-            Saved Bill Attachments ({retainedExistingAttachments.length})
-          </h3>
-          <div className="pv-bill-cards-grid">
-            {retainedExistingAttachments.map((att) => (
-              <div key={att.attachmentId} className="pv-edit-att-wrap">
-                <BillAttachmentCard
-                  attachment={att}
-                  onOpenPreview={onOpenExistingAttachmentPreview}
-                />
-                <button
-                  type="button"
-                  className="pv-remove-saved-att-btn"
-                  onClick={() =>
-                    onMarkExistingAttachmentRemoved(att.attachmentId)
-                  }
-                >
-                  Remove attachment on save
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+      {isPreviewOpen && activePreviewEntry ? (
+        <BillLocalPreviewPanel
+          entry={activePreviewEntry}
+          isExpanded={isPreviewExpanded}
+          onToggleExpanded={onTogglePreviewExpanded}
+          onClose={onClosePreview}
+          className="pv-bill-preview--inline"
+        />
       ) : null}
     </section>
   )
