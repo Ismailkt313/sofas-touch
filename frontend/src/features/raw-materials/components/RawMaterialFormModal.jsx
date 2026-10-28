@@ -1,5 +1,4 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Dropdown } from '../../../components/common'
 import {
   MAX_MATERIAL_DESCRIPTION_LENGTH,
@@ -15,6 +14,7 @@ const FIELD_DOM_IDS = {
   unit: 'rm-form-unit',
   category: 'rm-form-category',
   description: 'rm-form-description',
+  isActive: 'rm-form-status',
 }
 
 const CREATE_STATUS_OPTIONS = [
@@ -53,8 +53,8 @@ function buildInitialValues(material, isEditMode) {
   if (!isEditMode || !material) {
     return {
       name: '',
-      category: '',
       unit: '',
+      category: '',
       description: '',
       isActive: true,
     }
@@ -62,8 +62,8 @@ function buildInitialValues(material, isEditMode) {
 
   return {
     name: material.name || '',
-    category: material.category || '',
     unit: material.unit || '',
+    category: material.category || '',
     description: material.description || '',
     isActive: material.isActive !== false,
   }
@@ -93,7 +93,7 @@ function validateFormValues(values) {
 }
 
 function focusFirstInvalidField(validationErrors) {
-  const orderedKeys = ['name', 'unit', 'category', 'description']
+  const orderedKeys = ['name', 'unit', 'category', 'description', 'isActive']
   const firstKey = orderedKeys.find((key) => Boolean(validationErrors[key]))
   if (!firstKey || typeof document === 'undefined') {
     return
@@ -177,7 +177,7 @@ export function RawMaterialFormModal({
     }
   }, [isOpen, onClose])
 
-  if (!isOpen || typeof document === 'undefined') {
+  if (!isOpen) {
     return null
   }
 
@@ -266,9 +266,9 @@ export function RawMaterialFormModal({
 
   const isFormDisabled = isSubmitting || isLoadingRecord || Boolean(loadError)
 
-  return createPortal(
+  return (
     <div
-      className="admin-modal-backdrop"
+      className="admin-modal-backdrop rm-modal-backdrop"
       onMouseDown={(event) => {
         backdropMouseDownRef.current = event.target === event.currentTarget
       }}
@@ -284,14 +284,14 @@ export function RawMaterialFormModal({
       }}
     >
       <div
-        className="admin-modal rm-form-modal"
+        className="admin-modal rm-modal rm-form-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={subtitleId}
       >
-        <div className="admin-modal__header">
-          <div>
+        <div className="admin-modal__header rm-modal__header">
+          <div className="rm-modal__heading">
             <h2 id={titleId} className="admin-modal__title">
               {isEditMode ? 'Edit Material' : 'Add Material'}
             </h2>
@@ -303,7 +303,7 @@ export function RawMaterialFormModal({
           </div>
           <button
             type="button"
-            className="admin-modal__close"
+            className="admin-modal__close rm-modal__close"
             onClick={onClose}
             disabled={isSubmitting}
             aria-label="Close material form"
@@ -320,55 +320,64 @@ export function RawMaterialFormModal({
         </div>
 
         <form onSubmit={handleSubmit} className="rm-form" noValidate>
-          <div className="admin-modal__body rm-form__body">
+          <div className="admin-modal__body rm-modal__body rm-form__body">
             {isLoadingRecord ? (
-              <div className="rm-inline-alert rm-inline-alert--info" role="status">
+              <div
+                className="rm-inline-alert rm-inline-alert--info"
+                role="status"
+              >
                 Refreshing saved material details...
               </div>
             ) : null}
 
             {loadError ? (
-              <div className="rm-inline-alert rm-inline-alert--error" role="alert">
+              <div
+                className="rm-inline-alert rm-inline-alert--error"
+                role="alert"
+              >
                 {loadError}
               </div>
             ) : null}
 
             {submitError ? (
-              <div className="rm-inline-alert rm-inline-alert--error" role="alert">
+              <div
+                className="rm-inline-alert rm-inline-alert--error"
+                role="alert"
+              >
                 {submitError}
               </div>
             ) : null}
 
-            <div className="rm-form__field">
-              <label htmlFor={FIELD_DOM_IDS.name} className="rm-form__label">
-                Material Name <span className="rm-form__req">*</span>
-              </label>
-              <input
-                ref={nameInputRef}
-                id={FIELD_DOM_IDS.name}
-                name="name"
-                type="text"
-                className={`rm-form__input${
-                  errors.name ? ' rm-form__input--error' : ''
-                }`}
-                placeholder="e.g., Belgian Linen Velvet, Seasoned Teak Strip"
-                value={values.name}
-                onChange={(event) => updateField('name', event.target.value)}
-                onBlur={handleInputBlur}
-                maxLength={MAX_MATERIAL_NAME_LENGTH}
-                disabled={isFormDisabled}
-                aria-invalid={Boolean(errors.name)}
-                aria-describedby={errors.name ? nameErrorId : undefined}
-                autoComplete="off"
-              />
-              {errors.name ? (
-                <p id={nameErrorId} className="rm-form__error" role="alert">
-                  {errors.name}
-                </p>
-              ) : null}
-            </div>
-
             <div className="rm-form__grid">
+              <div className="rm-form__field rm-form__field--full">
+                <label htmlFor={FIELD_DOM_IDS.name} className="rm-form__label">
+                  Material Name <span className="rm-form__req">*</span>
+                </label>
+                <input
+                  ref={nameInputRef}
+                  id={FIELD_DOM_IDS.name}
+                  name="name"
+                  type="text"
+                  className={`rm-form__input${
+                    errors.name ? ' rm-form__input--error' : ''
+                  }`}
+                  placeholder="e.g., Belgian Linen Velvet, Seasoned Teak Strip"
+                  value={values.name}
+                  onChange={(event) => updateField('name', event.target.value)}
+                  onBlur={handleInputBlur}
+                  maxLength={MAX_MATERIAL_NAME_LENGTH}
+                  disabled={isFormDisabled}
+                  aria-invalid={Boolean(errors.name)}
+                  aria-describedby={errors.name ? nameErrorId : undefined}
+                  autoComplete="off"
+                />
+                {errors.name ? (
+                  <p id={nameErrorId} className="rm-form__error" role="alert">
+                    {errors.name}
+                  </p>
+                ) : null}
+              </div>
+
               <div className="rm-form__field">
                 <label htmlFor={FIELD_DOM_IDS.unit} className="rm-form__label">
                   Unit <span className="rm-form__req">*</span>
@@ -421,83 +430,92 @@ export function RawMaterialFormModal({
                   </p>
                 ) : null}
               </div>
-            </div>
 
-            <div className="rm-form__field">
-              <div className="rm-form__label-row">
-                <label
-                  htmlFor={FIELD_DOM_IDS.description}
-                  className="rm-form__label"
-                >
-                  Description <span className="rm-form__opt">(Optional)</span>
-                </label>
-                <span className="rm-form__counter">
-                  {String(values.description || '').length}/
-                  {MAX_MATERIAL_DESCRIPTION_LENGTH}
-                </span>
-              </div>
-              <textarea
-                id={FIELD_DOM_IDS.description}
-                name="description"
-                rows={3}
-                className={`rm-form__textarea${
-                  errors.description ? ' rm-form__input--error' : ''
-                }`}
-                placeholder="Specifications, weave, thickness, grade, or width notes..."
-                value={values.description}
-                onChange={(event) =>
-                  updateField('description', event.target.value)
-                }
-                onBlur={handleInputBlur}
-                maxLength={MAX_MATERIAL_DESCRIPTION_LENGTH}
-                disabled={isFormDisabled}
-                aria-invalid={Boolean(errors.description)}
-                aria-describedby={
-                  errors.description ? descriptionErrorId : undefined
-                }
-              />
-              {errors.description ? (
-                <p
-                  id={descriptionErrorId}
-                  className="rm-form__error"
-                  role="alert"
-                >
-                  {errors.description}
-                </p>
-              ) : null}
-            </div>
-
-            {isEditMode ? (
-              <div className="rm-form__status-summary">
-                <span className="rm-form__status-label">Current Status</span>
-                <div className="rm-form__status-row">
-                  <RawMaterialStatusBadge isActive={values.isActive} />
-                  <span className="rm-form__status-note">
-                    Use Activate or Deactivate in the actions menu to change
-                    availability.
+              <div className="rm-form__field rm-form__field--full">
+                <div className="rm-form__label-row">
+                  <label
+                    htmlFor={FIELD_DOM_IDS.description}
+                    className="rm-form__label"
+                  >
+                    Description <span className="rm-form__opt">(Optional)</span>
+                  </label>
+                  <span className="rm-form__counter">
+                    {String(values.description || '').length}/
+                    {MAX_MATERIAL_DESCRIPTION_LENGTH}
                   </span>
                 </div>
-              </div>
-            ) : (
-              <div className="rm-form__field">
-                <label htmlFor="rm-form-status" className="rm-form__label">
-                  Active Status
-                </label>
-                <Dropdown
-                  id="rm-form-status"
-                  name="isActive"
-                  variant="form"
-                  value={values.isActive ? 'active' : 'inactive'}
-                  options={CREATE_STATUS_OPTIONS}
+                <textarea
+                  id={FIELD_DOM_IDS.description}
+                  name="description"
+                  rows={3}
+                  className={`rm-form__textarea${
+                    errors.description ? ' rm-form__input--error' : ''
+                  }`}
+                  placeholder="Specifications, weave, thickness, grade, or width notes..."
+                  value={values.description}
+                  onChange={(event) =>
+                    updateField('description', event.target.value)
+                  }
+                  onBlur={handleInputBlur}
+                  maxLength={MAX_MATERIAL_DESCRIPTION_LENGTH}
                   disabled={isFormDisabled}
-                  onChange={(val) => updateField('isActive', val === 'active')}
-                  ariaLabel="Initial active status"
+                  aria-invalid={Boolean(errors.description)}
+                  aria-describedby={
+                    errors.description ? descriptionErrorId : undefined
+                  }
                 />
+                {errors.description ? (
+                  <p
+                    id={descriptionErrorId}
+                    className="rm-form__error"
+                    role="alert"
+                  >
+                    {errors.description}
+                  </p>
+                ) : null}
               </div>
-            )}
+
+              {isEditMode ? (
+                <div className="rm-form__field rm-form__field--full">
+                  <div className="rm-form__status-summary">
+                    <span className="rm-form__status-label">
+                      Current Status
+                    </span>
+                    <div className="rm-form__status-row">
+                      <RawMaterialStatusBadge isActive={values.isActive} />
+                      <span className="rm-form__status-note">
+                        Use Activate or Deactivate in the actions menu to change
+                        availability.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rm-form__field rm-form__field--full">
+                  <label
+                    htmlFor={FIELD_DOM_IDS.isActive}
+                    className="rm-form__label"
+                  >
+                    Active Status
+                  </label>
+                  <Dropdown
+                    id={FIELD_DOM_IDS.isActive}
+                    name="isActive"
+                    variant="form"
+                    value={values.isActive ? 'active' : 'inactive'}
+                    options={CREATE_STATUS_OPTIONS}
+                    disabled={isFormDisabled}
+                    onChange={(val) =>
+                      updateField('isActive', val === 'active')
+                    }
+                    ariaLabel="Active status"
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="admin-modal__footer rm-form__footer">
+          <div className="admin-modal__footer rm-modal__footer rm-form__footer">
             <button
               type="button"
               className="admin-btn admin-btn--secondary"
@@ -522,7 +540,6 @@ export function RawMaterialFormModal({
           </div>
         </form>
       </div>
-    </div>,
-    document.body,
+    </div>
   )
 }

@@ -1,4 +1,3 @@
-/* Soft Touch Sofas - Premium Reusable Dropdown System */
 .sts-dropdown {
   position: relative;
   display: inline-block;
@@ -35,19 +34,20 @@
     background-color 0.16s ease;
 }
 
-/* Variants */
 .sts-dropdown__trigger--filter {
-  height: 40px;
+  height: 38px;
   padding: 0 0.75rem;
   font-size: 0.84375rem;
   background-color: #ffffff;
 }
 
 .sts-dropdown__trigger--form {
-  height: 44px;
+  height: 42px;
   background-color: #fdfbf8;
-  border-color: #d5c7b7;
-  font-size: 0.9375rem;
+  border-color: #d5c6b5;
+  font-size: 0.875rem;
+  font-weight: 400;
+  padding: 0 0.82rem;
 }
 
 .sts-dropdown__trigger:hover:not(:disabled) {
@@ -64,7 +64,8 @@
 }
 
 .sts-dropdown__trigger--error {
-  border-color: var(--sts-error-accent, #c94a4a) !important;
+  border-color: var(--sts-error-accent, #a63a2a) !important;
+  background-color: #fffafa;
 }
 
 .sts-dropdown__trigger:disabled {
@@ -97,7 +98,7 @@
   height: 16px;
   color: #7a6e65;
   flex-shrink: 0;
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .sts-dropdown__trigger--open .sts-dropdown__chevron {
@@ -105,32 +106,57 @@
   color: var(--sts-walnut);
 }
 
-/* Portal Menu Popover */
 .sts-dropdown__menu {
   position: fixed;
   z-index: 99999;
-  background: #ffffff;
-  border: 1px solid #d8caa8;
-  border-radius: 12px;
+  background-color: #ffffff;
+  border: 1px solid #d5c4af;
+  border-radius: 11px;
   box-shadow:
-    0 12px 32px rgba(42, 37, 33, 0.16),
-    0 4px 12px rgba(42, 37, 33, 0.08);
-  padding: 6px;
+    0 14px 34px -6px rgba(36, 24, 16, 0.2),
+    0 4px 12px -3px rgba(36, 24, 16, 0.1);
+  padding: 5px;
   box-sizing: border-box;
-  animation: stsDropdownPopIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-  max-height: 280px;
+  transform-origin: top center;
+  animation: stsDropdownPopDown 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: 260px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-@keyframes stsDropdownPopIn {
+.sts-dropdown__menu--upward {
+  transform-origin: bottom center;
+  animation: stsDropdownPopUp 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sts-dropdown__menu--inline {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 40;
+}
+
+@keyframes stsDropdownPopDown {
   from {
     opacity: 0;
-    transform: scale(0.96) translateY(-4px);
+    transform: translateY(-4px);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes stsDropdownPopUp {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -148,10 +174,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.55rem 0.75rem;
+  min-height: 36px;
+  padding: 0.5rem 0.72rem;
   border-radius: 8px;
   font-family: var(--sts-font-sans);
   font-size: 0.875rem;
+  line-height: 1.35;
   color: var(--sts-charcoal);
   cursor: pointer;
   user-select: none;
@@ -162,7 +190,7 @@
 
 .sts-dropdown__option--highlighted,
 .sts-dropdown__option:hover:not(.sts-dropdown__option--disabled) {
-  background-color: #f7f3ec;
+  background-color: #f7f2ea;
   color: var(--sts-walnut);
 }
 
@@ -175,7 +203,7 @@
 .sts-dropdown__option-content {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.12rem;
   min-width: 0;
   flex: 1;
 }
@@ -206,8 +234,8 @@
 }
 
 .sts-dropdown__empty {
-  padding: 1rem 0.75rem;
+  padding: 0.85rem 0.75rem;
   text-align: center;
-  font-size: 0.8125rem;
+  font-size: 0.84375rem;
   color: #8c827a;
 }

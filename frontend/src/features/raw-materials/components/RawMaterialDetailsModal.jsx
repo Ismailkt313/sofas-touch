@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { formatMaterialDateTime } from '../services/rawMaterialService'
 import {
   RawMaterialCategoryTag,
@@ -47,13 +46,13 @@ export function RawMaterialDetailsModal({
     }
   }, [isOpen, onClose])
 
-  if (!isOpen || typeof document === 'undefined') {
+  if (!isOpen) {
     return null
   }
 
-  return createPortal(
+  return (
     <div
-      className="admin-modal-backdrop"
+      className="admin-modal-backdrop rm-modal-backdrop"
       onMouseDown={(event) => {
         backdropMouseDownRef.current = event.target === event.currentTarget
       }}
@@ -68,13 +67,13 @@ export function RawMaterialDetailsModal({
       }}
     >
       <div
-        className="admin-modal rm-details-modal"
+        className="admin-modal rm-modal rm-details-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
       >
-        <div className="admin-modal__header">
-          <div>
+        <div className="admin-modal__header rm-modal__header">
+          <div className="rm-modal__heading">
             <h2 id={titleId} className="admin-modal__title">
               Material Details
             </h2>
@@ -85,7 +84,7 @@ export function RawMaterialDetailsModal({
           <button
             ref={closeBtnRef}
             type="button"
-            className="admin-modal__close"
+            className="admin-modal__close rm-modal__close"
             onClick={onClose}
             aria-label="Close material details"
           >
@@ -100,7 +99,7 @@ export function RawMaterialDetailsModal({
           </button>
         </div>
 
-        <div className="admin-modal__body rm-details-modal__body">
+        <div className="admin-modal__body rm-modal__body rm-details-modal__body">
           {error ? (
             <div className="rm-details-state" role="alert">
               <p className="rm-details-state__msg">{error}</p>
@@ -166,7 +165,7 @@ export function RawMaterialDetailsModal({
           ) : null}
         </div>
 
-        <div className="admin-modal__footer rm-details-modal__footer">
+        <div className="admin-modal__footer rm-modal__footer rm-details-modal__footer">
           {adminAccess && material && !error ? (
             <>
               <button
@@ -202,7 +201,6 @@ export function RawMaterialDetailsModal({
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </div>
   )
 }
