@@ -5,18 +5,16 @@ import {
   fetchRawMaterials,
   formatMaterialStockOnHand,
   formatMaterialUnit,
-  formatMaterialUnitOptionLabel,
 } from '../../raw-materials'
-import { BillAttachmentCard } from '../components/BillAttachmentCard'
 import { BillAttachmentModal } from '../components/BillAttachmentModal'
+import { BillUploadOcrPanel } from '../components/BillUploadOcrPanel'
+import { PurchaseLineItemsEditor } from '../components/PurchaseLineItemsEditor'
+import { PurchaseTotalsSummary } from '../components/PurchaseTotalsSummary'
 import {
   MAX_BILL_ATTACHMENTS,
-  calculateLineTotalPreview,
   calculateVoucherPreviewTotals,
   createPurchaseVoucher,
   fetchPurchaseVoucherById,
-  formatFileSize,
-  formatInrCurrency,
   hasActiveAuthToken,
   isAdminUser,
   toInputDateString,
@@ -33,6 +31,12 @@ function nextRowKey() {
   return `pv-line-${rowKeyCounter}`
 }
 
+let uncertainKeyCounter = 1
+function nextUncertainKey() {
+  uncertainKeyCounter += 1
+  return `pv-uncertain-${uncertainKeyCounter}`
+}
+
 function makeEmptyLineItem() {
   return {
     rowKey: nextRowKey(),
@@ -44,6 +48,23 @@ function makeEmptyLineItem() {
     detectedUnit: '',
     suggestions: [],
     needsReview: false,
+  }
+}
+
+function makeInitialOcrState() {
+  return {
+    isRunning: false,
+    percent: 0,
+    message: '',
+    error: '',
+    completed: false,
+    draftDiscarded: false,
+    tableDetected: false,
+    rawText: '',
+    warnings: [],
+    detectedSubtotal: null,
+    detectedGrandTotal: null,
+    averageConfidence: 0,
   }
 }
 
@@ -81,6 +102,7 @@ export function PurchaseVoucherFormPage({
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState('')
   const [projectId, setProjectId] = useState('')
   const [lineItems, setLineItems] = useState(() => [makeEmptyLineItem()])
+  const [uncertainLineItems, setUncertainLineItems] = useState([])
   const [discountAmount, setDiscountAmount] = useState('')
   const [taxAmount, setTaxAmount] = useState('')
   const [otherCharges, setOtherCharges] = useState('')
@@ -99,18 +121,7 @@ export function PurchaseVoucherFormPage({
   const [isLoadingRefs, setIsLoadingRefs] = useState(true)
   const [loadError, setLoadError] = useState('')
 
-  const [ocrState, setOcrState] = useState({
-    isRunning: false,
-    percent: 0,
-    message: '',
-    error: '',
-    completed: false,
-    rawText: '',
-    warnings: [],
-    detectedSubtotal: null,
-    detectedGrandTotal: null,
-    averageConfidence: 0,
-  })
+  const [ocrState, setOcrState] = useState(() => makeInitialOcrState())
   const [showRawOcrText, setShowRawOcrText] = useState(false)
 
   const [fieldErrors, setFieldErrors] = useState({})
@@ -331,7 +342,7 @@ export function PurchaseVoucherFormPage({
       setOtherCharges((prev) => (prev.trim() ? prev : parsed.otherCharges))
     }
 
-    if (parsed.lineItems.length > 0) {
+    if (Array.isArray(parsed.lineItems) && parsed.lineItems.length > 0) {
       setLineItems((prev) => {
         const hasPopulatedExisting = prev.some(
           (row) =>
@@ -355,6 +366,38 @@ export function PurchaseVoucherFormPage({
           : mappedOcrRows
       })
     }
+
+    if (
+      Array.isArray(parsed.uncertainLineItems) &&
+      parsed.uncertainLineItems.length > 0
+    ) {
+      setUncertainLineItems(
+        parsed.uncertainLineItems.map((uRow) => ({
+          ...uRow,
+          uncertainKey: nextUncertainKey(),
+        })),
+      )
+    } else {
+      setUncertainLineItems([])
+    }
+  }, [])
+
+  const handleDiscardOcrDraft = useCallback(() => {
+    setSupplierName('')
+    setSupplierInvoiceNumber('')
+    setPurchaseDate(toInputDateString())
+    setDiscountAmount('')
+    setTaxAmount('')
+    setOtherCharges('')
+    setLineItems([makeEmptyLineItem()])
+    setUncertainLineItems([])
+    setFieldErrors({})
+    setSubmitError('')
+    setShowRawOcrText(false)
+    setOcrState({
+      ...makeInitialOcrState(),
+      draftDiscarded: true,
+    })
   }, [])
 
   const runOcrForPendingFile = useCallback(
@@ -363,17 +406,12 @@ export function PurchaseVoucherFormPage({
         return
       }
 
+      setShowRawOcrText(false)
       setOcrState({
+        ...makeInitialOcrState(),
         isRunning: true,
         percent: 5,
         message: 'Preparing bill document for local OCR...',
-        error: '',
-        completed: false,
-        rawText: '',
-        warnings: [],
-        detectedSubtotal: null,
-        detectedGrandTotal: null,
-        averageConfidence: 0,
       })
 
       try {
@@ -398,23 +436,15 @@ export function PurchaseVoucherFormPage({
           )
         }
 
-        const parsed = parseBillOcrText(
-          extraction.rawText,
-          rawMaterialsRef.current,
-        )
+        const parsed = parseBillOcrText(extraction, rawMaterialsRef.current)
 
         if (!parsed.hasContent) {
+          setUncertainLineItems([])
           setOcrState({
-            isRunning: false,
-            percent: 0,
-            message: '',
+            ...makeInitialOcrState(),
             error:
               'Local OCR could not read clear text from this bill (it may be blurry, rotated, or low-contrast). You can still keep the bill attached and enter the fields manually below.',
-            completed: false,
-            rawText: '',
             warnings: parsed.warnings,
-            detectedSubtotal: null,
-            detectedGrandTotal: null,
             averageConfidence: extraction.averageConfidence,
           })
           return
@@ -429,6 +459,8 @@ export function PurchaseVoucherFormPage({
             'Local OCR finished. Please review and verify every field before saving.',
           error: '',
           completed: true,
+          draftDiscarded: false,
+          tableDetected: Boolean(parsed.tableDetected),
           rawText: parsed.normalizedText,
           warnings: parsed.warnings,
           detectedSubtotal: parsed.detectedSubtotal,
@@ -436,19 +468,12 @@ export function PurchaseVoucherFormPage({
           averageConfidence: extraction.averageConfidence,
         })
       } catch (err) {
+        setUncertainLineItems([])
         setOcrState({
-          isRunning: false,
-          percent: 0,
-          message: '',
+          ...makeInitialOcrState(),
           error:
             err?.message ||
             'Local OCR could not read this file. You can continue by entering the purchase details manually below.',
-          completed: false,
-          rawText: '',
-          warnings: [],
-          detectedSubtotal: null,
-          detectedGrandTotal: null,
-          averageConfidence: 0,
         })
       }
     },
@@ -552,6 +577,67 @@ export function PurchaseVoucherFormPage({
       }
       return prev.filter((row) => row.rowKey !== rowKey)
     })
+  }
+
+  const handlePromoteUncertainRow = (uncertainKey) => {
+    const target = uncertainLineItems.find(
+      (item) => item.uncertainKey === uncertainKey,
+    )
+    if (!target) {
+      return
+    }
+
+    setUncertainLineItems((prev) =>
+      prev.filter((item) => item.uncertainKey !== uncertainKey),
+    )
+
+    const qtyNum = Number(target.quantity)
+    const priceNum = Number(target.unitPrice)
+    const amtNum =
+      target.lineAmount !== null && target.lineAmount !== undefined
+        ? Number(target.lineAmount)
+        : NaN
+    const isMathConsistent =
+      Number.isFinite(qtyNum) &&
+      qtyNum > 0 &&
+      Number.isFinite(priceNum) &&
+      priceNum > 0 &&
+      Number.isFinite(amtNum) &&
+      amtNum > 0 &&
+      Math.abs(qtyNum * priceNum - amtNum) <= Math.max(2, amtNum * 0.02)
+
+    const promotedRow = {
+      rowKey: nextRowKey(),
+      materialId: '',
+      quantity: isMathConsistent ? String(target.quantity) : '',
+      unitPrice: isMathConsistent ? String(target.unitPrice) : '',
+      remarks: '',
+      extractedDescription:
+        target.extractedDescription || target.rawRowText || '',
+      detectedUnit: target.detectedUnit || '',
+      suggestions: target.suggestions || [],
+      needsReview: true,
+    }
+
+    setLineItems((prev) => {
+      const isSingleEmpty =
+        prev.length === 1 &&
+        !prev[0].materialId &&
+        !String(prev[0].quantity).trim() &&
+        !String(prev[0].unitPrice).trim() &&
+        !prev[0].extractedDescription
+      return isSingleEmpty ? [promotedRow] : [...prev, promotedRow]
+    })
+  }
+
+  const handleDismissUncertainRow = (uncertainKey) => {
+    setUncertainLineItems((prev) =>
+      prev.filter((item) => item.uncertainKey !== uncertainKey),
+    )
+  }
+
+  const handleDismissAllUncertainRows = () => {
+    setUncertainLineItems([])
   }
 
   const isDirty = useMemo(() => {
@@ -719,7 +805,8 @@ export function PurchaseVoucherFormPage({
         setFieldErrors(err.fieldErrors)
       }
       setSubmitError(
-        err?.message || 'Unable to save purchase voucher. Please review the form.',
+        err?.message ||
+          'Unable to save purchase voucher. Please review the form.',
       )
       setIsSaving(false)
       setUploadProgress(0)
@@ -749,8 +836,6 @@ export function PurchaseVoucherFormPage({
       </div>
     )
   }
-
-  const activePreviewEntry = pendingFiles[activePreviewFileIdx] || null
 
   return (
     <div className="pv-page">
@@ -818,7 +903,11 @@ export function PurchaseVoucherFormPage({
       ) : (
         <form className="pv-form-layout" onSubmit={handleSubmit} noValidate>
           {!isEditMode ? (
-            <div className="pv-method-tabs" role="tablist" aria-label="Purchase entry method">
+            <div
+              className="pv-method-tabs"
+              role="tablist"
+              aria-label="Purchase entry method"
+            >
               <button
                 type="button"
                 role="tab"
@@ -861,245 +950,31 @@ export function PurchaseVoucherFormPage({
             </div>
           ) : null}
 
-          {ocrState.completed ? (
-            <div className="pv-alert pv-alert--review" role="status">
-              <div className="pv-alert__header">
-                <strong>
-                  OCR Extraction Complete — Verification Required Before Saving
-                </strong>
-                {ocrState.rawText ? (
-                  <button
-                    type="button"
-                    className="pv-text-btn"
-                    onClick={() => setShowRawOcrText((prev) => !prev)}
-                  >
-                    {showRawOcrText ? 'Hide OCR Text' : 'Inspect Raw OCR Text'}
-                  </button>
-                ) : null}
-              </div>
-              <p className="pv-alert__body">
-                Extracted values have been placed into the form below using
-                deterministic rules. Please verify the supplier name, invoice
-                date, Raw Material matches, quantities, and unit prices before
-                saving.
-              </p>
-              {ocrState.warnings.length > 0 ? (
-                <ul className="pv-alert__list">
-                  {ocrState.warnings.map((warn, i) => (
-                    <li key={i}>{warn}</li>
-                  ))}
-                </ul>
-              ) : null}
-              {showRawOcrText && ocrState.rawText ? (
-                <pre className="pv-ocr-raw-box">{ocrState.rawText}</pre>
-              ) : null}
-            </div>
-          ) : null}
-
-          {ocrState.error ? (
-            <div className="pv-alert pv-alert--warning" role="alert">
-              <strong>Local OCR Notice:</strong> {ocrState.error}
-            </div>
-          ) : null}
-
-          {(entryMethod === 'upload_bill' || isEditMode || pendingFiles.length > 0) ? (
-            <section className="pv-surface pv-section-card">
-              <div className="pv-section-card__header">
-                <div>
-                  <h2 className="pv-section-card__title">
-                    Supplier Bill Attachment &amp; Local OCR
-                  </h2>
-                  <p className="pv-section-card__subtitle">
-                    Accepts JPG, PNG, WEBP images, or PDF bills up to 10 MB per
-                    file. OCR runs 100% locally in your browser before upload.
-                  </p>
-                </div>
-
-                <div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf"
-                    multiple
-                    onChange={handleFilesSelected}
-                    className="sr-only"
-                    id="pv-bill-file-input"
-                    disabled={
-                      isSaving || totalAttachmentCount >= MAX_BILL_ATTACHMENTS
-                    }
-                  />
-                  <label
-                    htmlFor="pv-bill-file-input"
-                    className={`admin-btn admin-btn--secondary pv-upload-trigger${
-                      totalAttachmentCount >= MAX_BILL_ATTACHMENTS
-                        ? ' pv-upload-trigger--disabled'
-                        : ''
-                    }`}
-                  >
-                    <span>
-                      {pendingFiles.length > 0 ||
-                      retainedExistingAttachments.length > 0
-                        ? '+ Add Another Page / File'
-                        : 'Choose Bill Image or PDF'}
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              {fieldErrors.attachments ? (
-                <p className="pv-field-error" role="alert">
-                  {fieldErrors.attachments}
-                </p>
-              ) : null}
-
-              {ocrState.isRunning ? (
-                <div className="pv-progress-panel" role="status" aria-live="polite">
-                  <div className="pv-progress-panel__top">
-                    <span>{ocrState.message}</span>
-                    <strong>{ocrState.percent}%</strong>
-                  </div>
-                  <div className="pv-progress-bar">
-                    <div
-                      className="pv-progress-bar__fill"
-                      style={{ width: `${ocrState.percent}%` }}
-                    />
-                  </div>
-                </div>
-              ) : null}
-
-              {pendingFiles.length > 0 ? (
-                <div className="pv-upload-workspace">
-                  <div className="pv-pending-files-list">
-                    {pendingFiles.map((entry, idx) => (
-                      <div
-                        key={entry.localId}
-                        className={`pv-pending-file-item${
-                          idx === activePreviewFileIdx
-                            ? ' pv-pending-file-item--active'
-                            : ''
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          className="pv-pending-file-item__select"
-                          onClick={() => setActivePreviewFileIdx(idx)}
-                        >
-                          <span className="pv-pending-file-item__name">
-                            {entry.file.name}
-                          </span>
-                          <span className="pv-pending-file-item__size">
-                            {entry.isPdf ? 'PDF' : 'Image'} ·{' '}
-                            {formatFileSize(entry.file.size)}
-                          </span>
-                        </button>
-
-                        <div className="pv-pending-file-item__btns">
-                          <button
-                            type="button"
-                            className="pv-action-btn"
-                            disabled={ocrState.isRunning}
-                            onClick={() => runOcrForPendingFile(entry)}
-                          >
-                            {ocrState.isRunning ? 'Reading...' : 'Run OCR'}
-                          </button>
-                          <button
-                            type="button"
-                            className="pv-action-btn pv-action-btn--danger"
-                            disabled={isSaving}
-                            onClick={() => handleRemovePendingFile(entry.localId)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {activePreviewEntry ? (
-                    <div className="pv-local-preview-box">
-                      <div className="pv-local-preview-box__head">
-                        <span>
-                          Local Preview: <strong>{activePreviewEntry.file.name}</strong>{' '}
-                          (not uploaded until you save)
-                        </span>
-                      </div>
-                      <div className="pv-local-preview-box__body">
-                        {activePreviewEntry.isPdf ? (
-                          activePreviewEntry.renderedPdfPreviewUrl ? (
-                            <img
-                              src={activePreviewEntry.renderedPdfPreviewUrl}
-                              alt={`Rendered page 1 of ${activePreviewEntry.file.name}`}
-                              className="pv-local-preview-img"
-                            />
-                          ) : (
-                            <div className="pv-local-pdf-note">
-                              <p>
-                                PDF selected ({formatFileSize(activePreviewEntry.file.size)}
-                                ). Click <strong>Run OCR</strong> to render PDF
-                                pages locally and extract text.
-                              </p>
-                            </div>
-                          )
-                        ) : (
-                          <img
-                            src={activePreviewEntry.localObjectUrl}
-                            alt={`Preview of ${activePreviewEntry.file.name}`}
-                            className="pv-local-preview-img"
-                          />
-                        )}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : !isEditMode ? (
-                <label htmlFor="pv-bill-file-input" className="pv-dropzone">
-                  <svg viewBox="0 0 28 28" fill="none" aria-hidden="true">
-                    <path
-                      d="M14 19V7M14 7L9.5 11.5M14 7L18.5 11.5M5.5 21.5H22.5"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <strong>Click to select or photograph a supplier bill</strong>
-                  <span>
-                    Supports JPG, PNG, WEBP, or PDF (max 10 MB). Or switch to
-                    Enter Manually if no bill is available yet.
-                  </span>
-                </label>
-              ) : null}
-
-              {retainedExistingAttachments.length > 0 ? (
-                <div className="pv-existing-att-block">
-                  <h3 className="pv-subsection-title">
-                    Saved Bill Attachments ({retainedExistingAttachments.length})
-                  </h3>
-                  <div className="pv-bill-cards-grid">
-                    {retainedExistingAttachments.map((att) => (
-                      <div key={att.attachmentId} className="pv-edit-att-wrap">
-                        <BillAttachmentCard
-                          attachment={att}
-                          onOpenPreview={setPreviewModalAttachment}
-                        />
-                        <button
-                          type="button"
-                          className="pv-remove-saved-att-btn"
-                          onClick={() =>
-                            setRemovedAttachmentIds((prev) => [
-                              ...prev,
-                              att.attachmentId,
-                            ])
-                          }
-                        >
-                          Remove attachment on save
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </section>
+          {entryMethod === 'upload_bill' ||
+          isEditMode ||
+          pendingFiles.length > 0 ? (
+            <BillUploadOcrPanel
+              isEditMode={isEditMode}
+              isSaving={isSaving}
+              totalAttachmentCount={totalAttachmentCount}
+              fileInputRef={fileInputRef}
+              fieldError={fieldErrors.attachments}
+              ocrState={ocrState}
+              showRawOcrText={showRawOcrText}
+              onToggleRawOcrText={() => setShowRawOcrText((prev) => !prev)}
+              onDiscardOcrDraft={handleDiscardOcrDraft}
+              pendingFiles={pendingFiles}
+              activePreviewFileIdx={activePreviewFileIdx}
+              onSelectPreviewFile={setActivePreviewFileIdx}
+              onFilesSelected={handleFilesSelected}
+              onRunOcrForFile={runOcrForPendingFile}
+              onRemovePendingFile={handleRemovePendingFile}
+              retainedExistingAttachments={retainedExistingAttachments}
+              onOpenExistingAttachmentPreview={setPreviewModalAttachment}
+              onMarkExistingAttachmentRemoved={(attachmentId) =>
+                setRemovedAttachmentIds((prev) => [...prev, attachmentId])
+              }
+            />
           ) : (
             <section className="pv-surface pv-section-card pv-optional-bill-bar">
               <div>
@@ -1120,7 +995,9 @@ export function PurchaseVoucherFormPage({
           )}
 
           <section className="pv-surface pv-section-card">
-            <h2 className="pv-section-card__title">Supplier &amp; Project Details</h2>
+            <h2 className="pv-section-card__title">
+              Supplier &amp; Project Details
+            </h2>
             <div className="pv-form-grid">
               <div className="pv-form-field">
                 <label htmlFor="pv-purchase-date" className="pv-form-label">
@@ -1207,344 +1084,46 @@ export function PurchaseVoucherFormPage({
             </div>
           </section>
 
-          <section className="pv-surface pv-section-card">
-            <div className="pv-section-card__header">
-              <div>
-                <h2 className="pv-section-card__title">Material Line Items</h2>
-                <p className="pv-section-card__subtitle">
-                  Select an existing Raw Material to lock in its supported unit
-                  and update stock on hand when saved.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="admin-btn admin-btn--secondary"
-                onClick={handleAddLineRow}
-                disabled={isSaving}
-              >
-                + Add Material Row
-              </button>
-            </div>
+          <PurchaseLineItemsEditor
+            lineItems={lineItems}
+            uncertainLineItems={uncertainLineItems}
+            materialById={materialById}
+            materialOptions={materialOptions}
+            fieldErrors={fieldErrors}
+            isSaving={isSaving}
+            adminAccess={adminAccess}
+            onAddLineRow={handleAddLineRow}
+            onUpdateLineItem={updateLineItem}
+            onRemoveLineRow={handleRemoveLineRow}
+            onPromoteUncertainRow={handlePromoteUncertainRow}
+            onDismissUncertainRow={handleDismissUncertainRow}
+            onDismissAllUncertainRows={handleDismissAllUncertainRows}
+            onRequestCancelToCatalog={() =>
+              requestControlledCancel('/raw-materials')
+            }
+          />
 
-            {fieldErrors.lineItems ? (
-              <p className="pv-field-error">{fieldErrors.lineItems}</p>
-            ) : null}
-
-            <div className="pv-lines-list">
-              {lineItems.map((row, idx) => {
-                const selectedMat = materialById.get(row.materialId)
-                const lineTotal = calculateLineTotalPreview(
-                  row.quantity,
-                  row.unitPrice,
-                )
-                const matErr = fieldErrors[`lineItems[${idx}].materialId`]
-                const qtyErr = fieldErrors[`lineItems[${idx}].quantity`]
-                const priceErr = fieldErrors[`lineItems[${idx}].unitPrice`]
-                const needsMaterialReview =
-                  Boolean(row.extractedDescription) && !row.materialId
-
-                return (
-                  <div
-                    key={row.rowKey}
-                    className={`pv-line-card${
-                      needsMaterialReview ? ' pv-line-card--review' : ''
-                    }`}
-                  >
-                    <div className="pv-line-card__top">
-                      <span className="pv-line-card__index">
-                        Item #{idx + 1}
-                      </span>
-
-                      {row.extractedDescription ? (
-                        <span className="pv-ocr-detected-pill">
-                          Detected on bill: &ldquo;{row.extractedDescription}&rdquo;
-                          {row.detectedUnit ? ` (${row.detectedUnit})` : ''}
-                        </span>
-                      ) : null}
-
-                      <button
-                        type="button"
-                        className="pv-line-remove-btn"
-                        onClick={() => handleRemoveLineRow(row.rowKey)}
-                        disabled={isSaving}
-                        aria-label={`Remove line item ${idx + 1}`}
-                      >
-                        {lineItems.length > 1 ? 'Remove' : 'Clear'}
-                      </button>
-                    </div>
-
-                    {!row.materialId &&
-                    Array.isArray(row.suggestions) &&
-                    row.suggestions.length > 0 ? (
-                      <div className="pv-suggestions-row">
-                        <span className="pv-suggestions-row__label">
-                          Likely catalog match (click to confirm):
-                        </span>
-                        {row.suggestions.map((sug) => (
-                          <button
-                            key={sug.id}
-                            type="button"
-                            className="pv-suggestion-chip"
-                            onClick={() =>
-                              updateLineItem(row.rowKey, 'materialId', sug.id)
-                            }
-                          >
-                            {sug.name} ({formatMaterialUnit(sug.unit)})
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    <div className="pv-line-card__grid">
-                      <div className="pv-form-field pv-line-card__mat-col">
-                        <label className="pv-form-label">
-                          Raw Material <span className="pv-req">*</span>
-                        </label>
-                        <Dropdown
-                          variant="form"
-                          value={row.materialId}
-                          options={materialOptions}
-                          placeholder="Select raw material..."
-                          error={Boolean(matErr || needsMaterialReview)}
-                          disabled={isSaving}
-                          onChange={(val) =>
-                            updateLineItem(row.rowKey, 'materialId', val)
-                          }
-                          ariaLabel={`Line item ${idx + 1} raw material`}
-                        />
-                        {matErr ? (
-                          <p className="pv-field-error">{matErr}</p>
-                        ) : needsMaterialReview ? (
-                          <p className="pv-field-review-hint">
-                            Confirm the matching Raw Material for this bill line.
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <div className="pv-form-field pv-line-card__unit-col">
-                        <label className="pv-form-label">Unit</label>
-                        <div
-                          className="pv-readonly-unit"
-                          title={
-                            selectedMat
-                              ? formatMaterialUnitOptionLabel(selectedMat.unit)
-                              : 'Select a material to auto-fill unit'
-                          }
-                        >
-                          {selectedMat
-                            ? formatMaterialUnitOptionLabel(selectedMat.unit)
-                            : 'Auto-filled'}
-                        </div>
-                      </div>
-
-                      <div className="pv-form-field">
-                        <label className="pv-form-label">
-                          Quantity <span className="pv-req">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          step="any"
-                          min="0.001"
-                          className={`pv-input${
-                            qtyErr ? ' pv-input--error' : ''
-                          }`}
-                          placeholder="0"
-                          value={row.quantity}
-                          onChange={(e) =>
-                            updateLineItem(row.rowKey, 'quantity', e.target.value)
-                          }
-                          disabled={isSaving}
-                          aria-label={`Line item ${idx + 1} quantity`}
-                        />
-                        {qtyErr ? (
-                          <p className="pv-field-error">{qtyErr}</p>
-                        ) : null}
-                      </div>
-
-                      <div className="pv-form-field">
-                        <label className="pv-form-label">
-                          Unit Price (₹) <span className="pv-req">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0.01"
-                          className={`pv-input${
-                            priceErr ? ' pv-input--error' : ''
-                          }`}
-                          placeholder="0.00"
-                          value={row.unitPrice}
-                          onChange={(e) =>
-                            updateLineItem(
-                              row.rowKey,
-                              'unitPrice',
-                              e.target.value,
-                            )
-                          }
-                          disabled={isSaving}
-                          aria-label={`Line item ${idx + 1} unit price`}
-                        />
-                        {priceErr ? (
-                          <p className="pv-field-error">{priceErr}</p>
-                        ) : null}
-                      </div>
-
-                      <div className="pv-form-field pv-line-card__total-col">
-                        <label className="pv-form-label">Line Total</label>
-                        <div className="pv-readonly-total">
-                          {formatInrCurrency(lineTotal)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pv-line-card__remarks">
-                      <input
-                        type="text"
-                        className="pv-input pv-input--compact"
-                        placeholder="Line item note / shade / batch code (optional)"
-                        value={row.remarks}
-                        onChange={(e) =>
-                          updateLineItem(row.rowKey, 'remarks', e.target.value)
-                        }
-                        maxLength={300}
-                        disabled={isSaving}
-                        aria-label={`Line item ${idx + 1} remarks`}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="pv-missing-material-callout">
-              <div>
-                <strong>Need a material not listed in the catalog?</strong>
-                <p>
-                  Unrecognized bill items are never auto-created as Raw
-                  Materials.{' '}
-                  {adminAccess
-                    ? 'Cancel this draft to add the new material with its canonical unit in Raw Materials first.'
-                    : 'Please ask an Administrator to register the material in Raw Materials before recording this voucher.'}
-                </p>
-              </div>
-              {adminAccess ? (
-                <button
-                  type="button"
-                  className="admin-btn admin-btn--secondary"
-                  onClick={() => requestControlledCancel('/raw-materials')}
-                >
-                  Cancel &amp; Go to Raw Materials
-                </button>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="pv-surface pv-section-card pv-totals-grid">
-            <div className="pv-notes-column">
-              <div className="pv-form-field">
-                <label htmlFor="pv-notes" className="pv-form-label">
-                  Voucher Notes <span className="pv-opt">(Optional)</span>
-                </label>
-                <textarea
-                  id="pv-notes"
-                  rows={4}
-                  className="pv-textarea"
-                  placeholder="Delivery challan reference, quality inspection remarks, or unloading notes..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  maxLength={1000}
-                  disabled={isSaving}
-                />
-              </div>
-            </div>
-
-            <div className="pv-financial-box">
-              <h3 className="pv-financial-box__title">Voucher Totals</h3>
-
-              <div className="pv-financial-row">
-                <span>Items Subtotal</span>
-                <strong>{formatInrCurrency(previewTotals.subtotal)}</strong>
-              </div>
-
-              <div className="pv-financial-input-row">
-                <label htmlFor="pv-discount">Discount (− ₹)</label>
-                <input
-                  id="pv-discount"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  className={`pv-input pv-input--num${
-                    fieldErrors.discountAmount ? ' pv-input--error' : ''
-                  }`}
-                  placeholder="0.00"
-                  value={discountAmount}
-                  onChange={(e) => setDiscountAmount(e.target.value)}
-                  disabled={isSaving}
-                />
-              </div>
-              {fieldErrors.discountAmount ? (
-                <p className="pv-field-error">{fieldErrors.discountAmount}</p>
-              ) : null}
-
-              <div className="pv-financial-input-row">
-                <label htmlFor="pv-tax">GST / Tax (+ ₹)</label>
-                <input
-                  id="pv-tax"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  className={`pv-input pv-input--num${
-                    fieldErrors.taxAmount ? ' pv-input--error' : ''
-                  }`}
-                  placeholder="0.00"
-                  value={taxAmount}
-                  onChange={(e) => setTaxAmount(e.target.value)}
-                  disabled={isSaving}
-                />
-              </div>
-
-              <div className="pv-financial-input-row">
-                <label htmlFor="pv-other-charges">
-                  Freight / Other Charges (+ ₹)
-                </label>
-                <input
-                  id="pv-other-charges"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  className={`pv-input pv-input--num${
-                    fieldErrors.otherCharges ? ' pv-input--error' : ''
-                  }`}
-                  placeholder="0.00"
-                  value={otherCharges}
-                  onChange={(e) => setOtherCharges(e.target.value)}
-                  disabled={isSaving}
-                />
-              </div>
-
-              <div className="pv-financial-row pv-financial-row--final">
-                <span>Final Total</span>
-                <strong>{formatInrCurrency(previewTotals.finalTotal)}</strong>
-              </div>
-
-              {ocrState.detectedGrandTotal !== null &&
-              Math.abs(ocrState.detectedGrandTotal - previewTotals.finalTotal) >
-                1 ? (
-                <p className="pv-ocr-diff-note">
-                  Bill total detected by OCR:{' '}
-                  <strong>
-                    {formatInrCurrency(ocrState.detectedGrandTotal)}
-                  </strong>
-                  . Verify line items, tax, or discount if totals differ.
-                </p>
-              ) : null}
-            </div>
-          </section>
+          <PurchaseTotalsSummary
+            notes={notes}
+            onNotesChange={setNotes}
+            previewTotals={previewTotals}
+            discountAmount={discountAmount}
+            onDiscountChange={setDiscountAmount}
+            taxAmount={taxAmount}
+            onTaxChange={setTaxAmount}
+            otherCharges={otherCharges}
+            onOtherChargesChange={setOtherCharges}
+            fieldErrors={fieldErrors}
+            ocrState={ocrState}
+            isSaving={isSaving}
+          />
 
           {isSaving && pendingFiles.length > 0 ? (
             <div className="pv-progress-panel" role="status">
               <div className="pv-progress-panel__top">
-                <span>Uploading bill attachment &amp; recording voucher...</span>
+                <span>
+                  Uploading bill attachment &amp; recording voucher...
+                </span>
                 <strong>{uploadProgress}%</strong>
               </div>
               <div className="pv-progress-bar">
@@ -1590,7 +1169,11 @@ export function PurchaseVoucherFormPage({
 
       {confirmLeaveTarget ? (
         <div className="admin-modal-backdrop">
-          <div className="admin-modal pv-cancel-modal" role="dialog" aria-modal="true">
+          <div
+            className="admin-modal pv-cancel-modal"
+            role="dialog"
+            aria-modal="true"
+          >
             <div className="admin-modal__header">
               <h2 className="admin-modal__title">Discard unsaved voucher?</h2>
             </div>
