@@ -49,8 +49,13 @@ export const ADMIN_NAV_ITEMS = [
   },
 ]
 
+const PROJECT_REPORT_SUBROUTE_RE = /^\/projects\/[^/]+\/report$/
+
 export function isNavItemActive(pathname, itemPath) {
   const cleanPath = (pathname || '').replace(/\/+$/, '') || '/'
+  if (PROJECT_REPORT_SUBROUTE_RE.test(cleanPath)) {
+    return itemPath === '/reports'
+  }
   return cleanPath === itemPath || cleanPath.startsWith(`${itemPath}/`)
 }
 

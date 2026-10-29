@@ -13,6 +13,7 @@ import {
   cancelExpense,
   createExpense,
   createExpenseCategory,
+  fetchExpenseById,
   fetchExpenseCategories,
   fetchExpenses,
   hasActiveAuthToken,
@@ -114,6 +115,43 @@ export function ExpensesPage({ currentUser, onNavigate }) {
   useEffect(() => {
     return loadReferenceData()
   }, [loadReferenceData])
+
+  useEffect(() => {
+    if (!hasActiveAuthToken() || typeof window === 'undefined') {
+      return undefined
+    }
+    const params = new URLSearchParams(window.location.search)
+    const viewVoucher = (params.get('view') || '').trim()
+    if (!viewVoucher) {
+      return undefined
+    }
+
+    let cancelled = false
+    fetchExpenseById(viewVoucher)
+      .then((voucher) => {
+        if (cancelled || !voucher?.id) return
+        setFormServerError('')
+        setFormModalState({
+          key: `view-${voucher.id}`,
+          mode: 'view',
+          expense: voucher,
+        })
+        const nextParams = new URLSearchParams(window.location.search)
+        nextParams.delete('view')
+        const nextQuery = nextParams.toString()
+        const cleanUrl = nextQuery
+          ? `${window.location.pathname}?${nextQuery}`
+          : window.location.pathname
+        window.history.replaceState({}, '', cleanUrl)
+      })
+      .catch(() => {
+        void 0
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!hasActiveAuthToken()) {
