@@ -17,6 +17,7 @@ export const HEADER_TRACKED_FIELDS = Object.freeze([
   'supplierInvoiceNumber',
   'projectId',
   'discountAmount',
+  'taxRatePercent',
   'taxAmount',
   'otherCharges',
   'notes',
@@ -33,6 +34,7 @@ export const LINE_TRACKED_FIELDS = Object.freeze([
 
 const NUMERIC_COMPARE_FIELDS = new Set([
   'discountAmount',
+  'taxRatePercent',
   'taxAmount',
   'otherCharges',
   'quantity',
@@ -142,6 +144,7 @@ export function createSavedHeaderFieldMeta(voucher = {}) {
     discountAmount: hasPosNum(voucher.discountAmount)
       ? createFieldProvenance('saved')
       : createFieldProvenance('initial'),
+    taxRatePercent: createFieldProvenance('initial'),
     taxAmount: hasPosNum(voucher.taxAmount)
       ? createFieldProvenance('saved')
       : createFieldProvenance('initial'),
@@ -332,7 +335,73 @@ export function isLineItemListEffectivelyEmpty(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return true
   }
-  return rows.length === 1 && isUntouchedBlankLineItem(rows[0])
+  return rows.every((row) => isUntouchedBlankLineItem(row))
+}
+
+export function prependEmptyLineItem(existingRows = []) {
+  const newRow = createEmptyLineItem()
+  const safeRows = Array.isArray(existingRows) ? existingRows : []
+  return {
+    newRow,
+    lineItems: [newRow, ...safeRows],
+  }
+}
+
+export function shiftLineItemFieldErrorsOnPrepend(fieldErrors = {}) {
+  if (!fieldErrors || typeof fieldErrors !== 'object') {
+    return {}
+  }
+  const nextErrors = {}
+  const lineKeyPattern = /^lineItems\[(\d+)\]\.(.+)$/
+  for (const [key, msg] of Object.entries(fieldErrors)) {
+    if (key === 'lineItems') {
+      continue
+    }
+    const match = lineKeyPattern.exec(key)
+    if (match) {
+      const shiftedIdx = Number(match[1]) + 1
+      nextErrors[`lineItems[${shiftedIdx}].${match[2]}`] = msg
+    } else {
+      nextErrors[key] = msg
+    }
+  }
+  return nextErrors
+}
+
+export function shiftLineItemFieldErrorsOnRemove(
+  fieldErrors = {},
+  removedIndex = -1,
+) {
+  if (
+    !fieldErrors ||
+    typeof fieldErrors !== 'object' ||
+    !Number.isInteger(removedIndex) ||
+    removedIndex < 0
+  ) {
+    return fieldErrors || {}
+  }
+  const nextErrors = {}
+  const lineKeyPattern = /^lineItems\[(\d+)\]\.(.+)$/
+  for (const [key, msg] of Object.entries(fieldErrors)) {
+    if (key === 'lineItems') {
+      continue
+    }
+    const match = lineKeyPattern.exec(key)
+    if (!match) {
+      nextErrors[key] = msg
+      continue
+    }
+    const idx = Number(match[1])
+    if (idx === removedIndex) {
+      continue
+    }
+    if (idx > removedIndex) {
+      nextErrors[`lineItems[${idx - 1}].${match[2]}`] = msg
+    } else {
+      nextErrors[key] = msg
+    }
+  }
+  return nextErrors
 }
 
 export function applyManualLineItemEdit(row, fieldKey, nextValue) {
@@ -456,6 +525,15 @@ function getReliableHeaderCandidates(parsedOcr = {}) {
     Number(parsedOcr.discountAmount) > 0
   ) {
     candidates.discountAmount = String(parsedOcr.discountAmount).trim()
+  }
+
+  if (
+    parsedOcr.detectedTaxRatePercent !== null &&
+    parsedOcr.detectedTaxRatePercent !== undefined &&
+    Number.isFinite(Number(parsedOcr.detectedTaxRatePercent)) &&
+    Number(parsedOcr.detectedTaxRatePercent) > 0
+  ) {
+    candidates.taxRatePercent = String(parsedOcr.detectedTaxRatePercent).trim()
   }
 
   if (

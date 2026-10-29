@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react'
 import { FieldSourceBadge, FieldSuggestionBanner } from './FieldProvenanceControl'
-import { formatInrCurrency } from '../services/purchaseService'
+import {
+  GST_PERCENTAGE_PRESETS,
+  calculateTaxFromPercentage,
+  formatInrCurrency,
+  roundTaxPercent,
+} from '../services/purchaseService'
 import { reconcileInvoiceTotals } from '../utils/billOcrParser'
 
 export function PurchaseTotalsSummary({
@@ -9,8 +14,12 @@ export function PurchaseTotalsSummary({
   previewTotals,
   discountAmount,
   onDiscountChange,
+  taxRatePercent = '',
+  taxCalculationMode = 'manual',
+  onTaxRateChange,
   taxAmount,
   onTaxChange,
+  onUsePrintedTax,
   otherCharges,
   onOtherChargesChange,
   fieldMeta = {},
@@ -35,11 +44,35 @@ export function PurchaseTotalsSummary({
     Boolean(fieldSuggestions.discountAmount) ||
     discountExpanded
 
+  const printedTaxAmount =
+    typeof ocrState?.printedTaxAmount === 'number' &&
+    Number.isFinite(ocrState.printedTaxAmount) &&
+    ocrState.printedTaxAmount >= 0
+      ? ocrState.printedTaxAmount
+      : null
+
+  const activeRateNum = useMemo(
+    () => roundTaxPercent(taxRatePercent),
+    [taxRatePercent],
+  )
+
+  const rateBasedTax = useMemo(() => {
+    if (activeRateNum === null) {
+      return null
+    }
+    return calculateTaxFromPercentage(
+      previewTotals.subtotal,
+      discountAmount,
+      activeRateNum,
+    )
+  }, [previewTotals.subtotal, discountAmount, activeRateNum])
+
   const reconciliation = useMemo(
     () =>
       reconcileInvoiceTotals({
         calculatedSubtotal: previewTotals.subtotal,
         printedSubtotal: ocrState?.detectedSubtotal ?? null,
+        printedTaxAmount,
         discountAmount,
         taxAmount,
         otherCharges,
@@ -49,6 +82,7 @@ export function PurchaseTotalsSummary({
       previewTotals.subtotal,
       ocrState?.detectedSubtotal,
       ocrState?.detectedGrandTotal,
+      printedTaxAmount,
       discountAmount,
       taxAmount,
       otherCharges,
@@ -57,7 +91,18 @@ export function PurchaseTotalsSummary({
 
   const hasPrintedTotals =
     reconciliation.printedSubtotal !== null ||
+    reconciliation.printedTaxAmount !== null ||
     reconciliation.printedFinalTotal !== null
+
+  const currentTaxDiffersFromPrinted =
+    printedTaxAmount !== null &&
+    Math.abs(previewTotals.taxAmount - printedTaxAmount) > 0.05
+
+  const rateTaxDiffersFromPrinted =
+    !currentTaxDiffersFromPrinted &&
+    printedTaxAmount !== null &&
+    rateBasedTax !== null &&
+    Math.abs(rateBasedTax - printedTaxAmount) > 0.5
 
   return (
     <section
@@ -195,8 +240,13 @@ export function PurchaseTotalsSummary({
               <div className="pv-ledger__row">
                 <span className="pv-ledger__label-group">
                   <label htmlFor="pv-tax" className="pv-ledger__label">
-                    Tax (+)
+                    Tax / GST (+)
                   </label>
+                  {ocrState?.taxBreakdownLabel ? (
+                    <span className="pv-tax-breakdown-pill">
+                      {ocrState.taxBreakdownLabel}
+                    </span>
+                  ) : null}
                   <FieldSourceBadge
                     meta={fieldMeta.taxAmount}
                     hasValue={String(taxAmount ?? '').trim() !== ''}
@@ -217,6 +267,99 @@ export function PurchaseTotalsSummary({
                   disabled={isSaving}
                 />
               </div>
+
+              <div className="pv-tax-rate-bar" aria-label="GST rate options">
+                <div className="pv-tax-rate-presets">
+                  {GST_PERCENTAGE_PRESETS.map((preset) => {
+                    const isSelected =
+                      activeRateNum !== null &&
+                      Math.abs(activeRateNum - preset) < 0.001
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        className={`pv-tax-preset-btn${
+                          isSelected ? ' pv-tax-preset-btn--active' : ''
+                        }`}
+                        aria-pressed={isSelected}
+                        onClick={() => onTaxRateChange?.(String(preset))}
+                        disabled={isSaving}
+                      >
+                        {preset}%
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="pv-tax-rate-custom">
+                  <label htmlFor="pv-tax-rate" className="sr-only">
+                    GST percentage
+                  </label>
+                  <input
+                    id="pv-tax-rate"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    className={`pv-input pv-input--tax-pct${
+                      fieldErrors.taxRatePercent ? ' pv-input--error' : ''
+                    }`}
+                    placeholder="GST %"
+                    value={taxRatePercent}
+                    onChange={(e) => onTaxRateChange?.(e.target.value)}
+                    disabled={isSaving}
+                  />
+                  <span className="pv-tax-rate-suffix" aria-hidden="true">
+                    %
+                  </span>
+                </div>
+              </div>
+
+              {currentTaxDiffersFromPrinted ? (
+                <div className="pv-tax-diff-bar" role="status">
+                  <span>
+                    Printed bill GST:{' '}
+                    <strong>{formatInrCurrency(printedTaxAmount)}</strong> ·{' '}
+                    {taxCalculationMode === 'percentage'
+                      ? 'Calculated GST'
+                      : 'Current voucher GST'}
+                    :{' '}
+                    <strong>{formatInrCurrency(previewTotals.taxAmount)}</strong>
+                  </span>
+                  {onUsePrintedTax ? (
+                    <button
+                      type="button"
+                      className="pv-link-btn"
+                      onClick={() => onUsePrintedTax(printedTaxAmount)}
+                      disabled={isSaving}
+                    >
+                      Use bill GST
+                    </button>
+                  ) : null}
+                </div>
+              ) : rateTaxDiffersFromPrinted ? (
+                <div className="pv-tax-diff-bar" role="status">
+                  <span>
+                    Printed bill GST:{' '}
+                    <strong>{formatInrCurrency(printedTaxAmount)}</strong> ·{' '}
+                    {activeRateNum}% on current items:{' '}
+                    <strong>{formatInrCurrency(rateBasedTax)}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    className="pv-link-btn"
+                    onClick={() => onTaxRateChange?.(String(activeRateNum))}
+                    disabled={isSaving}
+                  >
+                    Apply {activeRateNum}%
+                  </button>
+                </div>
+              ) : null}
+
+              {fieldErrors.taxRatePercent ? (
+                <p className="pv-field-error">{fieldErrors.taxRatePercent}</p>
+              ) : null}
               {fieldErrors.taxAmount ? (
                 <p className="pv-field-error">{fieldErrors.taxAmount}</p>
               ) : null}
@@ -290,7 +433,8 @@ export function PurchaseTotalsSummary({
                   ? reconciliation.mismatchMessages[0]
                   : `Matches printed bill total (${formatInrCurrency(
                       reconciliation.printedFinalTotal ??
-                        reconciliation.printedSubtotal,
+                        reconciliation.printedSubtotal ??
+                        reconciliation.printedTaxAmount,
                     )})`}
               </div>
             ) : null}
