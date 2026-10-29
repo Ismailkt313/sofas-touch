@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { FieldSourceBadge, FieldSuggestionBanner } from './FieldProvenanceControl'
 import { formatInrCurrency } from '../services/purchaseService'
 import { reconcileInvoiceTotals } from '../utils/billOcrParser'
-import { GST_PERCENTAGE_PRESETS } from '../utils/purchaseMath'
 
 export function PurchaseTotalsSummary({
   notes,
@@ -10,16 +9,10 @@ export function PurchaseTotalsSummary({
   previewTotals,
   discountAmount,
   onDiscountChange,
-  taxMode = 'bill_amount',
-  onTaxModeChange,
-  taxRatePercent = '',
-  onTaxRatePercentChange,
   taxAmount,
   onTaxChange,
   otherCharges,
   onOtherChargesChange,
-  printedInvoiceSummary = null,
-  hasSelectedProject = false,
   fieldMeta = {},
   fieldSuggestions = {},
   onAcceptFieldSuggestion,
@@ -42,71 +35,29 @@ export function PurchaseTotalsSummary({
     Boolean(fieldSuggestions.discountAmount) ||
     discountExpanded
 
-  const isPercentageMode = taxMode === 'percentage'
-
-  const effectivePrintedSummary = useMemo(() => {
-    if (printedInvoiceSummary) {
-      return printedInvoiceSummary
-    }
-    if (
-      ocrState?.detectedSubtotal !== null ||
-      ocrState?.detectedGrandTotal !== null
-    ) {
-      return {
-        printedSubtotal: ocrState?.detectedSubtotal ?? null,
-        printedDiscountAmount: ocrState?.printedDiscountAmount ?? null,
-        printedTaxAmount: ocrState?.printedTaxAmount ?? null,
-        printedTaxRatePercent: ocrState?.extractedTaxRatePercent ?? null,
-        printedCgstAmount: ocrState?.cgstAmount ?? null,
-        printedSgstAmount: ocrState?.sgstAmount ?? null,
-        printedIgstAmount: ocrState?.igstAmount ?? null,
-        printedOtherCharges: ocrState?.printedOtherCharges ?? null,
-        printedGrandTotal: ocrState?.detectedGrandTotal ?? null,
-      }
-    }
-    return null
-  }, [printedInvoiceSummary, ocrState])
-
   const reconciliation = useMemo(
     () =>
       reconcileInvoiceTotals({
         calculatedSubtotal: previewTotals.subtotal,
-        printedSubtotal: effectivePrintedSummary?.printedSubtotal ?? null,
-        discountAmount: previewTotals.discount,
-        printedDiscountAmount:
-          effectivePrintedSummary?.printedDiscountAmount ?? undefined,
-        taxAmount: previewTotals.tax,
-        printedTaxAmount:
-          effectivePrintedSummary?.printedTaxAmount ?? undefined,
-        otherCharges: previewTotals.charges,
-        printedOtherCharges:
-          effectivePrintedSummary?.printedOtherCharges ?? undefined,
-        printedFinalTotal: effectivePrintedSummary?.printedGrandTotal ?? null,
-        hasConfirmedItems: previewTotals.subtotal > 0,
+        printedSubtotal: ocrState?.detectedSubtotal ?? null,
+        discountAmount,
+        taxAmount,
+        otherCharges,
+        printedFinalTotal: ocrState?.detectedGrandTotal ?? null,
       }),
     [
       previewTotals.subtotal,
-      previewTotals.discount,
-      previewTotals.tax,
-      previewTotals.charges,
-      effectivePrintedSummary,
+      ocrState?.detectedSubtotal,
+      ocrState?.detectedGrandTotal,
+      discountAmount,
+      taxAmount,
+      otherCharges,
     ],
   )
 
-  const hasPrintedTotals = Boolean(
+  const hasPrintedTotals =
     reconciliation.printedSubtotal !== null ||
-      reconciliation.printedDiscountAmount !== null ||
-      reconciliation.printedTaxAmount !== null ||
-      reconciliation.printedOtherCharges !== null ||
-      reconciliation.printedFinalTotal !== null,
-  )
-
-  const showSplitSubtotals = previewTotals.expenseSubtotal > 0
-  const explicitPrintedRate =
-    effectivePrintedSummary?.printedTaxRatePercent ?? null
-  const printedCgst = effectivePrintedSummary?.printedCgstAmount ?? null
-  const printedSgst = effectivePrintedSummary?.printedSgstAmount ?? null
-  const printedIgst = effectivePrintedSummary?.printedIgstAmount ?? null
+    reconciliation.printedFinalTotal !== null
 
   return (
     <section
@@ -164,95 +115,14 @@ export function PurchaseTotalsSummary({
               />
             </div>
           )}
-
-          {hasPrintedTotals ? (
-            <div
-              className="pv-printed-bill-card"
-              aria-label="Printed bill figures"
-            >
-              <span className="pv-printed-bill-card__title">
-                Printed figures on bill (retained for verification)
-              </span>
-              <div className="pv-printed-bill-card__grid">
-                {reconciliation.printedSubtotal !== null ? (
-                  <span>
-                    Subtotal:{' '}
-                    <strong>
-                      {formatInrCurrency(reconciliation.printedSubtotal)}
-                    </strong>
-                  </span>
-                ) : null}
-                {reconciliation.printedDiscountAmount !== null ? (
-                  <span>
-                    Discount:{' '}
-                    <strong>
-                      {formatInrCurrency(reconciliation.printedDiscountAmount)}
-                    </strong>
-                  </span>
-                ) : null}
-                {reconciliation.printedTaxAmount !== null ? (
-                  <span>
-                    GST/Tax:{' '}
-                    <strong>
-                      {formatInrCurrency(reconciliation.printedTaxAmount)}
-                    </strong>
-                  </span>
-                ) : null}
-                {reconciliation.printedOtherCharges !== null ? (
-                  <span>
-                    Charges:{' '}
-                    <strong>
-                      {formatInrCurrency(reconciliation.printedOtherCharges)}
-                    </strong>
-                  </span>
-                ) : null}
-                {reconciliation.printedFinalTotal !== null ? (
-                  <span>
-                    Grand Total:{' '}
-                    <strong>
-                      {formatInrCurrency(reconciliation.printedFinalTotal)}
-                    </strong>
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
         </div>
 
         <div className="pv-ledger">
           <h2 id="pv-totals-heading" className="pv-section-title">
-            Totals &amp; GST
+            Totals
           </h2>
 
           <div className="pv-ledger__rows">
-            {showSplitSubtotals ? (
-              <>
-                <div className="pv-ledger__row pv-ledger__row--sub">
-                  <span className="pv-ledger__label">Raw materials</span>
-                  <span className="pv-ledger__amount">
-                    {formatInrCurrency(previewTotals.materialSubtotal)}
-                  </span>
-                </div>
-                <div className="pv-ledger__row pv-ledger__row--sub">
-                  <span className="pv-ledger__label">Other expenses</span>
-                  <span className="pv-ledger__amount">
-                    {formatInrCurrency(previewTotals.expenseSubtotal)}
-                  </span>
-                </div>
-              </>
-            ) : null}
-
-            {previewTotals.unclassifiedCount > 0 ? (
-              <div className="pv-ledger__row pv-ledger__row--sub">
-                <span className="pv-ledger__label">
-                  Unclassified ({previewTotals.unclassifiedCount})
-                </span>
-                <span className="pv-ledger__amount">
-                  {formatInrCurrency(previewTotals.unclassifiedSubtotal)}
-                </span>
-              </div>
-            ) : null}
-
             <div className="pv-ledger__row">
               <span className="pv-ledger__label">Subtotal</span>
               <strong className="pv-ledger__amount">
@@ -321,168 +191,43 @@ export function PurchaseTotalsSummary({
               </div>
             )}
 
-            {previewTotals.discount > 0 || isPercentageMode ? (
-              <div className="pv-ledger__row pv-ledger__row--sub">
-                <span className="pv-ledger__label">Taxable subtotal</span>
-                <span className="pv-ledger__amount">
-                  {formatInrCurrency(previewTotals.taxableSubtotal)}
-                </span>
-              </div>
-            ) : null}
-
-            <div className="pv-tax-box">
-              <div className="pv-tax-box__head">
-                <span className="pv-ledger__label">GST / Tax (+)</span>
-                <div
-                  className="pv-tax-mode-seg"
-                  role="group"
-                  aria-label="GST calculation mode"
-                >
-                  <button
-                    type="button"
-                    className={`pv-tax-mode-seg__btn${
-                      !isPercentageMode ? ' pv-tax-mode-seg__btn--active' : ''
-                    }`}
-                    onClick={() => onTaxModeChange?.('bill_amount')}
-                    disabled={isSaving}
-                  >
-                    Bill Amount
-                  </button>
-                  <button
-                    type="button"
-                    className={`pv-tax-mode-seg__btn${
-                      isPercentageMode ? ' pv-tax-mode-seg__btn--active' : ''
-                    }`}
-                    onClick={() => onTaxModeChange?.('percentage')}
-                    disabled={isSaving}
-                  >
-                    By %
-                  </button>
-                </div>
-              </div>
-
-              {!isPercentageMode ? (
-                <div className="pv-ledger__field-block">
-                  <div className="pv-ledger__row">
-                    <span className="pv-ledger__label-group">
-                      <label htmlFor="pv-tax" className="pv-tax-sub-label">
-                        Tax from bill (₹)
-                      </label>
-                      <FieldSourceBadge
-                        meta={fieldMeta.taxAmount}
-                        hasValue={String(taxAmount ?? '').trim() !== ''}
-                      />
-                      {explicitPrintedRate !== null ? (
-                        <span className="pv-tax-rate-pill">
-                          Printed {explicitPrintedRate}%
-                        </span>
-                      ) : null}
-                    </span>
-                    <input
-                      id="pv-tax"
-                      type="number"
-                      inputMode="decimal"
-                      step="0.01"
-                      min="0"
-                      className={`pv-input pv-input--ledger${
-                        fieldErrors.taxAmount ? ' pv-input--error' : ''
-                      }`}
-                      placeholder="0.00"
-                      value={taxAmount}
-                      onChange={(e) => onTaxChange(e.target.value)}
-                      disabled={isSaving}
-                    />
-                  </div>
-                  {(printedCgst !== null ||
-                    printedSgst !== null ||
-                    printedIgst !== null) ? (
-                    <span className="pv-tax-comp-caption">
-                      Bill GST breakdown:{' '}
-                      {[
-                        printedCgst !== null
-                          ? `CGST ${formatInrCurrency(printedCgst)}`
-                          : '',
-                        printedSgst !== null
-                          ? `SGST ${formatInrCurrency(printedSgst)}`
-                          : '',
-                        printedIgst !== null
-                          ? `IGST ${formatInrCurrency(printedIgst)}`
-                          : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' + ')}
-                    </span>
-                  ) : null}
-                  {fieldErrors.taxAmount ? (
-                    <p className="pv-field-error">{fieldErrors.taxAmount}</p>
-                  ) : null}
-                  <FieldSuggestionBanner
-                    suggestion={fieldSuggestions.taxAmount}
-                    labelPrefix="Bill tax"
-                    formatValue={(v) => formatInrCurrency(Number(v))}
-                    onAccept={() => onAcceptFieldSuggestion?.('taxAmount')}
-                    onDismiss={() => onDismissFieldSuggestion?.('taxAmount')}
-                    disabled={isSaving}
+            <div className="pv-ledger__field-block">
+              <div className="pv-ledger__row">
+                <span className="pv-ledger__label-group">
+                  <label htmlFor="pv-tax" className="pv-ledger__label">
+                    Tax (+)
+                  </label>
+                  <FieldSourceBadge
+                    meta={fieldMeta.taxAmount}
+                    hasValue={String(taxAmount ?? '').trim() !== ''}
                   />
-                </div>
-              ) : (
-                <div className="pv-ledger__field-block">
-                  <div className="pv-tax-presets">
-                    {GST_PERCENTAGE_PRESETS.map((preset) => {
-                      const activePreset =
-                        String(taxRatePercent ?? '').trim() !== '' &&
-                        Number(taxRatePercent) === preset
-                      return (
-                        <button
-                          key={preset}
-                          type="button"
-                          className={`pv-tax-preset-chip${
-                            activePreset ? ' pv-tax-preset-chip--active' : ''
-                          }`}
-                          onClick={() =>
-                            onTaxRatePercentChange?.(String(preset))
-                          }
-                          disabled={isSaving}
-                        >
-                          {preset}%
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <div className="pv-ledger__row">
-                    <span className="pv-ledger__label-group">
-                      <label htmlFor="pv-tax-rate" className="pv-tax-sub-label">
-                        GST rate (%)
-                      </label>
-                      <input
-                        id="pv-tax-rate"
-                        type="number"
-                        inputMode="decimal"
-                        step="0.01"
-                        min="0"
-                        max="100"
-                        className={`pv-input pv-input--pct${
-                          fieldErrors.taxRatePercent ? ' pv-input--error' : ''
-                        }`}
-                        placeholder="18"
-                        value={taxRatePercent}
-                        onChange={(e) =>
-                          onTaxRatePercentChange?.(e.target.value)
-                        }
-                        disabled={isSaving}
-                      />
-                    </span>
-                    <strong className="pv-ledger__amount">
-                      {formatInrCurrency(previewTotals.percentageTax)}
-                    </strong>
-                  </div>
-                  {fieldErrors.taxRatePercent ? (
-                    <p className="pv-field-error">
-                      {fieldErrors.taxRatePercent}
-                    </p>
-                  ) : null}
-                </div>
-              )}
+                </span>
+                <input
+                  id="pv-tax"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  className={`pv-input pv-input--ledger${
+                    fieldErrors.taxAmount ? ' pv-input--error' : ''
+                  }`}
+                  placeholder="0.00"
+                  value={taxAmount}
+                  onChange={(e) => onTaxChange(e.target.value)}
+                  disabled={isSaving}
+                />
+              </div>
+              {fieldErrors.taxAmount ? (
+                <p className="pv-field-error">{fieldErrors.taxAmount}</p>
+              ) : null}
+              <FieldSuggestionBanner
+                suggestion={fieldSuggestions.taxAmount}
+                labelPrefix="Bill tax"
+                formatValue={(v) => formatInrCurrency(Number(v))}
+                onAccept={() => onAcceptFieldSuggestion?.('taxAmount')}
+                onDismiss={() => onDismissFieldSuggestion?.('taxAmount')}
+                disabled={isSaving}
+              />
             </div>
 
             <div className="pv-ledger__field-block">
@@ -532,31 +277,6 @@ export function PurchaseTotalsSummary({
               <strong>{formatInrCurrency(previewTotals.finalTotal)}</strong>
             </div>
 
-            {hasSelectedProject &&
-            showSplitSubtotals &&
-            previewTotals.unclassifiedCount === 0 ? (
-              <div
-                className="pv-allocation-box"
-                aria-label="Project cost allocation"
-              >
-                <span className="pv-allocation-box__title">
-                  Project financial summary allocation
-                </span>
-                <div className="pv-allocation-box__row">
-                  <span>Purchases (materials + allocated tax/charges)</span>
-                  <strong>
-                    {formatInrCurrency(previewTotals.materialAllocatedTotal)}
-                  </strong>
-                </div>
-                <div className="pv-allocation-box__row">
-                  <span>Other Expenses (expenses + allocated tax/charges)</span>
-                  <strong>
-                    {formatInrCurrency(previewTotals.expenseAllocatedTotal)}
-                  </strong>
-                </div>
-              </div>
-            ) : null}
-
             {hasPrintedTotals ? (
               <div
                 className={`pv-reconcile-inline${
@@ -564,20 +284,14 @@ export function PurchaseTotalsSummary({
                     ? ' pv-reconcile-inline--warn'
                     : ' pv-reconcile-inline--ok'
                 }`}
-                role={reconciliation.hasMismatch ? 'alert' : 'status'}
+                role="status"
               >
-                {reconciliation.hasMismatch ? (
-                  <ul className="pv-reconcile-inline__list">
-                    {reconciliation.mismatchMessages.map((msg) => (
-                      <li key={msg}>{msg}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  `Reconciled with printed bill total (${formatInrCurrency(
-                    reconciliation.printedFinalTotal ??
-                      reconciliation.printedSubtotal,
-                  )})`
-                )}
+                {reconciliation.hasMismatch
+                  ? reconciliation.mismatchMessages[0]
+                  : `Matches printed bill total (${formatInrCurrency(
+                      reconciliation.printedFinalTotal ??
+                        reconciliation.printedSubtotal,
+                    )})`}
               </div>
             ) : null}
           </div>

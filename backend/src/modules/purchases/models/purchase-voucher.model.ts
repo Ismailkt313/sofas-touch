@@ -1,5 +1,4 @@
 import mongoose, { Model, Schema } from 'mongoose';
-import { EXPENSE_HEAD_CATEGORIES } from '../../expense-heads/models/expense-head.model';
 import {
   RAW_MATERIAL_CATEGORIES,
   RAW_MATERIAL_UNITS,
@@ -9,12 +8,9 @@ import {
   IPurchaseAppliedStockLine,
   IPurchaseBillAttachment,
   IPurchaseLineItem,
-  IPurchasePrintedInvoiceSummary,
   IPurchaseStockSyncState,
   IPurchaseVoucher,
   PurchaseEntryMethod,
-  PurchaseLineItemType,
-  PurchaseTaxMode,
   PurchaseVoucherStatus,
   SupportedBillMimeType,
 } from '../types';
@@ -27,16 +23,6 @@ export const PURCHASE_VOUCHER_STATUSES: readonly PurchaseVoucherStatus[] = [
 export const PURCHASE_ENTRY_METHODS: readonly PurchaseEntryMethod[] = [
   'upload_bill',
   'manual',
-] as const;
-
-export const PURCHASE_LINE_ITEM_TYPES: readonly PurchaseLineItemType[] = [
-  'material',
-  'expense',
-] as const;
-
-export const PURCHASE_TAX_MODES: readonly PurchaseTaxMode[] = [
-  'bill_amount',
-  'percentage',
 ] as const;
 
 export const SUPPORTED_BILL_MIME_TYPES: readonly SupportedBillMimeType[] = [
@@ -62,20 +48,14 @@ export function normalizePurchaseKey(value: string): string {
 
 const PurchaseLineItemSchema = new Schema<IPurchaseLineItem>(
   {
-    itemType: {
-      type: String,
-      enum: PURCHASE_LINE_ITEM_TYPES,
-      required: true,
-      default: 'material',
-    },
     materialId: {
       type: String,
-      default: null,
+      required: true,
       trim: true,
     },
     materialName: {
       type: String,
-      default: '',
+      required: true,
       trim: true,
     },
     materialCategory: {
@@ -83,51 +63,25 @@ const PurchaseLineItemSchema = new Schema<IPurchaseLineItem>(
       enum: [...RAW_MATERIAL_CATEGORIES, null],
       default: null,
     },
-    expenseHeadId: {
-      type: String,
-      default: null,
-      trim: true,
-    },
-    expenseHeadName: {
-      type: String,
-      default: '',
-      trim: true,
-    },
-    expenseHeadCategory: {
-      type: String,
-      enum: [...EXPENSE_HEAD_CATEGORIES, null],
-      default: null,
-    },
-    description: {
-      type: String,
-      trim: true,
-      default: '',
-      maxlength: 240,
-    },
     unit: {
       type: String,
-      default: null,
-      trim: true,
-      maxlength: 40,
+      enum: RAW_MATERIAL_UNITS,
+      required: true,
     },
     quantity: {
       type: Number,
-      default: null,
+      required: true,
+      min: 0.001,
     },
     unitPrice: {
-      type: Number,
-      default: null,
-    },
-    lineTotal: {
       type: Number,
       required: true,
       min: 0.01,
     },
-    taxRate: {
+    lineTotal: {
       type: Number,
-      default: null,
+      required: true,
       min: 0,
-      max: 100,
     },
     remarks: {
       type: String,
@@ -138,33 +92,6 @@ const PurchaseLineItemSchema = new Schema<IPurchaseLineItem>(
   },
   { _id: false },
 );
-
-const PurchasePrintedInvoiceSummarySchema =
-  new Schema<IPurchasePrintedInvoiceSummary>(
-    {
-      printedSubtotal: {
-        type: Number,
-        default: null,
-      },
-      printedDiscountAmount: {
-        type: Number,
-        default: null,
-      },
-      printedTaxAmount: {
-        type: Number,
-        default: null,
-      },
-      printedOtherCharges: {
-        type: Number,
-        default: null,
-      },
-      printedGrandTotal: {
-        type: Number,
-        default: null,
-      },
-    },
-    { _id: false },
-  );
 
 const PurchaseBillAttachmentSchema = new Schema<IPurchaseBillAttachment>(
   {
@@ -342,20 +269,8 @@ const PurchaseVoucherSchema = new Schema<IPurchaseVoucher>(
       validate: {
         validator: (items: IPurchaseLineItem[]) =>
           Array.isArray(items) && items.length > 0,
-        message: 'At least one purchase line item is required.',
+        message: 'At least one material line item is required.',
       },
-    },
-    materialSubtotal: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
-    },
-    expenseSubtotal: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
     },
     subtotal: {
       type: Number,
@@ -366,39 +281,6 @@ const PurchaseVoucherSchema = new Schema<IPurchaseVoucher>(
       type: Number,
       required: true,
       default: 0,
-      min: 0,
-    },
-    taxableSubtotal: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
-    },
-    taxMode: {
-      type: String,
-      enum: PURCHASE_TAX_MODES,
-      required: true,
-      default: 'bill_amount',
-    },
-    taxRatePercent: {
-      type: Number,
-      default: null,
-      min: 0,
-      max: 100,
-    },
-    cgstAmount: {
-      type: Number,
-      default: null,
-      min: 0,
-    },
-    sgstAmount: {
-      type: Number,
-      default: null,
-      min: 0,
-    },
-    igstAmount: {
-      type: Number,
-      default: null,
       min: 0,
     },
     taxAmount: {
@@ -417,22 +299,6 @@ const PurchaseVoucherSchema = new Schema<IPurchaseVoucher>(
       type: Number,
       required: true,
       min: 0,
-    },
-    materialAllocatedTotal: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
-    },
-    expenseAllocatedTotal: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
-    },
-    printedInvoiceSummary: {
-      type: PurchasePrintedInvoiceSummarySchema,
-      default: null,
     },
     notes: {
       type: String,

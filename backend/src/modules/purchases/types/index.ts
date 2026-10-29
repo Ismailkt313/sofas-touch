@@ -1,6 +1,5 @@
 import { NextFunction, Response } from 'express';
 import { AuthenticatedRequest } from '../../../types/auth';
-import { ExpenseHeadCategory } from '../../expense-heads/models/expense-head.model';
 import {
   RawMaterialCategory,
   RawMaterialUnit,
@@ -8,8 +7,6 @@ import {
 
 export type PurchaseVoucherStatus = 'active' | 'cancelled';
 export type PurchaseEntryMethod = 'upload_bill' | 'manual';
-export type PurchaseLineItemType = 'material' | 'expense';
-export type PurchaseTaxMode = 'bill_amount' | 'percentage';
 export type BillStorageProvider = 'local_protected' | 's3' | 'cloudinary';
 export type SupportedBillMimeType =
   | 'image/jpeg'
@@ -46,28 +43,14 @@ export interface PaginatedResult<T> {
 }
 
 export interface IPurchaseLineItem {
-  itemType: PurchaseLineItemType;
-  materialId: string | null;
+  materialId: string;
   materialName: string;
   materialCategory: RawMaterialCategory | null;
-  expenseHeadId: string | null;
-  expenseHeadName: string;
-  expenseHeadCategory: ExpenseHeadCategory | null;
-  description: string;
-  unit: string | null;
-  quantity: number | null;
-  unitPrice: number | null;
+  unit: RawMaterialUnit;
+  quantity: number;
+  unitPrice: number;
   lineTotal: number;
-  taxRate: number | null;
   remarks: string;
-}
-
-export interface IPurchasePrintedInvoiceSummary {
-  printedSubtotal: number | null;
-  printedDiscountAmount: number | null;
-  printedTaxAmount: number | null;
-  printedOtherCharges: number | null;
-  printedGrandTotal: number | null;
 }
 
 export interface IPurchaseBillAttachment {
@@ -110,22 +93,11 @@ export interface IPurchaseVoucher {
   projectName: string | null;
   entryMethod: PurchaseEntryMethod;
   lineItems: IPurchaseLineItem[];
-  materialSubtotal: number;
-  expenseSubtotal: number;
   subtotal: number;
   discountAmount: number;
-  taxableSubtotal: number;
-  taxMode: PurchaseTaxMode;
-  taxRatePercent: number | null;
-  cgstAmount: number | null;
-  sgstAmount: number | null;
-  igstAmount: number | null;
   taxAmount: number;
   otherCharges: number;
   finalTotal: number;
-  materialAllocatedTotal: number;
-  expenseAllocatedTotal: number;
-  printedInvoiceSummary: IPurchasePrintedInvoiceSummary | null;
   notes: string;
   attachments: IPurchaseBillAttachment[];
   status: PurchaseVoucherStatus;
@@ -194,16 +166,11 @@ export interface PurchaseInlineNewMaterialDto {
 }
 
 export interface PurchaseLineItemInputDto {
-  itemType: PurchaseLineItemType;
   materialId?: string;
   newMaterial?: PurchaseInlineNewMaterialDto | null;
-  expenseHeadId?: string;
-  description?: string;
-  unit?: string | null;
-  quantity?: number | null;
-  unitPrice?: number | null;
-  amount?: number | null;
-  taxRate?: number | null;
+  unit?: RawMaterialUnit | null;
+  quantity: number;
+  unitPrice: number;
   remarks?: string;
 }
 
@@ -215,14 +182,8 @@ export interface CreatePurchaseVoucherDto {
   entryMethod: PurchaseEntryMethod;
   lineItems: PurchaseLineItemInputDto[];
   discountAmount: number;
-  taxMode: PurchaseTaxMode;
-  taxRatePercent: number | null;
-  cgstAmount: number | null;
-  sgstAmount: number | null;
-  igstAmount: number | null;
   taxAmount: number;
   otherCharges: number;
-  printedInvoiceSummary: IPurchasePrintedInvoiceSummary | null;
   notes: string;
   clientRequestId: string | null;
 }
@@ -235,14 +196,8 @@ export interface UpdatePurchaseVoucherDto {
   entryMethod?: PurchaseEntryMethod;
   lineItems?: PurchaseLineItemInputDto[];
   discountAmount?: number;
-  taxMode?: PurchaseTaxMode;
-  taxRatePercent?: number | null;
-  cgstAmount?: number | null;
-  sgstAmount?: number | null;
-  igstAmount?: number | null;
   taxAmount?: number;
   otherCharges?: number;
-  printedInvoiceSummary?: IPurchasePrintedInvoiceSummary | null;
   notes?: string;
   removeAttachmentIds?: string[];
 }
@@ -296,23 +251,11 @@ export interface PurchaseVoucherResponseDto {
   projectName: string | null;
   entryMethod: PurchaseEntryMethod;
   lineItems: IPurchaseLineItem[];
-  materialSubtotal: number;
-  expenseSubtotal: number;
   subtotal: number;
   discountAmount: number;
-  taxableSubtotal: number;
-  taxMode: PurchaseTaxMode;
-  taxRatePercent: number | null;
-  cgstAmount: number | null;
-  sgstAmount: number | null;
-  igstAmount: number | null;
   taxAmount: number;
   otherCharges: number;
   finalTotal: number;
-  materialAllocatedTotal: number;
-  expenseAllocatedTotal: number;
-  printedInvoiceSummary: IPurchasePrintedInvoiceSummary | null;
-  reconciliationWarnings: string[];
   notes: string;
   attachments: PurchaseBillAttachmentResponseDto[];
   hasAttachments: boolean;
@@ -336,13 +279,6 @@ export interface PurchaseVoucherListSummary {
   cancelledCount: number;
   activeTotalAmount: number;
   withAttachmentCount: number;
-}
-
-export interface IPurchaseProjectAggregationResult {
-  totalAmount: number;
-  materialAmount: number;
-  expenseAmount: number;
-  latestActivityAt: Date | null;
 }
 
 export interface IPurchaseVoucherRepository {
@@ -373,7 +309,7 @@ export interface IPurchaseVoucherRepository {
   aggregateActivePurchasesForProject(
     projectRecordId: string,
     projectCode: string,
-  ): Promise<IPurchaseProjectAggregationResult>;
+  ): Promise<{ totalAmount: number; latestActivityAt: Date | null }>;
   recordStockMovement(
     entry: Omit<IPurchaseStockMovement, '_id'>,
   ): Promise<IPurchaseStockMovement>;
@@ -391,30 +327,16 @@ export interface IPurchaseVoucherRepository {
 }
 
 export interface IPurchaseVoucherService {
-  createPurchaseVoucher(
-    rawBody: unknown,
-    uploadedFiles: UploadedBillInputFile[],
-    caller: PurchaseCallerIdentity,
-    headerIdempotencyKey?: string,
-  ): Promise<{ voucher: PurchaseVoucherResponseDto; created: boolean }>;
-  updatePurchaseVoucher(
-    identifier: string,
-    rawBody: unknown,
-    uploadedFiles: UploadedBillInputFile[],
+  createVoucher(
+    dto: CreatePurchaseVoucherDto,
+    files: UploadedBillInputFile[],
     caller: PurchaseCallerIdentity,
   ): Promise<PurchaseVoucherResponseDto>;
-  cancelPurchaseVoucher(
-    identifier: string,
-    cancelReasonRaw: unknown,
-    caller: PurchaseCallerIdentity,
-  ): Promise<PurchaseVoucherResponseDto>;
-  getPurchaseVoucherById(identifier: string): Promise<{
-    voucher: PurchaseVoucherResponseDto;
-    stockMovements: PurchaseStockMovementResponseDto[];
-  }>;
-  listPurchaseVouchers(rawQuery: Record<string, unknown>): Promise<
+  listVouchers(
+    dto: ListPurchaseVouchersDto,
+    callerRole: PurchaseCallerRole,
+  ): Promise<
     PaginatedResult<PurchaseVoucherResponseDto> & {
-      vouchers: PurchaseVoucherResponseDto[];
       summary: PurchaseVoucherListSummary;
       storageInfo: {
         provider: BillStorageProvider;
@@ -422,9 +344,33 @@ export interface IPurchaseVoucherService {
       };
     }
   >;
-  openVoucherAttachment(
+  getVoucherById(
+    identifier: string,
+    callerRole: PurchaseCallerRole,
+  ): Promise<{
+    voucher: PurchaseVoucherResponseDto;
+    stockMovements: PurchaseStockMovementResponseDto[];
+  }>;
+  updateVoucher(
+    identifier: string,
+    dto: UpdatePurchaseVoucherDto,
+    newFiles: UploadedBillInputFile[],
+    caller: PurchaseCallerIdentity,
+  ): Promise<PurchaseVoucherResponseDto>;
+  addAttachmentsToVoucher(
+    identifier: string,
+    files: UploadedBillInputFile[],
+    caller: PurchaseCallerIdentity,
+  ): Promise<PurchaseVoucherResponseDto>;
+  cancelVoucher(
+    identifier: string,
+    reason: string,
+    caller: PurchaseCallerIdentity,
+  ): Promise<PurchaseVoucherResponseDto>;
+  getAuthorizedAttachmentFile(
     identifier: string,
     attachmentId: string,
+    callerRole: PurchaseCallerRole,
   ): Promise<{
     attachment: IPurchaseBillAttachment;
     buffer: Buffer;

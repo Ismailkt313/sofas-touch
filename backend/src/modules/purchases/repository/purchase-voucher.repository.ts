@@ -17,7 +17,6 @@ import {
 } from '../models/purchase-voucher.model';
 import { roundPurchaseMoney } from '../dto/create-purchase-voucher.dto';
 import {
-  IPurchaseProjectAggregationResult,
   IPurchaseStockMovement,
   IPurchaseVoucher,
   IPurchaseVoucherRepository,
@@ -56,9 +55,6 @@ function cloneVoucher(voucher: IPurchaseVoucher): IPurchaseVoucher {
     ...voucher,
     purchaseDate: new Date(voucher.purchaseDate),
     lineItems: (voucher.lineItems || []).map((item) => ({ ...item })),
-    printedInvoiceSummary: voucher.printedInvoiceSummary
-      ? { ...voucher.printedInvoiceSummary }
-      : null,
     attachments: (voucher.attachments || []).map((att) => ({
       ...att,
       uploadedAt: new Date(att.uploadedAt),
@@ -403,8 +399,6 @@ export class PurchaseVoucherRepository implements IPurchaseVoucherRepository {
           { projectCode: rx },
           { projectName: rx },
           { 'lineItems.materialName': rx },
-          { 'lineItems.expenseHeadName': rx },
-          { 'lineItems.description': rx },
         ];
         if (filter.$or) {
           filter.$and = [{ $or: filter.$or as unknown[] }, { $or: searchOr }];
@@ -474,12 +468,7 @@ export class PurchaseVoucherRepository implements IPurchaseVoucherRepository {
           rx.test(v.supplierInvoiceNumber || '') ||
           rx.test(v.projectCode || '') ||
           rx.test(v.projectName || '') ||
-          v.lineItems.some(
-            (li) =>
-              rx.test(li.materialName || '') ||
-              rx.test(li.expenseHeadName || '') ||
-              rx.test(li.description || ''),
-          ),
+          v.lineItems.some((li) => rx.test(li.materialName)),
       );
     }
 
@@ -668,7 +657,7 @@ export class PurchaseVoucherRepository implements IPurchaseVoucherRepository {
   async aggregateActivePurchasesForProject(
     projectRecordId: string,
     projectCode: string,
-  ): Promise<IPurchaseProjectAggregationResult> {
+  ): Promise<{ totalAmount: number; latestActivityAt: Date | null }> {
     const cleanRecordId = String(projectRecordId || '').trim();
     const cleanCode = String(projectCode || '').trim().toUpperCase();
 
@@ -681,21 +670,11 @@ export class PurchaseVoucherRepository implements IPurchaseVoucherRepository {
         orClauses.push({ projectCode: cleanCode });
       }
       if (orClauses.length === 0) {
-        return {
-          totalAmount: 0,
-          materialAmount: 0,
-          expenseAmount: 0,
-          latestActivityAt: null,
-        };
+        return { totalAmount: 0, latestActivityAt: null };
       }
 
       const rows = await this.voucherModel
-        .aggregate<{
-          totalAmount: number;
-          materialAmount: number;
-          expenseAmount: number;
-          latestAt: Date | null;
-        }>([
+        .aggregate<{ totalAmount: number; latestAt: Date | null }>([
           {
             $match: {
               status: 'active',
@@ -706,16 +685,6 @@ export class PurchaseVoucherRepository implements IPurchaseVoucherRepository {
             $group: {
               _id: null,
               totalAmount: { $sum: '$finalTotal' },
-              materialAmount: {
-                $sum: {
-                  $ifNull: ['$materialAllocatedTotal', '$finalTotal'],
-                },
-              },
-              expenseAmount: {
-                $sum: {
-                  $ifNull: ['$expenseAllocatedTotal', 0],
-                },
-              },
               latestAt: { $max: '$updatedAt' },
             },
           },
@@ -723,33 +692,16 @@ export class PurchaseVoucherRepository implements IPurchaseVoucherRepository {
         .exec();
 
       if (!rows.length) {
-        return {
-          totalAmount: 0,
-          materialAmount: 0,
-          expenseAmount: 0,
-          latestActivityAt: null,
-        };
+        return { totalAmount: 0, latestActivityAt: null };
       }
 
-      const materialAmount = roundPurchaseMoney(
-        Number(rows[0].materialAmount || 0),
-      );
-      const expenseAmount = roundPurchaseMoney(
-        Number(rows[0].expenseAmount || 0),
-      );
       return {
-        totalAmount: roundPurchaseMoney(
-          Number(rows[0].totalAmount ?? materialAmount + expenseAmount),
-        ),
-        materialAmount,
-        expenseAmount,
+        totalAmount: roundPurchaseMoney(Number(rows[0].totalAmount || 0)),
         latestActivityAt: rows[0].latestAt ? new Date(rows[0].latestAt) : null,
       };
     }
 
-    let totalSum = 0;
-    let materialSum = 0;
-    let expenseSum = 0;
+    let sum = 0;
     let latestMs: number | null = null;
 
     for (const v of this.voucherMemory.values()) {
@@ -762,22 +714,7 @@ export class PurchaseVoucherRepository implements IPurchaseVoucherRepository {
         cleanCode && (v.projectCode || '').toUpperCase() === cleanCode;
 
       if (matchesRecord || matchesCode) {
-        const finalTot = roundPurchaseMoney(Number(v.finalTotal || 0));
-        const matAlloc =
-          typeof v.materialAllocatedTotal === 'number' &&
-          Number.isFinite(v.materialAllocatedTotal)
-            ? roundPurchaseMoney(v.materialAllocatedTotal)
-            : finalTot;
-        const expAlloc =
-          typeof v.expenseAllocatedTotal === 'number' &&
-          Number.isFinite(v.expenseAllocatedTotal)
-            ? roundPurchaseMoney(v.expenseAllocatedTotal)
-            : 0;
-
-        totalSum = roundPurchaseMoney(totalSum + finalTot);
-        materialSum = roundPurchaseMoney(materialSum + matAlloc);
-        expenseSum = roundPurchaseMoney(expenseSum + expAlloc);
-
+        sum = roundPurchaseMoney(sum + Number(v.finalTotal || 0));
         const ts = v.updatedAt
           ? new Date(v.updatedAt).getTime()
           : new Date(v.purchaseDate).getTime();
@@ -788,9 +725,7 @@ export class PurchaseVoucherRepository implements IPurchaseVoucherRepository {
     }
 
     return {
-      totalAmount: totalSum,
-      materialAmount: materialSum,
-      expenseAmount: expenseSum,
+      totalAmount: sum,
       latestActivityAt: latestMs !== null ? new Date(latestMs) : null,
     };
   }

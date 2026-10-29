@@ -65,7 +65,7 @@ export function PurchasesTable({
                     ) : (
                       <span className="pv-supplier-cell__inv pv-supplier-cell__inv--muted">
                         {voucher.lineItems.length}{' '}
-                        {voucher.lineItems.length === 1 ? 'item' : 'items'}
+                        {voucher.lineItems.length === 1 ? 'material' : 'materials'}
                       </span>
                     )}
                   </div>
