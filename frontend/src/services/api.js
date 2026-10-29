@@ -1,5 +1,9 @@
 import axios from 'axios'
 
+export const ACTIVITY_UPDATED_EVENT = 'sts:activity-updated'
+
+const MUTATING_HTTP_METHODS = new Set(['post', 'put', 'patch', 'delete'])
+
 export function getApiBaseUrl() {
   const configured = import.meta.env.VITE_API_BASE_URL
   if (!configured || typeof configured !== 'string') {
@@ -32,7 +36,6 @@ export const api = axios.create({
   timeout: 10000,
 })
 
-// Attach Bearer token from stored session if present
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
@@ -48,10 +51,32 @@ api.interceptors.request.use(
           }
         }
       } catch {
-        // Ignore storage read/parse errors
+        return config
       }
     }
     return config
+  },
+  (error) => Promise.reject(error),
+)
+
+api.interceptors.response.use(
+  (response) => {
+    if (typeof window !== 'undefined') {
+      const method = String(response?.config?.method || '').toLowerCase()
+      const url = String(response?.config?.url || '')
+      if (
+        MUTATING_HTTP_METHODS.has(method) &&
+        !url.includes('/auth/login') &&
+        !url.includes('/auth/logout')
+      ) {
+        window.dispatchEvent(
+          new CustomEvent(ACTIVITY_UPDATED_EVENT, {
+            detail: { method, url, status: response.status },
+          }),
+        )
+      }
+    }
+    return response
   },
   (error) => Promise.reject(error),
 )

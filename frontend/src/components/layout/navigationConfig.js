@@ -9,12 +9,14 @@ export const ADMIN_NAV_ITEMS = [
     id: 'users',
     label: 'Users',
     path: '/users',
+    adminOnly: true,
     description: 'Manage user accounts, roles, and access.',
   },
   {
     id: 'user-approvals',
     label: 'User Approvals',
     path: '/user-approvals',
+    adminOnly: true,
     description: 'Review and manage Data Entry account signup requests.',
   },
   {
@@ -45,9 +47,23 @@ export const ADMIN_NAV_ITEMS = [
     id: 'reports',
     label: 'Reports',
     path: '/reports',
+    adminOnly: true,
     description: 'Review project profitability, purchase, and expense reports.',
   },
+  {
+    id: 'activity',
+    label: 'Activity Log',
+    path: '/activity',
+    description: 'Review platform-wide operational activity history.',
+  },
 ]
+
+export function getVisibleNavItems(role) {
+  if (role === 'data_entry') {
+    return ADMIN_NAV_ITEMS.filter((item) => !item.adminOnly)
+  }
+  return ADMIN_NAV_ITEMS
+}
 
 const PROJECT_REPORT_SUBROUTE_RE = /^\/projects\/[^/]+\/report$/
 

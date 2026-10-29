@@ -159,6 +159,18 @@ export function RawMaterialDetailsModal({
                   </dd>
                 </div>
                 <div className="profile-details__row">
+                  <dt>Minimum Stock Level</dt>
+                  <dd>
+                    {typeof material.minStockLevel === 'number' &&
+                    Number.isFinite(material.minStockLevel)
+                      ? formatMaterialQuantityOnHand(
+                          material.minStockLevel,
+                          material.unit,
+                        )
+                      : 'Not configured'}
+                  </dd>
+                </div>
+                <div className="profile-details__row">
                   <dt>Unit</dt>
                   <dd>{formatMaterialUnitOptionLabel(material.unit) || '—'}</dd>
                 </div>

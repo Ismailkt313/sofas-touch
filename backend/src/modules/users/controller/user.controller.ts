@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../../../types/auth';
+import { activityService } from '../../activity';
 import { validateListUsersDto } from '../dto/list-users.dto';
 import { validateListPendingApprovalsDto } from '../dto/list-pending-approvals.dto';
 import { validateRejectUserDto } from '../dto/reject-user.dto';
@@ -135,10 +136,24 @@ export class UserController implements IUserController {
       }
 
       const currentAdminId = req.user?.id || req.user?.email || '';
+      const adminName = req.user?.name || req.user?.email || 'Administrator';
       const user = await this.userService.createUser(
         validation.value,
         currentAdminId,
       );
+
+      await activityService.recordSafe({
+        actionType: 'user.created',
+        entityType: 'user',
+        entityId: user.id,
+        entityLabel: user.name,
+        description: `Created Data Entry user account for ${user.name}.`,
+        actorId: currentAdminId || 'admin',
+        actorName: adminName,
+        actorRole: 'admin',
+        visibility: 'admin_only',
+        targetPath: '/users',
+      });
 
       res.status(201).json({
         message: 'User created successfully.',
@@ -183,11 +198,25 @@ export class UserController implements IUserController {
       }
 
       const currentAdminId = req.user?.id || req.user?.email || '';
+      const adminName = req.user?.name || req.user?.email || 'Administrator';
       const user = await this.userService.updateUser(
         id.trim(),
         validation.value,
         currentAdminId,
       );
+
+      await activityService.recordSafe({
+        actionType: 'user.updated',
+        entityType: 'user',
+        entityId: user.id,
+        entityLabel: user.name,
+        description: `Updated user account profile for ${user.name}.`,
+        actorId: currentAdminId || 'admin',
+        actorName: adminName,
+        actorRole: 'admin',
+        visibility: 'admin_only',
+        targetPath: '/users',
+      });
 
       res.status(200).json({
         message: 'User updated successfully.',
@@ -256,11 +285,25 @@ export class UserController implements IUserController {
       }
 
       const currentAdminId = req.user?.id || req.user?.email || '';
+      const adminName = req.user?.name || req.user?.email || 'Administrator';
       const user = await this.userService.updateUserStatus(
         id.trim(),
         validation.value.isActive,
         currentAdminId,
       );
+
+      await activityService.recordSafe({
+        actionType: 'user.status_changed',
+        entityType: 'user',
+        entityId: user.id,
+        entityLabel: user.name,
+        description: `${user.isActive ? 'Activated' : 'Deactivated'} user account for ${user.name}.`,
+        actorId: currentAdminId || 'admin',
+        actorName: adminName,
+        actorRole: 'admin',
+        visibility: 'admin_only',
+        targetPath: '/users',
+      });
 
       res.status(200).json({
         message: 'User status updated successfully.',
@@ -303,7 +346,21 @@ export class UserController implements IUserController {
       }
 
       const currentAdminId = req.user?.id || req.user?.email || '';
+      const adminName = req.user?.name || req.user?.email || 'Administrator';
       const user = await this.userService.approveUser(id.trim(), currentAdminId);
+
+      await activityService.recordSafe({
+        actionType: 'user.approved',
+        entityType: 'user',
+        entityId: user.id,
+        entityLabel: user.name,
+        description: `Approved Data Entry registration for ${user.name}.`,
+        actorId: currentAdminId || 'admin',
+        actorName: adminName,
+        actorRole: 'admin',
+        visibility: 'admin_only',
+        targetPath: '/users',
+      });
 
       res.status(200).json({
         message: 'User account approved successfully.',
@@ -364,11 +421,25 @@ export class UserController implements IUserController {
       }
 
       const currentAdminId = req.user?.id || req.user?.email || '';
+      const adminName = req.user?.name || req.user?.email || 'Administrator';
       const user = await this.userService.rejectUser(
         id.trim(),
         currentAdminId,
         validation.value.reason,
       );
+
+      await activityService.recordSafe({
+        actionType: 'user.rejected',
+        entityType: 'user',
+        entityId: user.id,
+        entityLabel: user.name,
+        description: `Rejected Data Entry registration request for ${user.name}.`,
+        actorId: currentAdminId || 'admin',
+        actorName: adminName,
+        actorRole: 'admin',
+        visibility: 'admin_only',
+        targetPath: '/user-approvals',
+      });
 
       res.status(200).json({
         message: 'User account registration rejected.',

@@ -2,6 +2,7 @@ import { NextFunction, RequestHandler, Response } from 'express';
 import multer from 'multer';
 import { env } from '../../../config/env';
 import { AuthenticatedRequest } from '../../../types/auth';
+import { activityService } from '../../activity';
 import {
   BillAttachmentNotFoundError,
   InvalidBillAttachmentError,
@@ -219,6 +220,19 @@ export class ExpenseController {
     try {
       const caller = extractCaller(req);
       const category = await this.service.createCategory(req.body, caller);
+
+      await activityService.recordSafe({
+        actionType: 'expense.category_created',
+        entityType: 'expense',
+        entityId: category.id,
+        entityLabel: category.name,
+        description: `Created expense category '${category.name}'.`,
+        actorId: caller.id || caller.email || 'admin',
+        actorName: caller.name || caller.email || 'Administrator',
+        actorRole: caller.role,
+        targetPath: '/expenses',
+      });
+
       res.status(201).json({
         message: 'Expense category created successfully.',
         category,
@@ -241,6 +255,19 @@ export class ExpenseController {
         req.body,
         caller,
       );
+
+      await activityService.recordSafe({
+        actionType: 'expense.category_updated',
+        entityType: 'expense',
+        entityId: category.id,
+        entityLabel: category.name,
+        description: `Updated expense category '${category.name}'.`,
+        actorId: caller.id || caller.email || 'admin',
+        actorName: caller.name || caller.email || 'Administrator',
+        actorRole: caller.role,
+        targetPath: '/expenses',
+      });
+
       res.status(200).json({
         message: 'Expense category updated successfully.',
         category,
@@ -298,6 +325,27 @@ export class ExpenseController {
         headerIdempKey,
       );
 
+      if (result.created) {
+        const v = result.voucher;
+        const projText = v.projectCode
+          ? ` for ${v.projectCode}`
+          : ' (General Workshop)';
+        await activityService.recordSafe({
+          actionType: 'expense.created',
+          entityType: 'expense',
+          entityId: v.voucherNumber,
+          entityLabel: `${v.voucherNumber} (${v.categoryName})`,
+          description: `Recorded expense ${v.voucherNumber} under ${v.categoryName}${projText}.`,
+          actorId: caller.id || caller.email || 'user',
+          actorName: caller.name || caller.email || 'Workspace User',
+          actorRole: caller.role,
+          projectRecordId: v.projectRecordId || null,
+          projectCode: v.projectCode || null,
+          projectName: v.projectName || null,
+          targetPath: `/expenses?view=${encodeURIComponent(v.voucherNumber)}`,
+        });
+      }
+
       res.status(result.created ? 201 : 200).json({
         message: result.created
           ? 'Expense voucher recorded successfully.'
@@ -324,6 +372,22 @@ export class ExpenseController {
         uploadedFiles,
         caller,
       );
+
+      await activityService.recordSafe({
+        actionType: 'expense.updated',
+        entityType: 'expense',
+        entityId: voucher.voucherNumber,
+        entityLabel: `${voucher.voucherNumber} (${voucher.categoryName})`,
+        description: `Updated expense voucher ${voucher.voucherNumber} (${voucher.categoryName}).`,
+        actorId: caller.id || caller.email || 'admin',
+        actorName: caller.name || caller.email || 'Administrator',
+        actorRole: caller.role,
+        projectRecordId: voucher.projectRecordId || null,
+        projectCode: voucher.projectCode || null,
+        projectName: voucher.projectName || null,
+        targetPath: `/expenses?view=${encodeURIComponent(voucher.voucherNumber)}`,
+      });
+
       res.status(200).json({
         message: 'Expense voucher updated successfully.',
         voucher,
@@ -350,6 +414,22 @@ export class ExpenseController {
         reason,
         caller,
       );
+
+      await activityService.recordSafe({
+        actionType: 'expense.cancelled',
+        entityType: 'expense',
+        entityId: voucher.voucherNumber,
+        entityLabel: `${voucher.voucherNumber} (${voucher.categoryName})`,
+        description: `Voided expense voucher ${voucher.voucherNumber} (${voucher.categoryName}).`,
+        actorId: caller.id || caller.email || 'admin',
+        actorName: caller.name || caller.email || 'Administrator',
+        actorRole: caller.role,
+        projectRecordId: voucher.projectRecordId || null,
+        projectCode: voucher.projectCode || null,
+        projectName: voucher.projectName || null,
+        targetPath: `/expenses?view=${encodeURIComponent(voucher.voucherNumber)}`,
+      });
+
       res.status(200).json({
         message: 'Expense voucher cancelled and project cost updated.',
         voucher,

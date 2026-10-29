@@ -124,6 +124,12 @@ export function mapRawMaterialToResponse(
       !Number.isNaN(material.quantityOnHand)
         ? Math.max(0, material.quantityOnHand)
         : 0,
+    minStockLevel:
+      typeof material.minStockLevel === 'number' &&
+      Number.isFinite(material.minStockLevel) &&
+      material.minStockLevel >= 0
+        ? material.minStockLevel
+        : null,
     description: material.description || '',
     isActive: Boolean(material.isActive),
     createdBy: material.createdBy || undefined,
@@ -264,6 +270,7 @@ export class RawMaterialsService implements IRawMaterialsService {
           category: dto.category ?? null,
           unit: dto.unit,
           quantityOnHand: dto.quantityOnHand ?? 0,
+          minStockLevel: dto.minStockLevel ?? null,
           description: dto.description || '',
           isActive: true,
           createdBy,
@@ -382,6 +389,10 @@ export class RawMaterialsService implements IRawMaterialsService {
 
     if (dto.description !== undefined) {
       recordUpdates.description = dto.description;
+    }
+
+    if (dto.minStockLevel !== undefined) {
+      recordUpdates.minStockLevel = dto.minStockLevel;
     }
 
     try {

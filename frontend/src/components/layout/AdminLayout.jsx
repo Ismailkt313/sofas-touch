@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { RecentActivityDock } from '../../features/activity'
 import { useApprovalsContext } from '../../features/approvals/context/ApprovalsContext'
 import { AdminSidebar } from './AdminSidebar'
 import { HeaderNotificationsMenu } from './HeaderNotificationsMenu'
@@ -145,6 +146,14 @@ export function AdminLayout({
 
         <main className="admin-main">{children}</main>
       </div>
+
+      {currentUser ? (
+        <RecentActivityDock
+          pathname={pathname}
+          currentUser={currentUser}
+          onNavigate={onNavigate}
+        />
+      ) : null}
     </div>
   )
 }

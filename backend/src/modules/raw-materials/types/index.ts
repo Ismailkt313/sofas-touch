@@ -35,6 +35,7 @@ export interface RawMaterialResponseDto {
   category: RawMaterialCategory | null;
   unit: RawMaterialUnit;
   quantityOnHand: number;
+  minStockLevel: number | null;
   description: string;
   isActive: boolean;
   createdBy?: string;
@@ -57,6 +58,7 @@ export interface CreateRawMaterialRecordInput {
   category: RawMaterialCategory | null;
   unit: RawMaterialUnit;
   quantityOnHand?: number;
+  minStockLevel?: number | null;
   description: string;
   isActive: boolean;
   createdBy: string;
@@ -68,6 +70,7 @@ export interface UpdateRawMaterialRecordInput {
   category?: RawMaterialCategory | null;
   unit?: RawMaterialUnit;
   quantityOnHand?: number;
+  minStockLevel?: number | null;
   description?: string;
   isActive?: boolean;
 }

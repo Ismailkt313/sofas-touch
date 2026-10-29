@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { AdminLayout } from './components/layout/AdminLayout'
 import { AdminPlaceholderPage } from './components/layout/AdminPlaceholderPage'
 import { findNavItemByPath, isNavItemActive } from './components/layout/navigationConfig'
+import { ActivityHistoryPage } from './features/activity'
 import { ApprovalsProvider, UserApprovalsPage } from './features/approvals'
 import {
   AdminLoginPage,
@@ -10,6 +11,7 @@ import {
   fetchCurrentUser,
   getStoredSession,
 } from './features/auth'
+import { DashboardPage } from './features/dashboard'
 import { ProjectDetailsPage, ProjectsPage } from './features/projects'
 import { ExpensesPage } from './features/expenses'
 import {
@@ -86,6 +88,10 @@ function App() {
   }, [])
 
   const matchedAdminNav = findNavItemByPath(pathname)
+  const isDashboardRoute =
+    isNavItemActive(pathname, '/dashboard') ||
+    (pathname === '/' && Boolean(currentUser))
+  const isActivityRoute = isNavItemActive(pathname, '/activity')
   const isUsersRoute = isNavItemActive(pathname, '/users')
   const isUserApprovalsRoute = isNavItemActive(pathname, '/user-approvals')
   const isProjectsListRoute = pathname === '/projects'
@@ -121,7 +127,11 @@ function App() {
   const isSignupRoute = pathname === '/signup' || pathname === '/register'
 
   useEffect(() => {
-    if (isUserApprovalsRoute) {
+    if (isDashboardRoute) {
+      document.title = 'Soft Touch Sofas — Dashboard'
+    } else if (isActivityRoute) {
+      document.title = 'Soft Touch Sofas — Activity History'
+    } else if (isUserApprovalsRoute) {
       document.title = 'Soft Touch Sofas — User Approvals'
     } else if (isUsersRoute) {
       document.title = 'Soft Touch Sofas — User Management'
@@ -151,6 +161,8 @@ function App() {
       document.title = 'Soft Touch Sofas — Admin Sign In'
     }
   }, [
+    isDashboardRoute,
+    isActivityRoute,
     isUserApprovalsRoute,
     isUsersRoute,
     projectReportIdentifier,
@@ -169,7 +181,7 @@ function App() {
   const handleAuthenticated = useCallback(
     (sessionPayload) => {
       setCurrentUser(sessionPayload?.user || null)
-      navigate('/users')
+      navigate('/dashboard')
     },
     [navigate],
   )
@@ -189,16 +201,32 @@ function App() {
     )
   }
 
-  if (isUserApprovalsRoute || isUsersRoute || matchedAdminNav) {
+  if (
+    isDashboardRoute ||
+    isActivityRoute ||
+    isUserApprovalsRoute ||
+    isUsersRoute ||
+    matchedAdminNav
+  ) {
     return (
       <ApprovalsProvider currentUser={currentUser}>
         <AdminLayout
-          pathname={pathname}
+          pathname={isDashboardRoute ? '/dashboard' : pathname}
           currentUser={currentUser}
           onNavigate={navigate}
           onLogout={handleLogout}
         >
-          {isUserApprovalsRoute ? (
+          {isDashboardRoute ? (
+            <DashboardPage
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : isActivityRoute ? (
+            <ActivityHistoryPage
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : isUserApprovalsRoute ? (
             <UserApprovalsPage
               currentUser={currentUser}
               onNavigate={navigate}

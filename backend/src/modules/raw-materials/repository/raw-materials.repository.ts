@@ -71,9 +71,16 @@ function normalizeDocQuantity(material: IRawMaterial): IRawMaterial {
     !Number.isNaN(material.quantityOnHand)
       ? Math.max(0, material.quantityOnHand)
       : 0;
+  const normalizedMinStock =
+    typeof material.minStockLevel === 'number' &&
+    Number.isFinite(material.minStockLevel) &&
+    material.minStockLevel >= 0
+      ? roundMaterialQuantity(material.minStockLevel)
+      : null;
   return {
     ...material,
     quantityOnHand: roundMaterialQuantity(numeric),
+    minStockLevel: normalizedMinStock,
     createdAt: material.createdAt ? new Date(material.createdAt) : undefined,
     updatedAt: material.updatedAt ? new Date(material.updatedAt) : undefined,
   };
@@ -127,6 +134,12 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
       typeof input.quantityOnHand === 'number' && !Number.isNaN(input.quantityOnHand)
         ? Math.max(0, input.quantityOnHand)
         : 0;
+    const minStockLevel =
+      typeof input.minStockLevel === 'number' &&
+      Number.isFinite(input.minStockLevel) &&
+      input.minStockLevel >= 0
+        ? roundMaterialQuantity(input.minStockLevel)
+        : null;
 
     if (this.isDbConnected()) {
       await this.ensureDbIndexes();
@@ -137,6 +150,7 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
           category: input.category ?? null,
           unit: input.unit,
           quantityOnHand,
+          minStockLevel,
           description: input.description || '',
           isActive: input.isActive,
           createdBy: input.createdBy || '',
@@ -166,6 +180,7 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
       category: input.category ?? null,
       unit: input.unit,
       quantityOnHand,
+      minStockLevel,
       description: input.description || '',
       isActive: input.isActive,
       createdBy: input.createdBy || '',
@@ -382,6 +397,15 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
       sanitizedSet.quantityOnHand = Math.max(0, updates.quantityOnHand);
     }
 
+    if (updates.minStockLevel !== undefined) {
+      sanitizedSet.minStockLevel =
+        typeof updates.minStockLevel === 'number' &&
+        Number.isFinite(updates.minStockLevel) &&
+        updates.minStockLevel >= 0
+          ? roundMaterialQuantity(updates.minStockLevel)
+          : null;
+    }
+
     if (updates.description !== undefined) {
       sanitizedSet.description = updates.description;
     }
@@ -461,6 +485,9 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
         : {}),
       ...(sanitizedSet.quantityOnHand !== undefined
         ? { quantityOnHand: sanitizedSet.quantityOnHand as number }
+        : {}),
+      ...(sanitizedSet.minStockLevel !== undefined
+        ? { minStockLevel: sanitizedSet.minStockLevel as number | null }
         : {}),
       ...(sanitizedSet.description !== undefined
         ? { description: sanitizedSet.description as string }
