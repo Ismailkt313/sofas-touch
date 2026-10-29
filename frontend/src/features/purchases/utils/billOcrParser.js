@@ -267,8 +267,10 @@ function roundQuantity(value) {
 
 function repairCautiousOcrDecimals(line) {
   return line
-    .replace(/(\d),\s(\d{3}\.\d{2})\b/g, '$1,$2')
-    .replace(/(\d),\s(\d{2},\d{3}\.\d{2})\b/g, '$1,$2')
+    .replace(/(\d),\s+(\d{3}\.\d{2})\b/g, '$1,$2')
+    .replace(/(\d),\s+(\d{2},\d{3}\.\d{2})\b/g, '$1,$2')
+    .replace(/(\b[1-9]\d?)%\s*,\s*(\d{3}\.\d{2})\b/g, '$1,$2')
+    .replace(/(\b[1-9]\d?)['`‘’]\s*(\d{3}\.\d{2})\b/g, '$1,$2')
     .replace(/(\b\d[\d,]*\.\d)[Oo]\b/g, '$10')
     .replace(/(\b\d[\d,]*\.)[Oo](\d)\b/g, '$10$2')
     .replace(/(\b\d{1,3},)[Oo](\d{2})\b/g, '$10$2')
@@ -719,17 +721,17 @@ export function extractSummarySegmentFromRow(rowText) {
   }
 
   if (
-    /\bhsn\s*\/?\s*sac\b/i.test(clean) &&
-    /\b(?:taxable|central\s*tax|state\s*tax|cgst|sgst|total\s*tax)\b/i.test(clean)
+    /\b(?:hsn\s*\/?\s*sac|hsn\s*code)\b/i.test(clean) &&
+    /\b(?:taxable|central\s*tax|state\s*tax|cgst|sgst|igst|total\s*tax)\b/i.test(clean)
   ) {
     return { kind: 'footer_stop', segment: clean }
   }
 
   const grandTotalMatch =
-    /\b(?:grand\s*total|final\s*(?:bill\s*)?total|bill\s*total|invoice\s*total|net\s*(?:total|payable|amount)|amount\s*payable|total\s*(?:amount|payable|bill|value))\b.*$/i.exec(
+    /\b(?:grand\s*total|final\s*(?:bill\s*|invoice\s*)?total|bill\s*total|invoice\s*total|net\s*(?:total|payable|amount)|amount\s*payable|total\s*(?:amount|payable|bill|value|due))\b.*$/i.exec(
       clean,
     ) ||
-    /(?:^|\s)(total(?:\s*\((?:rs\.?|inr|₹)\))?\s*[:-]?\s*(?:rs\.?|inr|₹)?\s*(?:\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d{1,2})?)$/i.exec(
+    /(?:^|\s)(total(?:\s*\((?:rs\.?|inr|₹)\))?\s*[:-]?\s*(?:rs\.?|inr|₹|[₨£¥$€%X])?\s*(?:\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d{1,2})?)$/i.exec(
       clean,
     )
   if (grandTotalMatch) {
@@ -740,7 +742,7 @@ export function extractSummarySegmentFromRow(rowText) {
   }
 
   const subtotalMatch =
-    /\b(?:sub\s*[- ]?total|taxable\s*(?:value|amount)|total\s*taxable(?:\s*(?:value|amount))?|items?\s*sub\s*total|goods\s*total|basic\s*(?:total|amount))\b.*$/i.exec(
+    /\b(?:material\s*sub\s*[- ]?total|items?\s*sub\s*[- ]?total|sub\s*[- ]?total|taxable\s*(?:value|amount|sub\s*[- ]?total)|total\s*taxable(?:\s*(?:value|amount))?|goods\s*total|basic\s*(?:total|amount))\b.*$/i.exec(
       clean,
     )
   if (subtotalMatch) {
@@ -755,9 +757,22 @@ export function extractSummarySegmentFromRow(rowText) {
     return { kind: 'discount', segment: discountMatch[0] }
   }
 
-  if (!/\b(?:gstin|gst\s*(?:no|number|reg|id)|tax\s*invoice)\b/i.test(clean)) {
+  const isTaxMetadataLine =
+    /\b(?:gstin|gst\s*(?:no|number|reg|id|in\b|invoice)|tax\s*invoice|(?:invoice|inv\.?|bill|voucher|challan|po|order|ack|irn|e-?way)\s*(?:no\.?|number|#)|state\s*code)\b/i.test(
+      clean,
+    ) || /^\d{6,8}\b/.test(clean)
+
+  if (!isTaxMetadataLine) {
+    const combinedCgstSgstMatch =
+      /\b(?:total\s*)?\(?cgst\b[^+&\n]{0,24}(?:\+|&|\band\b|\/)\s*(?:sgst|utgst)\b.*$/i.exec(
+        clean,
+      )
+    if (combinedCgstSgstMatch && !/\btaxable\b/i.test(combinedCgstSgstMatch[0])) {
+      return { kind: 'tax_total', segment: combinedCgstSgstMatch[0] }
+    }
+
     const taxTotalMatch =
-      /\b(?:total\s*(?:gst|tax)\b|output\s*(?:gst|tax|vat)\b|input\s*(?:gst|tax)\b|gst(?:\s*@|\s*\(|\s*amount\b|\s*\d+|\s*[:-])|tax\s*amount\b|vat(?:\s*@|\s*amount\b|\s*[:-])).*$/i.exec(
+      /\b(?:total\s*(?:gst|tax|igst)\b|output\s*(?:gst|tax|vat)\b|input\s*(?:gst|tax)\b|(?:add\s*[:-]?\s*)?gst(?:\s*(?:@|at\b|\(|amount\b|total\b|\d+|[:-]|[₹₨£¥$€%X])|\s+(?=(?:rs\.?|inr\b|\d)))|tax\s*(?:@|at\b|\(|amount\b|total\b|[:-])|vat(?:\s*(?:@|at\b|\(|amount\b|[:-]))).*$/i.exec(
         clean,
       )
     if (taxTotalMatch && !/\btaxable\b/i.test(taxTotalMatch[0])) {
@@ -765,10 +780,10 @@ export function extractSummarySegmentFromRow(rowText) {
     }
 
     const taxCompMatch =
-      /\b(?:cgst|sgst|utgst|igst|central\s*tax|state\s*tax|integrated\s*tax|cess)\b.*$/i.exec(
+      /\b(?:cgst|sgst|utgst|igst|central\s*(?:gst|tax)|state\s*(?:gst|tax)|integrated\s*(?:gst|tax)|cess)\b.*$/i.exec(
         clean,
       )
-    if (taxCompMatch) {
+    if (taxCompMatch && !/\btaxable\b/i.test(taxCompMatch[0])) {
       return { kind: 'tax_component', segment: taxCompMatch[0] }
     }
   }
@@ -1223,11 +1238,79 @@ function extractSupplierNameFromRows(rows, headerLimitIdx) {
   return { value: '', confidence: 'none' }
 }
 
-function extractLastMonetaryAmountOnRow(rowText, { allowUnformattedSixDigit = false } = {}) {
-  const withoutPercentages = repairCautiousOcrDecimals(String(rowText || ''))
-    .replace(/\b\d+(?:\.\d+)?\s*%/g, ' ')
+function roundTaxRate(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) {
+    return null
+  }
+  return Math.round((num + Number.EPSILON) * 100) / 100
+}
+
+function extractTaxRateInfoFromSegment(segment, kind) {
+  const clean = String(segment || '').trim()
+  if (!clean) {
+    return { rate: null, componentKind: null }
+  }
+
+  const rates = []
+  const rateRegex = /(?:@|\bat\b|\(|\s|^)(\d{1,2}(?:\.\d{1,2})?)\s*%/gi
+  let match = rateRegex.exec(clean)
+  while (match !== null) {
+    const pct = Number(match[1])
+    if (Number.isFinite(pct) && pct > 0 && pct <= 50) {
+      rates.push(roundTaxRate(pct))
+    }
+    match = rateRegex.exec(clean)
+  }
+
+  const hasCgst = /\b(?:cgst|central\s*(?:gst|tax))\b/i.test(clean)
+  const hasSgst = /\b(?:sgst|utgst|state\s*(?:gst|tax))\b/i.test(clean)
+  const hasIgst = /\b(?:igst|integrated\s*(?:gst|tax))\b/i.test(clean)
+  const hasCess = /\bcess\b/i.test(clean)
+
+  if (hasCgst && hasSgst) {
+    const combinedRate =
+      rates.length >= 2
+        ? roundTaxRate(rates[0] + rates[1])
+        : rates.length === 1
+          ? rates[0]
+          : null
+    return { rate: combinedRate, componentKind: 'cgst_sgst_combined' }
+  }
+
+  if (kind === 'tax_component') {
+    const compKind = hasIgst
+      ? 'igst'
+      : hasCgst
+        ? 'cgst'
+        : hasSgst
+          ? 'sgst'
+          : hasCess
+            ? 'cess'
+            : 'other_component'
+    return { rate: rates[0] ?? null, componentKind: compKind }
+  }
+
+  return { rate: rates[0] ?? null, componentKind: 'tax_total' }
+}
+
+function extractLastMonetaryAmountOnRow(
+  rowText,
+  { allowUnformattedSixDigit = false } = {},
+) {
+  let withoutPercentages = repairCautiousOcrDecimals(String(rowText || ''))
     .replace(/\(\s*\d+(?:\.\d+)?\s*%\s*\)/g, ' ')
-    .replace(/@\s*\d+(?:\.\d+)?\b/g, ' ')
+    .replace(/(?:@|\bat\b)\s*\d+(?:\.\d+)?\s*%?(?!\s*,\s*\d{3}\b)/gi, ' ')
+    .replace(/\b\d+(?:\.\d+)?\s*%(?!\s*,?\s*\d{3}\.\d{2}\b)/g, ' ')
+    .replace(
+      /\b(?:hsn|sac|invoice|inv|bill|ref|code)\s*(?:no\.?|#)?\s*[:-]?\s*[A-Z0-9/_-]+/gi,
+      ' ',
+    )
+
+  withoutPercentages = withoutPercentages.replace(
+    /(^|[:-]|\bRs\.?|\bINR|[₹₨£¥$€]|\s{2,})\s*([1-9]\d?)\s(\d{3}\.\d{2})\s*$/i,
+    '$1 $2,$3',
+  )
 
   const matches = withoutPercentages.match(
     /(?:Rs\.?\s*|INR\s*)?(?:\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d{1,3})?/gi,
@@ -1236,6 +1319,7 @@ function extractLastMonetaryAmountOnRow(rowText, { allowUnformattedSixDigit = fa
     return null
   }
 
+  const parsedCandidates = []
   for (let i = matches.length - 1; i >= 0; i -= 1) {
     const raw = matches[i].trim()
     const val = parseCleanNumber(raw)
@@ -1248,21 +1332,80 @@ function extractLastMonetaryAmountOnRow(rowText, { allowUnformattedSixDigit = fa
     if (!allowUnformattedSixDigit && isLikelyPinCode(raw, val, withoutPercentages)) {
       continue
     }
-    return roundMoney(val)
+    parsedCandidates.push({
+      raw,
+      val: roundMoney(val),
+      hasDecimalOrComma: raw.includes('.') || raw.includes(','),
+      isHsnLikeInteger: isLikelyHsnOrIdentifierCode(raw, val),
+    })
   }
 
-  return null
+  if (parsedCandidates.length === 0) {
+    return null
+  }
+
+  const nonHsnDecimal = parsedCandidates.find(
+    (c) => c.hasDecimalOrComma && !c.isHsnLikeInteger,
+  )
+  if (nonHsnDecimal && parsedCandidates[0].isHsnLikeInteger) {
+    return nonHsnDecimal.val
+  }
+
+  const firstNonHsn = parsedCandidates.find((c) => !c.isHsnLikeInteger)
+  return firstNonHsn ? firstNonHsn.val : null
 }
 
-function extractSummaryAmountsFromRows(rows, startIdx = 0) {
+function reconcileAmountWithAnchor(rawAmt, anchorAmt, tolerance = 1.0) {
+  if (
+    rawAmt === null ||
+    rawAmt === undefined ||
+    rawAmt <= 0 ||
+    anchorAmt === null ||
+    anchorAmt === undefined ||
+    !Number.isFinite(anchorAmt) ||
+    anchorAmt <= 0
+  ) {
+    return rawAmt
+  }
+
+  if (Math.abs(rawAmt - anchorAmt) <= tolerance) {
+    return rawAmt
+  }
+
+  if (
+    rawAmt < 1000 &&
+    anchorAmt >= 1000 &&
+    Math.abs((anchorAmt % 1000) - rawAmt) <= 0.05
+  ) {
+    return roundMoney(anchorAmt)
+  }
+
+  const plain = rawAmt.toFixed(2)
+  if (/^[23789]\d/.test(plain)) {
+    const stripped = roundMoney(Number(plain.slice(1)))
+    if (stripped > 0 && Math.abs(stripped - anchorAmt) <= tolerance) {
+      return stripped
+    }
+  }
+
+  return rawAmt
+}
+
+function extractSummaryAmountsFromRows(
+  rows,
+  startIdx = 0,
+  { validatedItemsSubtotal = 0 } = {},
+) {
   let discountAmount = 0
-  let componentTaxSum = 0
-  let explicitTotalTax = null
   let otherCharges = 0
   let detectedSubtotal = null
   let detectedGrandTotal = null
+  let explicitTotalTax = null
+  let explicitTotalTaxRate = null
+  let hasCombinedCgstSgstLine = false
   let passedGrandTotal = false
   let seenHsnSummaryTable = false
+  const taxComponents = []
 
   const scanRows = rows.slice(Math.max(0, startIdx))
 
@@ -1278,18 +1421,29 @@ function extractSummaryAmountsFromRows(rows, startIdx = 0) {
       if (passedGrandTotal) {
         break
       }
-      if (/\bhsn\s*\/?\s*sac\b/i.test(row.text)) {
+      if (/\b(?:hsn\s*\/?\s*sac|hsn\s*code)\b/i.test(row.text)) {
         seenHsnSummaryTable = true
       }
       continue
     }
 
-    if (
-      seenHsnSummaryTable &&
-      kind === 'grand_total' &&
-      /^total(?:\s*\(|[:-]|\s+\d)/i.test(segment.trim())
-    ) {
-      continue
+    if (seenHsnSummaryTable) {
+      if (
+        kind === 'grand_total' &&
+        /^total(?:\s*\(|[:-]|\s+\d)/i.test(segment.trim())
+      ) {
+        continue
+      }
+      const startsWithHsn = /^\d{4,8}\b/.test(String(row.text || '').trim())
+      if (kind === 'subtotal' && (detectedSubtotal !== null || startsWithHsn)) {
+        continue
+      }
+      if (
+        (kind === 'tax_component' || kind === 'tax_total') &&
+        (explicitTotalTax !== null || taxComponents.length > 0 || startsWithHsn)
+      ) {
+        continue
+      }
     }
 
     if (
@@ -1316,13 +1470,29 @@ function extractSummaryAmountsFromRows(rows, startIdx = 0) {
       continue
     }
 
-    if (kind === 'tax_component' && amt > 0) {
-      componentTaxSum = roundMoney(componentTaxSum + amt)
+    if (kind === 'tax_component' && amt >= 0) {
+      const rateInfo = extractTaxRateInfoFromSegment(segment, kind)
+      if (amt > 0) {
+        taxComponents.push({
+          amount: amt,
+          rate: rateInfo.rate,
+          componentKind: rateInfo.componentKind,
+        })
+      }
       continue
     }
 
-    if (kind === 'tax_total' && amt > 0) {
-      explicitTotalTax = amt
+    if (kind === 'tax_total' && amt >= 0) {
+      const rateInfo = extractTaxRateInfoFromSegment(segment, kind)
+      if (rateInfo.componentKind === 'cgst_sgst_combined') {
+        hasCombinedCgstSgstLine = true
+      }
+      if (rateInfo.rate !== null) {
+        explicitTotalTaxRate = rateInfo.rate
+      }
+      if (amt > 0 || explicitTotalTax === null) {
+        explicitTotalTax = amt
+      }
       continue
     }
 
@@ -1337,18 +1507,147 @@ function extractSummaryAmountsFromRows(rows, startIdx = 0) {
     }
   }
 
+  if (detectedSubtotal !== null && validatedItemsSubtotal > 0) {
+    detectedSubtotal = reconcileAmountWithAnchor(
+      detectedSubtotal,
+      validatedItemsSubtotal,
+      1.0,
+    )
+  }
+
+  const baseSub =
+    detectedSubtotal !== null
+      ? detectedSubtotal
+      : validatedItemsSubtotal > 0
+        ? roundMoney(validatedItemsSubtotal)
+        : null
+  const taxableBase =
+    baseSub !== null ? Math.max(0, roundMoney(baseSub - discountAmount)) : null
+
+  const rateByCompKind = new Map()
+  for (const comp of taxComponents) {
+    if (
+      comp.rate !== null &&
+      comp.componentKind &&
+      !rateByCompKind.has(comp.componentKind)
+    ) {
+      rateByCompKind.set(comp.componentKind, comp.rate)
+    }
+  }
+  const componentRateSum =
+    rateByCompKind.size > 0
+      ? roundTaxRate(
+          Array.from(rateByCompKind.values()).reduce((s, r) => s + r, 0),
+        )
+      : null
+
+  const detectedTaxRatePercent =
+    explicitTotalTaxRate !== null ? explicitTotalTaxRate : componentRateSum
+
+  if (taxableBase !== null && taxableBase > 0) {
+    for (const comp of taxComponents) {
+      if (comp.rate !== null && comp.rate > 0) {
+        const expectedCompAmt = roundMoney((taxableBase * comp.rate) / 100)
+        comp.amount = reconcileAmountWithAnchor(comp.amount, expectedCompAmt, 0.75)
+      }
+    }
+  }
+
+  const componentTaxSum = taxComponents.reduce(
+    (sum, comp) => roundMoney(sum + comp.amount),
+    0,
+  )
+
+  const rateExpectedTax =
+    taxableBase !== null &&
+    taxableBase > 0 &&
+    detectedTaxRatePercent !== null &&
+    detectedTaxRatePercent > 0
+      ? roundMoney((taxableBase * detectedTaxRatePercent) / 100)
+      : null
+
+  if (
+    detectedGrandTotal !== null &&
+    baseSub !== null &&
+    rateExpectedTax !== null
+  ) {
+    const expectedGrandFromRate = roundMoney(
+      baseSub - discountAmount + rateExpectedTax + otherCharges,
+    )
+    detectedGrandTotal = reconcileAmountWithAnchor(
+      detectedGrandTotal,
+      expectedGrandFromRate,
+      1.0,
+    )
+  }
+
+  const residualExpectedTax =
+    baseSub !== null && detectedGrandTotal !== null
+      ? roundMoney(detectedGrandTotal - baseSub + discountAmount - otherCharges)
+      : null
+
+  const candidateTaxAnchors = []
+  if (
+    rateExpectedTax !== null &&
+    residualExpectedTax !== null &&
+    residualExpectedTax > 0 &&
+    Math.abs(rateExpectedTax - residualExpectedTax) <= 1.5
+  ) {
+    candidateTaxAnchors.push(residualExpectedTax)
+  } else {
+    if (residualExpectedTax !== null && residualExpectedTax > 0) {
+      candidateTaxAnchors.push(residualExpectedTax)
+    }
+    if (rateExpectedTax !== null && rateExpectedTax > 0) {
+      candidateTaxAnchors.push(rateExpectedTax)
+    }
+  }
+
+  if (explicitTotalTax !== null && explicitTotalTax > 0) {
+    for (const anchor of candidateTaxAnchors) {
+      const repaired = reconcileAmountWithAnchor(explicitTotalTax, anchor, 0.75)
+      if (repaired !== explicitTotalTax) {
+        explicitTotalTax = repaired
+        break
+      }
+    }
+  }
+
   let taxAmount
+  const hasPrintedTax = explicitTotalTax !== null || taxComponents.length > 0
+
   if (explicitTotalTax !== null && componentTaxSum > 0) {
-    if (Math.abs(explicitTotalTax - componentTaxSum) <= Math.max(2, explicitTotalTax * 0.03)) {
-      taxAmount = explicitTotalTax
-    } else if (
-      detectedSubtotal !== null &&
-      detectedGrandTotal !== null &&
-      Math.abs(detectedSubtotal - discountAmount + explicitTotalTax + otherCharges - detectedGrandTotal) <= 2
+    if (
+      Math.abs(explicitTotalTax - componentTaxSum) <=
+      Math.max(2, explicitTotalTax * 0.03)
     ) {
       taxAmount = explicitTotalTax
-    } else {
+    } else if (
+      baseSub !== null &&
+      detectedGrandTotal !== null &&
+      Math.abs(
+        baseSub -
+          discountAmount +
+          explicitTotalTax +
+          otherCharges -
+          detectedGrandTotal,
+      ) <= 2
+    ) {
+      taxAmount = explicitTotalTax
+    } else if (
+      baseSub !== null &&
+      detectedGrandTotal !== null &&
+      Math.abs(
+        baseSub -
+          discountAmount +
+          componentTaxSum +
+          otherCharges -
+          detectedGrandTotal,
+      ) <= 2
+    ) {
       taxAmount = componentTaxSum
+    } else {
+      taxAmount = explicitTotalTax
     }
   } else if (explicitTotalTax !== null) {
     taxAmount = explicitTotalTax
@@ -1356,9 +1655,55 @@ function extractSummaryAmountsFromRows(rows, startIdx = 0) {
     taxAmount = componentTaxSum
   }
 
+  if (taxAmount > 0 && explicitTotalTax === null && taxComponents.length > 0) {
+    for (const anchor of candidateTaxAnchors) {
+      const repaired = reconcileAmountWithAnchor(taxAmount, anchor, 0.75)
+      if (repaired !== taxAmount) {
+        taxAmount = repaired
+        break
+      }
+    }
+  }
+
+  if (detectedGrandTotal !== null && baseSub !== null && taxAmount > 0) {
+    const expectedGrandFromTax = roundMoney(
+      baseSub - discountAmount + taxAmount + otherCharges,
+    )
+    detectedGrandTotal = reconcileAmountWithAnchor(
+      detectedGrandTotal,
+      expectedGrandFromTax,
+      1.0,
+    )
+  }
+
+  let taxBreakdownLabel = ''
+  const hasCgstComp = taxComponents.some((c) => c.componentKind === 'cgst')
+  const hasSgstComp = taxComponents.some((c) => c.componentKind === 'sgst')
+  const hasIgstComp = taxComponents.some((c) => c.componentKind === 'igst')
+
+  if (hasCgstComp && hasSgstComp) {
+    const cgstR = rateByCompKind.get('cgst')
+    const sgstR = rateByCompKind.get('sgst')
+    taxBreakdownLabel =
+      cgstR && sgstR ? `CGST ${cgstR}% + SGST ${sgstR}%` : 'CGST + SGST'
+  } else if (hasCombinedCgstSgstLine) {
+    taxBreakdownLabel =
+      detectedTaxRatePercent !== null
+        ? `CGST + SGST (${detectedTaxRatePercent}%)`
+        : 'CGST + SGST'
+  } else if (hasIgstComp) {
+    const igstR = rateByCompKind.get('igst') ?? detectedTaxRatePercent
+    taxBreakdownLabel = igstR ? `IGST @ ${igstR}%` : 'IGST'
+  } else if (hasPrintedTax && detectedTaxRatePercent !== null) {
+    taxBreakdownLabel = `GST @ ${detectedTaxRatePercent}%`
+  }
+
   return {
     discountAmount,
     taxAmount,
+    hasPrintedTax,
+    detectedTaxRatePercent,
+    taxBreakdownLabel,
     otherCharges,
     detectedSubtotal,
     detectedGrandTotal,
@@ -1599,6 +1944,53 @@ function extractNumericTokensFromSegment(text) {
   return results
 }
 
+function reconcileLineRupeeDigits(qty, rate, amount, limits) {
+  if (!(qty > 0 && rate > 0 && amount > 0)) {
+    return { rate, amount }
+  }
+  if (isLineMathConsistent(qty, rate, amount, limits).consistent) {
+    return { rate, amount }
+  }
+  const ratePlain = rate.toFixed(2)
+  const amtPlain = amount.toFixed(2)
+  const canStripAmt = /^[23789]\d/.test(amtPlain)
+  const canStripRate = /^[23789]\d/.test(ratePlain)
+
+  if (canStripAmt) {
+    const strippedAmt = roundMoney(Number(amtPlain.slice(1)))
+    if (
+      strippedAmt > 0 &&
+      isLineMathConsistent(qty, rate, strippedAmt, limits).consistent
+    ) {
+      return { rate, amount: strippedAmt }
+    }
+  }
+
+  if (canStripRate) {
+    const strippedRate = roundMoney(Number(ratePlain.slice(1)))
+    if (
+      strippedRate > 0 &&
+      isLineMathConsistent(qty, strippedRate, amount, limits).consistent
+    ) {
+      return { rate: strippedRate, amount }
+    }
+  }
+
+  if (canStripRate && canStripAmt) {
+    const strippedRate = roundMoney(Number(ratePlain.slice(1)))
+    const strippedAmt = roundMoney(Number(amtPlain.slice(1)))
+    if (
+      strippedRate > 0 &&
+      strippedAmt > 0 &&
+      isLineMathConsistent(qty, strippedRate, strippedAmt, limits).consistent
+    ) {
+      return { rate: strippedRate, amount: strippedAmt }
+    }
+  }
+
+  return { rate, amount }
+}
+
 function solveQuantityRateAmount(numericTokens, limits, rowText) {
   const usable = numericTokens.filter(
     (tok) =>
@@ -1654,18 +2046,30 @@ function solveQuantityRateAmount(numericTokens, limits, rowText) {
           continue
         }
 
-        const mathCheck = isLineMathConsistent(
+        const reconciled = reconcileLineRupeeDigits(
           qTok.value,
           rTok.value,
           aTok.value,
+          limits,
+        )
+        const mathCheck = isLineMathConsistent(
+          qTok.value,
+          reconciled.rate,
+          reconciled.amount,
           limits,
         )
         if (mathCheck.consistent) {
           return {
             matched: true,
             quantityToken: qTok,
-            rateToken: rTok,
-            amountToken: aTok,
+            rateToken:
+              reconciled.rate !== rTok.value
+                ? { ...rTok, value: reconciled.rate }
+                : rTok,
+            amountToken:
+              reconciled.amount !== aTok.value
+                ? { ...aTok, value: reconciled.amount }
+                : aTok,
             expectedAmount: mathCheck.expected,
           }
         }
@@ -2080,8 +2484,14 @@ export function validateCandidateLineItem(
   const aTok = candidate.amountToken
 
   const qty = qTok ? roundQuantity(qTok.value) : null
-  const rate = rTok ? roundMoney(rTok.value) : null
-  const amount = aTok ? roundMoney(aTok.value) : null
+  let rate = rTok ? roundMoney(rTok.value) : null
+  let amount = aTok ? roundMoney(aTok.value) : null
+
+  if (qty !== null && qty > 0 && rate !== null && rate > 0 && amount !== null && amount > 0) {
+    const reconciled = reconcileLineRupeeDigits(qty, rate, amount, limits)
+    rate = reconciled.rate
+    amount = reconciled.amount
+  }
 
   if (qTok && isLikelyPinCode(qTok.raw, qTok.value, rawRow)) {
     return {
@@ -2227,6 +2637,7 @@ export function reconcileInvoiceTotals(params = {}) {
     printedSubtotal: directPrintedSubtotal,
     discountAmount: directDiscount,
     taxAmount: directTax,
+    printedTaxAmount: directPrintedTax,
     otherCharges: directOtherCharges,
     printedFinalTotal: directPrintedFinalTotal,
     limits = DEFAULT_OCR_VALIDATION_LIMITS,
@@ -2261,6 +2672,17 @@ export function reconcileInvoiceTotals(params = {}) {
       ? roundMoney(rawPrintedSub)
       : null
 
+  const rawPrintedTax =
+    directPrintedTax !== undefined
+      ? directPrintedTax
+      : summary.hasPrintedTax
+        ? summary.taxAmount
+        : null
+  const printedTaxAmount =
+    typeof rawPrintedTax === 'number' && rawPrintedTax >= 0
+      ? roundMoney(rawPrintedTax)
+      : null
+
   const discount = roundMoney(
     directDiscount !== undefined
       ? Number(directDiscount || 0)
@@ -2292,6 +2714,7 @@ export function reconcileInvoiceTotals(params = {}) {
 
   const mismatchMessages = []
   let subtotalMatches = true
+  let taxMatches = true
   let finalTotalMatches = true
 
   if (printedSubtotal !== null) {
@@ -2306,6 +2729,16 @@ export function reconcileInvoiceTotals(params = {}) {
         `Calculated items subtotal (₹${calculatedSubtotal.toFixed(2)}) differs from printed bill subtotal (₹${printedSubtotal.toFixed(2)}).`,
       )
     }
+  }
+
+  if (
+    printedTaxAmount !== null &&
+    Math.abs(tax - printedTaxAmount) > tolerance
+  ) {
+    taxMatches = false
+    mismatchMessages.push(
+      `Current voucher GST/tax (₹${tax.toFixed(2)}) differs from printed bill GST (₹${printedTaxAmount.toFixed(2)}).`,
+    )
   }
 
   if (printedFinalTotal !== null) {
@@ -2325,14 +2758,16 @@ export function reconcileInvoiceTotals(params = {}) {
   return {
     calculatedSubtotal,
     printedSubtotal,
+    printedTaxAmount,
     extractedDiscount: discount,
     extractedTax: tax,
     extractedOtherCharges: otherCharges,
     calculatedFinalTotal,
     printedFinalTotal,
     subtotalMatches,
+    taxMatches,
     finalTotalMatches,
-    hasMismatch: !subtotalMatches || !finalTotalMatches,
+    hasMismatch: !subtotalMatches || !taxMatches || !finalTotalMatches,
     mismatchMessages,
   }
 }
@@ -2364,9 +2799,14 @@ export function parseBillOcrText(ocrInput, rawMaterials = [], options = {}) {
       purchaseDateConfidence: 'none',
       discountAmount: '',
       taxAmount: '',
+      detectedTaxRatePercent: null,
+      taxBreakdownLabel: '',
       otherCharges: '',
       detectedSubtotal: null,
       detectedGrandTotal: null,
+      printedDiscountAmount: null,
+      printedTaxAmount: null,
+      printedOtherCharges: null,
       calculatedSubtotal: 0,
       calculatedFinalTotal: 0,
       lineItems: [],
@@ -2475,10 +2915,21 @@ export function parseBillOcrText(ocrInput, rawMaterials = [], options = {}) {
     globalRowOffset += page.rows.length
   })
 
+  const validatedItemsSubtotal = roundMoney(
+    validatedLineItems.reduce(
+      (sum, item) =>
+        sum +
+        roundMoney(Number(item.quantity || 0) * Number(item.unitPrice || 0)),
+      0,
+    ),
+  )
+
   const summaryStartIdx = tableHeaderDetected
     ? Math.max(0, firstPageHeaderIdx + 1)
     : 0
-  const summary = extractSummaryAmountsFromRows(allRows, summaryStartIdx)
+  const summary = extractSummaryAmountsFromRows(allRows, summaryStartIdx, {
+    validatedItemsSubtotal,
+  })
 
   const totalsValidation = reconcileInvoiceTotals({
     validatedLineItems,
@@ -2536,12 +2987,14 @@ export function parseBillOcrText(ocrInput, rawMaterials = [], options = {}) {
     discountAmount:
       summary.discountAmount > 0 ? String(summary.discountAmount) : '',
     taxAmount: summary.taxAmount > 0 ? String(summary.taxAmount) : '',
+    detectedTaxRatePercent: summary.detectedTaxRatePercent ?? null,
+    taxBreakdownLabel: summary.taxBreakdownLabel || '',
     otherCharges:
       summary.otherCharges > 0 ? String(summary.otherCharges) : '',
     detectedSubtotal: totalsValidation.printedSubtotal,
     detectedGrandTotal: totalsValidation.printedFinalTotal,
     printedDiscountAmount: summary.discountAmount,
-    printedTaxAmount: summary.taxAmount,
+    printedTaxAmount: summary.hasPrintedTax ? summary.taxAmount : null,
     printedOtherCharges: summary.otherCharges,
     calculatedSubtotal: totalsValidation.calculatedSubtotal,
     calculatedFinalTotal: totalsValidation.calculatedFinalTotal,

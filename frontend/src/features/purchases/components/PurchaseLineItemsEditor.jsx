@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Dropdown } from '../../../components/common'
 import { formatMaterialUnit } from '../../raw-materials'
 import {
@@ -21,6 +21,8 @@ export function PurchaseLineItemsEditor({
   materialOptions,
   fieldErrors,
   isSaving,
+  focusRowKey = '',
+  onRowFocused,
   onAddLineRow,
   onUpdateLineItem,
   onAcceptRowSuggestion,
@@ -37,6 +39,20 @@ export function PurchaseLineItemsEditor({
   onOpenEditStagedMaterialModal,
 }) {
   const [openNotesMap, setOpenNotesMap] = useState({})
+
+  useEffect(() => {
+    if (!focusRowKey) {
+      return undefined
+    }
+    const rafId = window.requestAnimationFrame(() => {
+      const targetEl = document.getElementById(`pv-mat-select-${focusRowKey}`)
+      if (targetEl && typeof targetEl.focus === 'function') {
+        targetEl.focus({ preventScroll: true })
+      }
+      onRowFocused?.(focusRowKey)
+    })
+    return () => window.cancelAnimationFrame(rafId)
+  }, [focusRowKey, onRowFocused])
 
   const toggleNoteOpen = (rowKey) => {
     setOpenNotesMap((prev) => ({
@@ -172,6 +188,7 @@ export function PurchaseLineItemsEditor({
                     />
                   </div>
                   <Dropdown
+                    id={`pv-mat-select-${row.rowKey}`}
                     variant="form"
                     searchable
                     searchPlaceholder="Search materials or type new name..."

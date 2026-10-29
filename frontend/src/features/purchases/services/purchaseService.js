@@ -2,19 +2,27 @@ import api from '../../../services/api'
 import { clearStoredSession, getStoredSession } from '../../auth'
 import { formatMaterialUnit } from '../../raw-materials'
 import {
+  GST_PERCENTAGE_PRESETS,
   calculateLineTotalPreview,
+  calculateTaxFromPercentage,
   calculateVoucherPreviewTotals,
+  evaluateFinalTotalMismatchModal,
   formatInrCurrency,
   roundMoney,
   roundQuantity,
+  roundTaxPercent,
 } from '../utils/purchaseMath'
 
 export {
+  GST_PERCENTAGE_PRESETS,
   calculateLineTotalPreview,
+  calculateTaxFromPercentage,
   calculateVoucherPreviewTotals,
+  evaluateFinalTotalMismatchModal,
   formatInrCurrency,
   roundMoney,
   roundQuantity,
+  roundTaxPercent,
 }
 
 export const SUPPORTED_BILL_MIME_TYPES = [

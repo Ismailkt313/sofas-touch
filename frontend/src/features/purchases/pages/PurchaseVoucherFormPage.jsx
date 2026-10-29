@@ -18,15 +18,19 @@ import {
 import { NewMaterialConfirmModal } from '../components/NewMaterialConfirmModal'
 import { PurchaseLineItemsEditor } from '../components/PurchaseLineItemsEditor'
 import { PurchaseTotalsSummary } from '../components/PurchaseTotalsSummary'
+import { TotalMismatchConfirmModal } from '../components/TotalMismatchConfirmModal'
 import {
   MAX_BILL_ATTACHMENTS,
+  calculateTaxFromPercentage,
   calculateVoucherPreviewTotals,
   createPurchaseVoucher,
+  evaluateFinalTotalMismatchModal,
   fetchPurchaseVoucherById,
   formatInrCurrency,
   formatPurchaseDate,
   hasActiveAuthToken,
   isAdminUser,
+  roundTaxPercent,
   toInputDateString,
   updatePurchaseVoucher,
   validateLocalBillFile,
@@ -52,7 +56,10 @@ import {
   mergeHeaderFieldsWithOcr,
   mergeLineItemsWithOcr,
   nextVoucherLineKey,
+  prependEmptyLineItem,
   promoteSuggestedLineItemToRows,
+  shiftLineItemFieldErrorsOnPrepend,
+  shiftLineItemFieldErrorsOnRemove,
 } from '../utils/voucherOcrMerge'
 import '../styles/purchases.css'
 
@@ -75,6 +82,9 @@ function makeInitialOcrState() {
     warnings: [],
     detectedSubtotal: null,
     detectedGrandTotal: null,
+    printedTaxAmount: null,
+    detectedTaxRatePercent: null,
+    taxBreakdownLabel: '',
     averageConfidence: 0,
   }
 }
@@ -140,16 +150,21 @@ export function PurchaseVoucherFormPage({
     supplierInvoiceNumber: '',
     projectId: '',
     discountAmount: '',
+    taxRatePercent: '',
     taxAmount: '',
     otherCharges: '',
     notes: '',
   }))
+  const [taxCalculationMode, setTaxCalculationMode] = useState('manual')
   const [fieldMeta, setFieldMeta] = useState(() =>
     createInitialHeaderFieldMeta(),
   )
   const [fieldSuggestions, setFieldSuggestions] = useState({})
 
   const [lineItems, setLineItems] = useState(() => [createEmptyLineItem()])
+  const [pendingFocusRowKey, setPendingFocusRowKey] = useState('')
+  const [totalMismatchModal, setTotalMismatchModal] = useState(null)
+  const savingGuardRef = useRef(false)
   const [suggestedLineItems, setSuggestedLineItems] = useState([])
   const [uncertainLineItems, setUncertainLineItems] = useState([])
   const [dismissedFingerprints, setDismissedFingerprints] = useState([])
@@ -196,28 +211,6 @@ export function PurchaseVoucherFormPage({
     suggestedLineItems,
     dismissedFingerprints,
   })
-
-  useEffect(() => {
-    pendingFilesRef.current = pendingFiles
-    rawMaterialsRef.current = rawMaterials
-    latestFormSnapshotRef.current = {
-      headerValues,
-      fieldMeta,
-      fieldSuggestions,
-      lineItems,
-      suggestedLineItems,
-      dismissedFingerprints,
-    }
-  }, [
-    pendingFiles,
-    rawMaterials,
-    headerValues,
-    fieldMeta,
-    fieldSuggestions,
-    lineItems,
-    suggestedLineItems,
-    dismissedFingerprints,
-  ])
 
   useEffect(() => {
     return () => {
@@ -322,10 +315,12 @@ export function PurchaseVoucherFormPage({
             projectId: v.projectRecordId || '',
             discountAmount:
               v.discountAmount > 0 ? String(v.discountAmount) : '',
+            taxRatePercent: '',
             taxAmount: v.taxAmount > 0 ? String(v.taxAmount) : '',
             otherCharges: v.otherCharges > 0 ? String(v.otherCharges) : '',
             notes: v.notes || '',
           })
+          setTaxCalculationMode('manual')
           setFieldMeta(createSavedHeaderFieldMeta(v))
           setExistingAttachments(v.attachments || [])
 
@@ -453,20 +448,78 @@ export function PurchaseVoucherFormPage({
     return [...base, ...mapped]
   }, [projects, existingVoucher])
 
+  const baseSubtotalPreview = useMemo(
+    () =>
+      calculateVoucherPreviewTotals(lineItems, {
+        discountAmount: headerValues.discountAmount,
+        taxAmount: 0,
+        otherCharges: 0,
+      }),
+    [lineItems, headerValues.discountAmount],
+  )
+
+  const effectiveTaxAmount = useMemo(() => {
+    if (taxCalculationMode === 'percentage') {
+      const pct = roundTaxPercent(headerValues.taxRatePercent)
+      if (pct !== null) {
+        return String(
+          calculateTaxFromPercentage(
+            baseSubtotalPreview.subtotal,
+            headerValues.discountAmount,
+            pct,
+          ),
+        )
+      }
+    }
+    return headerValues.taxAmount
+  }, [
+    taxCalculationMode,
+    headerValues.taxRatePercent,
+    headerValues.taxAmount,
+    headerValues.discountAmount,
+    baseSubtotalPreview.subtotal,
+  ])
+
   const previewTotals = useMemo(
     () =>
       calculateVoucherPreviewTotals(lineItems, {
         discountAmount: headerValues.discountAmount,
-        taxAmount: headerValues.taxAmount,
+        taxAmount: effectiveTaxAmount,
         otherCharges: headerValues.otherCharges,
       }),
     [
       lineItems,
       headerValues.discountAmount,
-      headerValues.taxAmount,
+      effectiveTaxAmount,
       headerValues.otherCharges,
     ],
   )
+
+  useEffect(() => {
+    pendingFilesRef.current = pendingFiles
+    rawMaterialsRef.current = rawMaterials
+    latestFormSnapshotRef.current = {
+      headerValues: {
+        ...headerValues,
+        taxAmount: effectiveTaxAmount,
+      },
+      fieldMeta,
+      fieldSuggestions,
+      lineItems,
+      suggestedLineItems,
+      dismissedFingerprints,
+    }
+  }, [
+    pendingFiles,
+    rawMaterials,
+    headerValues,
+    effectiveTaxAmount,
+    fieldMeta,
+    fieldSuggestions,
+    lineItems,
+    suggestedLineItems,
+    dismissedFingerprints,
+  ])
 
   const retainedExistingAttachments = useMemo(
     () =>
@@ -524,10 +577,184 @@ export function PurchaseVoucherFormPage({
     })
   }, [])
 
+  const detectedOcrTaxRate = ocrState.detectedTaxRatePercent
+
+  const handleTaxRateChange = useCallback(
+    (nextRateInput) => {
+      const rawStr = String(nextRateInput ?? '')
+      const trimmed = rawStr.trim()
+
+      setFieldMeta((prev) => ({
+        ...prev,
+        taxRatePercent: createFieldProvenance('manual', {
+          touched: true,
+          confirmed: false,
+        }),
+      }))
+
+      setFieldErrors((prev) => {
+        if (!prev.taxRatePercent && !prev.taxAmount) {
+          return prev
+        }
+        const next = { ...prev }
+        delete next.taxRatePercent
+        delete next.taxAmount
+        return next
+      })
+
+      if (trimmed === '') {
+        setTaxCalculationMode('manual')
+        setHeaderValues((prev) => ({
+          ...prev,
+          taxRatePercent: '',
+        }))
+        return
+      }
+
+      const pct = roundTaxPercent(trimmed)
+      if (pct === null) {
+        setTaxCalculationMode('manual')
+        setHeaderValues((prev) => ({
+          ...prev,
+          taxRatePercent: rawStr,
+        }))
+        return
+      }
+
+      const computedTax = calculateTaxFromPercentage(
+        previewTotals.subtotal,
+        headerValues.discountAmount,
+        pct,
+      )
+      const computedTaxStr = String(computedTax)
+
+      setTaxCalculationMode('percentage')
+      setHeaderValues((prev) => ({
+        ...prev,
+        taxRatePercent: rawStr,
+        taxAmount: computedTaxStr,
+      }))
+      setFieldMeta((prev) => ({
+        ...prev,
+        taxRatePercent: createFieldProvenance('manual', {
+          touched: true,
+          confirmed: false,
+        }),
+        taxAmount: createFieldProvenance('manual', {
+          touched: true,
+          confirmed: false,
+        }),
+      }))
+      setFieldSuggestions((prev) => {
+        if (
+          prev.taxAmount &&
+          areFieldValuesEquivalent('taxAmount', computedTaxStr, prev.taxAmount.value)
+        ) {
+          const next = { ...prev }
+          delete next.taxAmount
+          return next
+        }
+        return prev
+      })
+    },
+    [previewTotals.subtotal, headerValues.discountAmount],
+  )
+
+  const handleManualTaxAmountChange = useCallback(
+    (nextTaxValue) => {
+      setTaxCalculationMode('manual')
+      setHeaderValues((prev) => {
+        const nextValues = {
+          ...prev,
+          taxAmount: nextTaxValue,
+        }
+        const currentPct = roundTaxPercent(prev.taxRatePercent)
+        if (currentPct !== null) {
+          const expectedAtPct = calculateTaxFromPercentage(
+            previewTotals.subtotal,
+            prev.discountAmount,
+            currentPct,
+          )
+          const enteredNum = Number(nextTaxValue)
+          const matchesPct =
+            String(nextTaxValue ?? '').trim() !== '' &&
+            Number.isFinite(enteredNum) &&
+            Math.abs(enteredNum - expectedAtPct) <= 0.05
+          if (!matchesPct) {
+            nextValues.taxRatePercent = ''
+          }
+        }
+        return nextValues
+      })
+      setFieldMeta((prev) => ({
+        ...prev,
+        taxAmount: createFieldProvenance('manual', {
+          touched: true,
+          confirmed: false,
+        }),
+      }))
+      setFieldSuggestions((prev) => {
+        if (
+          prev.taxAmount &&
+          areFieldValuesEquivalent('taxAmount', nextTaxValue, prev.taxAmount.value)
+        ) {
+          const next = { ...prev }
+          delete next.taxAmount
+          return next
+        }
+        return prev
+      })
+      setFieldErrors((prev) => {
+        if (!prev.taxAmount && !prev.taxRatePercent) return prev
+        const next = { ...prev }
+        delete next.taxAmount
+        delete next.taxRatePercent
+        return next
+      })
+    },
+    [previewTotals.subtotal],
+  )
+
+  const handleUsePrintedTax = useCallback(
+    (printedTax) => {
+      if (printedTax === null || printedTax === undefined) {
+        return
+      }
+      const nextTaxStr = printedTax > 0 ? String(printedTax) : '0'
+      setTaxCalculationMode('manual')
+      setHeaderValues((prev) => ({
+        ...prev,
+        taxAmount: nextTaxStr,
+        taxRatePercent:
+          detectedOcrTaxRate !== null && detectedOcrTaxRate !== undefined
+            ? String(detectedOcrTaxRate)
+            : prev.taxRatePercent,
+      }))
+      setFieldMeta((prev) => ({
+        ...prev,
+        taxAmount: createFieldProvenance('ocr', {
+          touched: false,
+          confirmed: true,
+        }),
+      }))
+      setFieldErrors((prev) => {
+        if (!prev.taxAmount && !prev.taxRatePercent) return prev
+        const next = { ...prev }
+        delete next.taxAmount
+        delete next.taxRatePercent
+        return next
+      })
+    },
+    [detectedOcrTaxRate],
+  )
+
   const handleAcceptHeaderSuggestion = useCallback((fieldKey) => {
     setFieldSuggestions((prev) => {
       const target = prev[fieldKey]
       if (!target) return prev
+      if (fieldKey === 'taxAmount') {
+        setTaxCalculationMode('manual')
+      }
       setHeaderValues((vals) => ({
         ...vals,
         [fieldKey]: target.value,
@@ -573,6 +800,10 @@ export function PurchaseVoucherFormPage({
         dismissedFingerprints: snapshot.dismissedFingerprints,
         isAdditionalBill,
       })
+
+      if (headerMerged.autofilledFields.includes('taxAmount')) {
+        setTaxCalculationMode('manual')
+      }
 
       setHeaderValues(headerMerged.values)
       setFieldMeta(headerMerged.fieldMeta)
@@ -680,6 +911,9 @@ export function PurchaseVoucherFormPage({
           warnings: parsed.warnings,
           detectedSubtotal: parsed.detectedSubtotal,
           detectedGrandTotal: parsed.detectedGrandTotal,
+          printedTaxAmount: parsed.printedTaxAmount ?? null,
+          detectedTaxRatePercent: parsed.detectedTaxRatePercent ?? null,
+          taxBreakdownLabel: parsed.taxBreakdownLabel || '',
           averageConfidence: extraction.averageConfidence,
         })
       } catch (err) {
@@ -846,7 +1080,10 @@ export function PurchaseVoucherFormPage({
   }
 
   const handleAddLineRow = () => {
-    setLineItems((prev) => [...prev, createEmptyLineItem()])
+    const { newRow } = prependEmptyLineItem([])
+    setLineItems((prev) => [newRow, ...prev])
+    setFieldErrors((prev) => shiftLineItemFieldErrorsOnPrepend(prev))
+    setPendingFocusRowKey(newRow.rowKey)
   }
 
   const clearLineRowErrors = (rowIndex) => {
@@ -869,10 +1106,11 @@ export function PurchaseVoucherFormPage({
     let targetRow
 
     if (!resolvedRowKey) {
-      const freshRow = createEmptyLineItem()
+      const { newRow: freshRow } = prependEmptyLineItem([])
       resolvedRowKey = freshRow.rowKey
       targetRow = freshRow
-      setLineItems((prev) => [...prev, freshRow])
+      setLineItems((prev) => [freshRow, ...prev])
+      setFieldErrors((prev) => shiftLineItemFieldErrorsOnPrepend(prev))
     } else {
       targetRow = lineItems.find((row) => row.rowKey === resolvedRowKey) || null
     }
@@ -1010,6 +1248,17 @@ export function PurchaseVoucherFormPage({
   }
 
   const handleRemoveLineRow = (rowKey) => {
+    const removedIdx = lineItems.findIndex((r) => r.rowKey === rowKey)
+    if (removedIdx !== -1) {
+      if (lineItems.length <= 1) {
+        clearLineRowErrors(0)
+      } else {
+        setFieldErrors((prev) =>
+          shiftLineItemFieldErrorsOnRemove(prev, removedIdx),
+        )
+      }
+    }
+
     setLineItems((prev) => {
       const target = prev.find((r) => r.rowKey === rowKey)
       if (target?.ocrFingerprint) {
@@ -1231,8 +1480,15 @@ export function PurchaseVoucherFormPage({
       }
     }
     checkCharge(headerValues.discountAmount, 'discountAmount', 'Discount')
-    checkCharge(headerValues.taxAmount, 'taxAmount', 'Tax')
+    checkCharge(effectiveTaxAmount, 'taxAmount', 'Tax')
     checkCharge(headerValues.otherCharges, 'otherCharges', 'Other charges')
+
+    if (
+      String(headerValues.taxRatePercent ?? '').trim() !== '' &&
+      roundTaxPercent(headerValues.taxRatePercent) === null
+    ) {
+      errors.taxRatePercent = 'GST % must be between 0 and 100.'
+    }
 
     if (previewTotals.discountExceedsSubtotal) {
       errors.discountAmount = 'Discount cannot exceed subtotal.'
@@ -1241,22 +1497,13 @@ export function PurchaseVoucherFormPage({
     return errors
   }
 
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    if (isSaving || ocrState.isRunning) {
+  const executeVoucherSave = async () => {
+    if (savingGuardRef.current || isSaving || ocrState.isRunning) {
       return
     }
 
+    savingGuardRef.current = true
     setSubmitError('')
-    const validationErrors = validateClientForm()
-    setFieldErrors(validationErrors)
-
-    if (Object.keys(validationErrors).length > 0) {
-      const firstMsg = Object.values(validationErrors)[0]
-      setSubmitError(firstMsg)
-      return
-    }
-
     setIsSaving(true)
     setUploadProgress(pendingFiles.length > 0 ? 5 : 0)
 
@@ -1281,7 +1528,7 @@ export function PurchaseVoucherFormPage({
           ? 0
           : Number(headerValues.discountAmount),
       taxAmount:
-        headerValues.taxAmount === '' ? 0 : Number(headerValues.taxAmount),
+        effectiveTaxAmount === '' ? 0 : Number(effectiveTaxAmount),
       otherCharges:
         headerValues.otherCharges === ''
           ? 0
@@ -1313,8 +1560,17 @@ export function PurchaseVoucherFormPage({
         savedVoucher = res.voucher
       }
 
+      if (!savedVoucher?.id) {
+        throw new Error(
+          'Server did not confirm the saved purchase voucher. Please retry.',
+        )
+      }
+
+      setTotalMismatchModal(null)
+      savingGuardRef.current = false
       onNavigate?.(`/purchases/${encodeURIComponent(savedVoucher.id)}`)
     } catch (err) {
+      setTotalMismatchModal(null)
       if (err?.fieldErrors) {
         setFieldErrors(err.fieldErrors)
       }
@@ -1337,9 +1593,59 @@ export function PurchaseVoucherFormPage({
         err?.message ||
           'Unable to save purchase voucher. Please review the form.',
       )
+      savingGuardRef.current = false
       setIsSaving(false)
       setUploadProgress(0)
     }
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    if (savingGuardRef.current || isSaving || ocrState.isRunning) {
+      return
+    }
+
+    setSubmitError('')
+    const validationErrors = validateClientForm()
+    setFieldErrors(validationErrors)
+
+    if (Object.keys(validationErrors).length > 0) {
+      const firstMsg = Object.values(validationErrors)[0]
+      setSubmitError(firstMsg)
+      return
+    }
+
+    const mismatch = evaluateFinalTotalMismatchModal({
+      hasAttachedBill: totalAttachmentCount > 0,
+      printedBillTotal: ocrState.detectedGrandTotal,
+      calculatedVoucherTotal: previewTotals.finalTotal,
+      tolerance: 1.0,
+    })
+
+    if (mismatch.shouldConfirm) {
+      setTotalMismatchModal(mismatch)
+      return
+    }
+
+    await executeVoucherSave()
+  }
+
+  const handleConfirmSaveAnyway = async () => {
+    if (savingGuardRef.current || isSaving || ocrState.isRunning) {
+      return
+    }
+
+    const validationErrors = validateClientForm()
+    setFieldErrors(validationErrors)
+
+    if (Object.keys(validationErrors).length > 0) {
+      setTotalMismatchModal(null)
+      const firstMsg = Object.values(validationErrors)[0]
+      setSubmitError(firstMsg)
+      return
+    }
+
+    await executeVoucherSave()
   }
 
   if (authRequired) {
@@ -1668,6 +1974,8 @@ export function PurchaseVoucherFormPage({
                 materialOptions={materialOptions}
                 fieldErrors={fieldErrors}
                 isSaving={isSaving}
+                focusRowKey={pendingFocusRowKey}
+                onRowFocused={() => setPendingFocusRowKey('')}
                 onAddLineRow={handleAddLineRow}
                 onUpdateLineItem={updateLineItem}
                 onAcceptRowSuggestion={handleAcceptRowSuggestion}
@@ -1696,8 +2004,12 @@ export function PurchaseVoucherFormPage({
                 onDiscountChange={(val) =>
                   handleHeaderFieldChange('discountAmount', val)
                 }
-                taxAmount={headerValues.taxAmount}
-                onTaxChange={(val) => handleHeaderFieldChange('taxAmount', val)}
+                taxRatePercent={headerValues.taxRatePercent}
+                taxCalculationMode={taxCalculationMode}
+                onTaxRateChange={handleTaxRateChange}
+                taxAmount={effectiveTaxAmount}
+                onTaxChange={handleManualTaxAmountChange}
+                onUsePrintedTax={handleUsePrintedTax}
                 otherCharges={headerValues.otherCharges}
                 onOtherChargesChange={(val) =>
                   handleHeaderFieldChange('otherCharges', val)
@@ -1834,6 +2146,20 @@ export function PurchaseVoucherFormPage({
           onSelectExistingOrStaged={handleSelectExistingOrStagedFromModal}
         />
       ) : null}
+
+      <TotalMismatchConfirmModal
+        isOpen={Boolean(totalMismatchModal)}
+        printedBillTotal={totalMismatchModal?.printedBillTotal}
+        calculatedVoucherTotal={totalMismatchModal?.calculatedVoucherTotal}
+        difference={totalMismatchModal?.difference}
+        isSaving={isSaving}
+        onReview={() => {
+          if (!isSaving) {
+            setTotalMismatchModal(null)
+          }
+        }}
+        onSaveAnyway={handleConfirmSaveAnyway}
+      />
 
       <BillAttachmentModal
         attachment={previewModalAttachment}
