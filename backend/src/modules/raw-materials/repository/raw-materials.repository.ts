@@ -649,4 +649,27 @@ export class RawMaterialsRepository implements IRawMaterialsRepository {
     this.memoryStore.set(targetKey, updatedRecord);
     return normalizeDocQuantity(updatedRecord);
   }
+
+  async deleteById(id: string): Promise<boolean> {
+    const trimmedId = typeof id === 'string' ? id.trim() : '';
+    if (!isValidRawMaterialObjectId(trimmedId)) {
+      return false;
+    }
+
+    if (this.isDbConnected()) {
+      const res = await this.materialModel
+        .deleteOne({ _id: new mongoose.Types.ObjectId(trimmedId) })
+        .exec();
+      return Number(res.deletedCount || 0) > 0;
+    }
+
+    for (const [key, item] of this.memoryStore.entries()) {
+      if (String(item._id).toLowerCase() === trimmedId.toLowerCase()) {
+        this.memoryStore.delete(key);
+        return true;
+      }
+    }
+
+    return false;
+  }
 }

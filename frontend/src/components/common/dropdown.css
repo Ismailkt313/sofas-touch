@@ -239,3 +239,115 @@
   font-size: 0.84375rem;
   color: #8c827a;
 }
+
+.sts-dropdown__menu--searchable {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.sts-dropdown__menu--searchable .sts-dropdown__options-list {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+  flex: 1 1 auto;
+}
+
+.sts-dropdown__search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  padding: 6px 8px;
+  border-bottom: 1px solid #ece3d7;
+  background-color: #fdfbf8;
+  flex-shrink: 0;
+}
+
+.sts-dropdown__search-icon {
+  width: 14px;
+  height: 14px;
+  color: #8c827a;
+  flex-shrink: 0;
+}
+
+.sts-dropdown__search-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #dfd2c3;
+  border-radius: 7px;
+  background-color: #ffffff;
+  color: var(--sts-charcoal);
+  font-family: var(--sts-font-sans);
+  font-size: 0.84rem;
+  height: 32px;
+  padding: 0 0.55rem;
+  box-sizing: border-box;
+}
+
+.sts-dropdown__search-input:focus {
+  outline: none;
+  border-color: var(--sts-walnut);
+  box-shadow: 0 0 0 2px rgba(74, 53, 37, 0.11);
+}
+
+.sts-dropdown__search-clear {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #7a6e65;
+  font-size: 1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.sts-dropdown__search-clear:hover {
+  background-color: #f3ecdf;
+  color: var(--sts-walnut);
+}
+
+.sts-dropdown__option--create {
+  border: 1px dashed #d3bda3;
+  background-color: #faf5ed;
+  color: var(--sts-walnut);
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.sts-dropdown__option--create.sts-dropdown__option--highlighted,
+.sts-dropdown__option--create:hover:not(.sts-dropdown__option--disabled) {
+  background-color: #f2e6d5;
+  border-color: var(--sts-walnut);
+  color: var(--sts-walnut);
+}
+
+.sts-dropdown__option-badge,
+.sts-dropdown__trigger-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.38rem;
+  padding: 0.04rem 0.38rem;
+  border-radius: 999px;
+  background-color: #efe4d2;
+  color: var(--sts-walnut);
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .sts-dropdown__search-input {
+    font-size: 16px;
+    height: 34px;
+  }
+}
+

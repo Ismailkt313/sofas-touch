@@ -1,21 +1,26 @@
 import { useState } from 'react'
 import { Dropdown } from '../../../components/common'
 import { formatMaterialUnit } from '../../raw-materials'
-import { FieldSourceBadge, FieldSuggestionBanner } from './FieldProvenanceControl'
+import {
+  FieldSourceBadge,
+  FieldSuggestionBanner,
+} from './FieldProvenanceControl'
 import {
   calculateLineTotalPreview,
   formatInrCurrency,
 } from '../services/purchaseService'
+import { buildCreateMaterialDropdownAction } from '../utils/purchaseMaterialCreation'
 
 export function PurchaseLineItemsEditor({
   lineItems,
   suggestedLineItems = [],
   uncertainLineItems = [],
+  rawMaterials = [],
+  stagedNewMaterials = [],
   materialById,
   materialOptions,
   fieldErrors,
   isSaving,
-  adminAccess,
   onAddLineRow,
   onUpdateLineItem,
   onAcceptRowSuggestion,
@@ -28,7 +33,8 @@ export function PurchaseLineItemsEditor({
   onPromoteUncertainRow,
   onDismissUncertainRow,
   onDismissAllUncertainRows,
-  onRequestCancelToCatalog,
+  onOpenCreateMaterialModal,
+  onOpenEditStagedMaterialModal,
 }) {
   const [openNotesMap, setOpenNotesMap] = useState({})
 
@@ -40,7 +46,10 @@ export function PurchaseLineItemsEditor({
   }
 
   return (
-    <section className="pv-voucher-section" aria-labelledby="pv-materials-heading">
+    <section
+      className="pv-voucher-section"
+      aria-labelledby="pv-materials-heading"
+    >
       <div className="pv-section-head">
         <h2 id="pv-materials-heading" className="pv-section-title">
           Materials
@@ -75,7 +84,13 @@ export function PurchaseLineItemsEditor({
             row.quantity,
             row.unitPrice,
           )
-          const matErr = fieldErrors[`lineItems[${idx}].materialId`]
+          const matErr =
+            fieldErrors[`lineItems[${idx}].materialId`] ||
+            fieldErrors[`lineItems[${idx}].newMaterial`] ||
+            fieldErrors[`lineItems[${idx}].newMaterial.name`]
+          const unitErr =
+            fieldErrors[`lineItems[${idx}].unit`] ||
+            fieldErrors[`lineItems[${idx}].newMaterial.unit`]
           const qtyErr = fieldErrors[`lineItems[${idx}].quantity`]
           const priceErr = fieldErrors[`lineItems[${idx}].unitPrice`]
           const needsMaterialReview =
@@ -97,6 +112,16 @@ export function PurchaseLineItemsEditor({
           const rowSugs = row.rowSuggestions || {}
           const hasRemarksText = Boolean(String(row.remarks || '').trim())
           const isNoteOpen = hasRemarksText || Boolean(openNotesMap[row.rowKey])
+
+          const inlineCreateAction =
+            !row.materialId && row.extractedDescription
+              ? buildCreateMaterialDropdownAction({
+                  searchQuery: '',
+                  row,
+                  existingMaterials: rawMaterials,
+                  stagedNewMaterials,
+                })
+              : null
 
           return (
             <div
@@ -148,11 +173,27 @@ export function PurchaseLineItemsEditor({
                   </div>
                   <Dropdown
                     variant="form"
+                    searchable
+                    searchPlaceholder="Search materials or type new name..."
                     value={row.materialId}
                     options={materialOptions}
-                    placeholder="Select material..."
-                    error={Boolean(matErr || needsMaterialReview)}
+                    placeholder="Select or create material..."
+                    error={Boolean(matErr || unitErr || needsMaterialReview)}
                     disabled={isSaving}
+                    createOption={(searchQuery) =>
+                      buildCreateMaterialDropdownAction({
+                        searchQuery,
+                        row,
+                        existingMaterials: rawMaterials,
+                        stagedNewMaterials,
+                      })
+                    }
+                    onCreateOption={(actionItem) =>
+                      onOpenCreateMaterialModal?.(
+                        row.rowKey,
+                        actionItem?.createName || '',
+                      )
+                    }
                     onChange={(val) =>
                       onUpdateLineItem(row.rowKey, 'materialId', val)
                     }
@@ -160,10 +201,32 @@ export function PurchaseLineItemsEditor({
                   />
                   {matErr ? (
                     <p className="pv-field-error">{matErr}</p>
+                  ) : unitErr ? (
+                    <p className="pv-field-error">{unitErr}</p>
                   ) : needsMaterialReview ? (
                     <p className="pv-field-review-hint">
-                      Select matching catalog material
+                      Select matching material or create a new material
                     </p>
+                  ) : null}
+                  {selectedMat?.isStagedNew ? (
+                    <div className="pv-staged-mat-bar">
+                      <span className="pv-staged-mat-bar__text">
+                        New material · created on voucher save
+                      </span>
+                      <button
+                        type="button"
+                        className="pv-link-btn"
+                        onClick={() =>
+                          onOpenEditStagedMaterialModal?.(
+                            row.rowKey,
+                            selectedMat.id,
+                          )
+                        }
+                        disabled={isSaving}
+                      >
+                        Edit
+                      </button>
+                    </div>
                   ) : null}
                   {rowSugs.materialId ? (
                     <FieldSuggestionBanner
@@ -227,7 +290,9 @@ export function PurchaseLineItemsEditor({
                   <span className="pv-mat-cell-label">Unit</span>
                   <div
                     className={`pv-unit-chip${
-                      hasUnitMismatch ? ' pv-unit-chip--mismatch' : ''
+                      hasUnitMismatch || unitErr
+                        ? ' pv-unit-chip--mismatch'
+                        : ''
                     }`}
                     title={
                       selectedMat
@@ -318,8 +383,9 @@ export function PurchaseLineItemsEditor({
               {row.extractedDescription ||
               hasUnitMismatch ||
               (!row.materialId &&
-                Array.isArray(row.suggestions) &&
-                row.suggestions.length > 0) ||
+                ((Array.isArray(row.suggestions) &&
+                  row.suggestions.length > 0) ||
+                  Boolean(inlineCreateAction))) ||
               !isNoteOpen ? (
                 <div className="pv-mat-row__subbar">
                   <div className="pv-mat-row__submeta">
@@ -337,24 +403,51 @@ export function PurchaseLineItemsEditor({
                     ) : null}
 
                     {!row.materialId &&
-                    Array.isArray(row.suggestions) &&
-                    row.suggestions.length > 0 ? (
+                    ((Array.isArray(row.suggestions) &&
+                      row.suggestions.length > 0) ||
+                      Boolean(inlineCreateAction)) ? (
                       <div className="pv-suggestions-row">
-                        <span className="pv-suggestions-row__label">
-                          Suggested:
-                        </span>
-                        {row.suggestions.map((sug) => (
+                        {Array.isArray(row.suggestions) &&
+                        row.suggestions.length > 0 ? (
+                          <>
+                            <span className="pv-suggestions-row__label">
+                              Suggested:
+                            </span>
+                            {row.suggestions.map((sug) => (
+                              <button
+                                key={sug.id}
+                                type="button"
+                                className="pv-suggestion-chip"
+                                onClick={() =>
+                                  onUpdateLineItem(
+                                    row.rowKey,
+                                    'materialId',
+                                    sug.id,
+                                  )
+                                }
+                                disabled={isSaving}
+                              >
+                                {sug.name} ({formatMaterialUnit(sug.unit)})
+                              </button>
+                            ))}
+                          </>
+                        ) : null}
+
+                        {inlineCreateAction ? (
                           <button
-                            key={sug.id}
                             type="button"
-                            className="pv-suggestion-chip"
+                            className="pv-suggestion-chip pv-suggestion-chip--create"
                             onClick={() =>
-                              onUpdateLineItem(row.rowKey, 'materialId', sug.id)
+                              onOpenCreateMaterialModal?.(
+                                row.rowKey,
+                                inlineCreateAction.createName || '',
+                              )
                             }
+                            disabled={isSaving}
                           >
-                            {sug.name} ({formatMaterialUnit(sug.unit)})
+                            {inlineCreateAction.label}
                           </button>
-                        ))}
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -551,18 +644,20 @@ export function PurchaseLineItemsEditor({
         </div>
       ) : null}
 
-      {adminAccess ? (
-        <div className="pv-catalog-caption">
-          <span>Material not in catalog?</span>{' '}
-          <button
-            type="button"
-            className="pv-link-btn"
-            onClick={onRequestCancelToCatalog}
-          >
-            Open Raw Materials
-          </button>
-        </div>
-      ) : null}
+      <div className="pv-catalog-caption">
+        <span>Material not in catalogue?</span>{' '}
+        <button
+          type="button"
+          className="pv-link-btn"
+          onClick={() => {
+            const targetRow = lineItems.find((r) => !r.materialId) || null
+            onOpenCreateMaterialModal?.(targetRow ? targetRow.rowKey : '', '')
+          }}
+          disabled={isSaving}
+        >
+          + Create new material
+        </button>
+      </div>
     </section>
   )
 }

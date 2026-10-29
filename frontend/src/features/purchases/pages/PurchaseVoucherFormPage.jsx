@@ -15,6 +15,7 @@ import {
   FieldSourceBadge,
   FieldSuggestionBanner,
 } from '../components/FieldProvenanceControl'
+import { NewMaterialConfirmModal } from '../components/NewMaterialConfirmModal'
 import { PurchaseLineItemsEditor } from '../components/PurchaseLineItemsEditor'
 import { PurchaseTotalsSummary } from '../components/PurchaseTotalsSummary'
 import {
@@ -32,6 +33,11 @@ import {
 } from '../services/purchaseService'
 import { parseBillOcrText } from '../utils/billOcrParser'
 import { extractBillTextLocally } from '../utils/ocrEngine'
+import {
+  buildNewMaterialDraft,
+  buildVoucherLineItemPayload,
+  nextStagedMaterialTempId,
+} from '../utils/purchaseMaterialCreation'
 import {
   acceptLineItemSuggestion,
   applyManualLineItemEdit,
@@ -80,6 +86,44 @@ function makeClientRequestId() {
   return `pv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+async function loadAllCatalogMaterials(adminAccess) {
+  const firstPage = await fetchRawMaterials({
+    page: 1,
+    limit: 100,
+    status: adminAccess ? 'all' : 'active',
+    isAdmin: adminAccess,
+  })
+  const byId = new Map()
+  ;(firstPage?.materials || []).forEach((mat) => {
+    if (mat?.id) {
+      byId.set(mat.id, mat)
+    }
+  })
+
+  const totalPages = Math.min(Number(firstPage?.totalPages || 1), 10)
+  if (totalPages > 1) {
+    const restPages = await Promise.all(
+      Array.from({ length: totalPages - 1 }, (_, i) =>
+        fetchRawMaterials({
+          page: i + 2,
+          limit: 100,
+          status: adminAccess ? 'all' : 'active',
+          isAdmin: adminAccess,
+        }),
+      ),
+    )
+    restPages.forEach((pageRes) => {
+      ;(pageRes?.materials || []).forEach((mat) => {
+        if (mat?.id) {
+          byId.set(mat.id, mat)
+        }
+      })
+    })
+  }
+
+  return Array.from(byId.values())
+}
+
 export function PurchaseVoucherFormPage({
   mode = 'create',
   voucherIdentifier = '',
@@ -122,6 +166,9 @@ export function PurchaseVoucherFormPage({
   const [isPreviewExpanded, setIsPreviewExpanded] = useState(false)
 
   const [rawMaterials, setRawMaterials] = useState([])
+  const [allCatalogMaterials, setAllCatalogMaterials] = useState([])
+  const [stagedNewMaterials, setStagedNewMaterials] = useState([])
+  const [materialModalState, setMaterialModalState] = useState(null)
   const [projects, setProjects] = useState([])
   const [isLoadingRefs, setIsLoadingRefs] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -244,12 +291,7 @@ export function PurchaseVoucherFormPage({
     let cancelled = false
 
     const loadPromises = [
-      fetchRawMaterials({
-        page: 1,
-        limit: 100,
-        status: 'active',
-        isAdmin: adminAccess,
-      }),
+      loadAllCatalogMaterials(adminAccess),
       fetchProjects({ page: 1, limit: 100 }),
     ]
 
@@ -258,10 +300,11 @@ export function PurchaseVoucherFormPage({
     }
 
     Promise.all(loadPromises)
-      .then(([matRes, projRes, voucherRes]) => {
+      .then(([allMats, projRes, voucherRes]) => {
         if (cancelled) return
 
-        const activeMats = matRes?.materials || []
+        const catalogList = Array.isArray(allMats) ? allMats : []
+        const activeMats = catalogList.filter((m) => m.isActive !== false)
         const loadedProjects = projRes?.projects || []
 
         if (isEditMode && voucherRes?.voucher) {
@@ -287,19 +330,23 @@ export function PurchaseVoucherFormPage({
           setExistingAttachments(v.attachments || [])
 
           const existingMatMap = new Map(activeMats.map((m) => [m.id, m]))
+          const fullCatalogMap = new Map(catalogList.map((m) => [m.id, m]))
           v.lineItems.forEach((li) => {
             if (li.materialId && !existingMatMap.has(li.materialId)) {
-              existingMatMap.set(li.materialId, {
+              const fallbackMat = fullCatalogMap.get(li.materialId) || {
                 id: li.materialId,
                 name: li.materialName,
                 category: li.materialCategory,
                 unit: li.unit,
                 quantityOnHand: 0,
                 isActive: false,
-              })
+              }
+              existingMatMap.set(li.materialId, fallbackMat)
+              fullCatalogMap.set(li.materialId, fallbackMat)
             }
           })
           setRawMaterials(Array.from(existingMatMap.values()))
+          setAllCatalogMaterials(Array.from(fullCatalogMap.values()))
 
           setLineItems(
             v.lineItems.length > 0
@@ -308,6 +355,7 @@ export function PurchaseVoucherFormPage({
           )
         } else {
           setRawMaterials(activeMats)
+          setAllCatalogMaterials(catalogList)
         }
 
         setProjects(loadedProjects)
@@ -335,11 +383,35 @@ export function PurchaseVoucherFormPage({
     rawMaterials.forEach((mat) => {
       map.set(mat.id, mat)
     })
+    stagedNewMaterials.forEach((staged) => {
+      map.set(staged.tempId, {
+        id: staged.tempId,
+        tempId: staged.tempId,
+        name: staged.name,
+        category: staged.category || null,
+        unit: staged.unit,
+        description: staged.description || '',
+        quantityOnHand: 0,
+        isActive: true,
+        isStagedNew: true,
+      })
+    })
     return map
-  }, [rawMaterials])
+  }, [rawMaterials, stagedNewMaterials])
 
   const materialOptions = useMemo(() => {
-    return rawMaterials.map((mat) => {
+    const stagedOpts = stagedNewMaterials.map((mat) => {
+      const shortUnit = formatMaterialUnit(mat.unit)
+      return {
+        value: mat.tempId,
+        label: shortUnit ? `${mat.name} (${shortUnit})` : mat.name,
+        badge: 'New',
+        searchText: `${mat.name} ${mat.unit} ${shortUnit || ''} ${mat.category || ''} new`,
+        description: `${mat.category || 'Uncategorized'} · Created when voucher is saved`,
+      }
+    })
+
+    const catalogOpts = rawMaterials.map((mat) => {
       const shortUnit = formatMaterialUnit(mat.unit)
       const stockLabel = formatMaterialStockOnHand(
         mat.quantityOnHand,
@@ -348,12 +420,15 @@ export function PurchaseVoucherFormPage({
       return {
         value: mat.id,
         label: shortUnit ? `${mat.name} (${shortUnit})` : mat.name,
+        searchText: `${mat.name} ${mat.unit} ${shortUnit || ''} ${mat.category || ''}`,
         description: `${mat.category || 'Uncategorized'} · Stock: ${stockLabel}${
           mat.isActive === false ? ' · Inactive' : ''
         }`,
       }
     })
-  }, [rawMaterials])
+
+    return [...stagedOpts, ...catalogOpts]
+  }, [rawMaterials, stagedNewMaterials])
 
   const projectOptions = useMemo(() => {
     const base = [
@@ -774,6 +849,166 @@ export function PurchaseVoucherFormPage({
     setLineItems((prev) => [...prev, createEmptyLineItem()])
   }
 
+  const clearLineRowErrors = (rowIndex) => {
+    setFieldErrors((prev) => {
+      const next = { ...prev }
+      delete next.lineItems
+      if (rowIndex >= 0) {
+        Object.keys(next).forEach((errKey) => {
+          if (errKey.startsWith(`lineItems[${rowIndex}]`)) {
+            delete next[errKey]
+          }
+        })
+      }
+      return next
+    })
+  }
+
+  const handleOpenCreateMaterialModal = (rowKey, initialSearchName = '') => {
+    let resolvedRowKey = rowKey
+    let targetRow
+
+    if (!resolvedRowKey) {
+      const freshRow = createEmptyLineItem()
+      resolvedRowKey = freshRow.rowKey
+      targetRow = freshRow
+      setLineItems((prev) => [...prev, freshRow])
+    } else {
+      targetRow = lineItems.find((row) => row.rowKey === resolvedRowKey) || null
+    }
+
+    setMaterialModalState({
+      modalKey: `create-${resolvedRowKey}-${Date.now()}`,
+      mode: 'create',
+      targetRowKey: resolvedRowKey,
+      editingTempId: '',
+      initialDraft: buildNewMaterialDraft({
+        searchQuery: initialSearchName,
+        row: targetRow,
+      }),
+      sourceBillDescription: targetRow?.extractedDescription || '',
+      sourceBillUnit: targetRow?.detectedUnit || '',
+    })
+  }
+
+  const handleOpenEditStagedMaterialModal = (rowKey, tempId) => {
+    const staged = stagedNewMaterials.find((item) => item.tempId === tempId)
+    if (!staged) {
+      return
+    }
+    const targetRow = lineItems.find((row) => row.rowKey === rowKey) || null
+
+    setMaterialModalState({
+      modalKey: `edit-${tempId}-${Date.now()}`,
+      mode: 'edit',
+      targetRowKey: rowKey,
+      editingTempId: tempId,
+      initialDraft: buildNewMaterialDraft({
+        existingStagedMaterial: staged,
+      }),
+      sourceBillDescription: targetRow?.extractedDescription || '',
+      sourceBillUnit: targetRow?.detectedUnit || '',
+    })
+  }
+
+  const handleConfirmNewMaterial = (validatedSpec, modalSnapshot) => {
+    if (!modalSnapshot) {
+      return
+    }
+
+    if (modalSnapshot.mode === 'edit' && modalSnapshot.editingTempId) {
+      setStagedNewMaterials((prev) =>
+        prev.map((item) =>
+          item.tempId === modalSnapshot.editingTempId
+            ? {
+                ...item,
+                ...validatedSpec,
+                isStagedNew: true,
+              }
+            : item,
+        ),
+      )
+      const rowIdx = lineItems.findIndex(
+        (r) => r.rowKey === modalSnapshot.targetRowKey,
+      )
+      clearLineRowErrors(rowIdx)
+      setMaterialModalState(null)
+      return
+    }
+
+    const tempId = nextStagedMaterialTempId()
+    setStagedNewMaterials((prev) => [
+      ...prev,
+      {
+        tempId,
+        ...validatedSpec,
+        isStagedNew: true,
+      },
+    ])
+
+    let matchedRowIdx = -1
+    setLineItems((prev) =>
+      prev.map((row, idx) => {
+        if (row.rowKey !== modalSnapshot.targetRowKey) {
+          return row
+        }
+        matchedRowIdx = idx
+        const edited = applyManualLineItemEdit(row, 'materialId', tempId)
+        return {
+          ...edited,
+          fieldMeta: {
+            ...(edited.fieldMeta || {}),
+            materialId: createFieldProvenance('manual', {
+              touched: true,
+              confirmed: true,
+            }),
+          },
+        }
+      }),
+    )
+
+    clearLineRowErrors(matchedRowIdx)
+    setMaterialModalState(null)
+  }
+
+  const handleSelectExistingOrStagedFromModal = (
+    selectedMaterialId,
+    modalSnapshot,
+  ) => {
+    if (!selectedMaterialId || !modalSnapshot?.targetRowKey) {
+      setMaterialModalState(null)
+      return
+    }
+
+    let matchedRowIdx = -1
+    setLineItems((prev) =>
+      prev.map((row, idx) => {
+        if (row.rowKey !== modalSnapshot.targetRowKey) {
+          return row
+        }
+        matchedRowIdx = idx
+        const edited = applyManualLineItemEdit(
+          row,
+          'materialId',
+          selectedMaterialId,
+        )
+        return {
+          ...edited,
+          fieldMeta: {
+            ...(edited.fieldMeta || {}),
+            materialId: createFieldProvenance('manual', {
+              touched: true,
+              confirmed: true,
+            }),
+          },
+        }
+      }),
+    )
+
+    clearLineRowErrors(matchedRowIdx)
+    setMaterialModalState(null)
+  }
+
   const handleRemoveLineRow = (rowKey) => {
     setLineItems((prev) => {
       const target = prev.find((r) => r.rowKey === rowKey)
@@ -925,6 +1160,7 @@ export function PurchaseVoucherFormPage({
         headerValues.supplierInvoiceNumber.trim() ||
         headerValues.notes.trim() ||
         pendingFiles.length > 0 ||
+        stagedNewMaterials.length > 0 ||
         !isLineItemListEffectivelyEmpty(lineItems),
     )
   }, [
@@ -933,6 +1169,7 @@ export function PurchaseVoucherFormPage({
     headerValues.supplierInvoiceNumber,
     headerValues.notes,
     pendingFiles.length,
+    stagedNewMaterials.length,
     lineItems,
   ])
 
@@ -1036,16 +1273,9 @@ export function PurchaseVoucherFormPage({
       supplierInvoiceNumber: headerValues.supplierInvoiceNumber.trim(),
       projectId: headerValues.projectId || null,
       entryMethod: resolvedEntryMethod,
-      lineItems: lineItems.map((row) => {
-        const mat = materialById.get(row.materialId)
-        return {
-          materialId: row.materialId,
-          unit: mat?.unit || undefined,
-          quantity: Number(row.quantity),
-          unitPrice: Number(row.unitPrice),
-          remarks: String(row.remarks || '').trim(),
-        }
-      }),
+      lineItems: lineItems.map((row) =>
+        buildVoucherLineItemPayload(row, materialById),
+      ),
       discountAmount:
         headerValues.discountAmount === ''
           ? 0
@@ -1087,6 +1317,21 @@ export function PurchaseVoucherFormPage({
     } catch (err) {
       if (err?.fieldErrors) {
         setFieldErrors(err.fieldErrors)
+      }
+      if (err?.status === 409) {
+        loadAllCatalogMaterials(adminAccess)
+          .then((latestMats) => {
+            if (!Array.isArray(latestMats)) return
+            setAllCatalogMaterials(latestMats)
+            setRawMaterials((prev) => {
+              const map = new Map(prev.map((m) => [m.id, m]))
+              latestMats
+                .filter((m) => m.isActive !== false)
+                .forEach((m) => map.set(m.id, m))
+              return Array.from(map.values())
+            })
+          })
+          .catch(() => undefined)
       }
       setSubmitError(
         err?.message ||
@@ -1417,11 +1662,12 @@ export function PurchaseVoucherFormPage({
                 lineItems={lineItems}
                 suggestedLineItems={suggestedLineItems}
                 uncertainLineItems={uncertainLineItems}
+                rawMaterials={allCatalogMaterials}
+                stagedNewMaterials={stagedNewMaterials}
                 materialById={materialById}
                 materialOptions={materialOptions}
                 fieldErrors={fieldErrors}
                 isSaving={isSaving}
-                adminAccess={adminAccess}
                 onAddLineRow={handleAddLineRow}
                 onUpdateLineItem={updateLineItem}
                 onAcceptRowSuggestion={handleAcceptRowSuggestion}
@@ -1436,8 +1682,9 @@ export function PurchaseVoucherFormPage({
                 onPromoteUncertainRow={handlePromoteUncertainRow}
                 onDismissUncertainRow={handleDismissUncertainRow}
                 onDismissAllUncertainRows={handleDismissAllUncertainRows}
-                onRequestCancelToCatalog={() =>
-                  requestControlledCancel('/raw-materials')
+                onOpenCreateMaterialModal={handleOpenCreateMaterialModal}
+                onOpenEditStagedMaterialModal={
+                  handleOpenEditStagedMaterialModal
                 }
               />
 
@@ -1574,6 +1821,18 @@ export function PurchaseVoucherFormPage({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {materialModalState ? (
+        <NewMaterialConfirmModal
+          key={materialModalState.modalKey}
+          modalState={materialModalState}
+          existingMaterials={allCatalogMaterials}
+          stagedNewMaterials={stagedNewMaterials}
+          onClose={() => setMaterialModalState(null)}
+          onConfirm={handleConfirmNewMaterial}
+          onSelectExistingOrStaged={handleSelectExistingOrStagedFromModal}
+        />
       ) : null}
 
       <BillAttachmentModal

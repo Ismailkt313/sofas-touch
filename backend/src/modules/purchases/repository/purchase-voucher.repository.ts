@@ -814,4 +814,53 @@ export class PurchaseVoucherRepository implements IPurchaseVoucherRepository {
     );
     return list;
   }
+
+  async deleteByRecordId(recordId: string): Promise<boolean> {
+    const clean = typeof recordId === 'string' ? recordId.trim() : '';
+    if (!clean) {
+      return false;
+    }
+
+    if (this.isDbConnected()) {
+      if (!mongoose.isValidObjectId(clean)) {
+        return false;
+      }
+      const res = await this.voucherModel
+        .deleteOne({ _id: new mongoose.Types.ObjectId(clean) })
+        .exec();
+      return Number(res.deletedCount || 0) > 0;
+    }
+
+    for (const [key, item] of this.voucherMemory.entries()) {
+      if (String(item._id).toLowerCase() === clean.toLowerCase()) {
+        this.voucherMemory.delete(key);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  async deleteStockMovementsForVoucherRevision(
+    voucherId: string,
+    revision: number,
+  ): Promise<void> {
+    const cleanVoucherId = typeof voucherId === 'string' ? voucherId.trim() : '';
+    if (!cleanVoucherId) {
+      return;
+    }
+
+    if (this.isDbConnected()) {
+      await this.movementModel
+        .deleteMany({ voucherId: cleanVoucherId, revision })
+        .exec();
+      return;
+    }
+
+    for (const [key, item] of this.movementMemory.entries()) {
+      if (item.voucherId === cleanVoucherId && item.revision === revision) {
+        this.movementMemory.delete(key);
+      }
+    }
+  }
 }

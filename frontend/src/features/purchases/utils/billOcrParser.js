@@ -1443,7 +1443,8 @@ export function matchDescriptionToRawMaterials(
 
       if (cleanDesc === matNameLower) {
         const unitMatches =
-          !isCatalogUnit || normalizedDetectedUnit === matUnitCanonical
+          !normalizedDetectedUnit ||
+          (isCatalogUnit && normalizedDetectedUnit === matUnitCanonical)
         return {
           material: mat,
           score: unitMatches ? 1 : 0.62,
@@ -1514,9 +1515,8 @@ export function matchDescriptionToRawMaterials(
   const hasClearMargin = !runnerUp || top.score - runnerUp.score >= 0.18
   const topMatUnitCanonical = normalizeCatalogUnitName(top.material.unit)
   const unitCompatible =
-    !isCatalogUnit ||
     !normalizedDetectedUnit ||
-    normalizedDetectedUnit === topMatUnitCanonical
+    (isCatalogUnit && normalizedDetectedUnit === topMatUnitCanonical)
   const enoughTokenEvidence =
     top.matTokenCount <= 1 ? top.score >= 0.94 : top.matchedTokens >= 2
 

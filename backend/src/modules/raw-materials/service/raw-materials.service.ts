@@ -216,6 +216,33 @@ export class RawMaterialsService implements IRawMaterialsService {
     return runNested(0);
   }
 
+  async withMaterialNameLocks<T>(
+    materialNames: string[],
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const sortedKeys = Array.from(
+      new Set(
+        materialNames
+          .map((name) =>
+            typeof name === 'string' ? normalizeMaterialNameKey(name) : '',
+          )
+          .filter(Boolean)
+          .map((key) => `name:${key}`),
+      ),
+    ).sort();
+
+    const runNested = async (index: number): Promise<T> => {
+      if (index >= sortedKeys.length) {
+        return operation();
+      }
+      return this.withSingleMaterialLock(sortedKeys[index], () =>
+        runNested(index + 1),
+      );
+    };
+
+    return runNested(0);
+  }
+
   async createRawMaterial(
     dto: CreateRawMaterialDto,
     createdBy: string,
@@ -223,30 +250,33 @@ export class RawMaterialsService implements IRawMaterialsService {
     const cleanName = normalizeMaterialDisplayName(dto.name);
     const normalizedName = normalizeMaterialNameKey(cleanName);
 
-    const existing = await this.repository.findByNormalizedName(normalizedName);
-    if (existing) {
-      throw new RawMaterialAlreadyExistsError(cleanName);
-    }
-
-    try {
-      const created = await this.repository.create({
-        name: cleanName,
-        normalizedName,
-        category: dto.category ?? null,
-        unit: dto.unit,
-        quantityOnHand: dto.quantityOnHand ?? 0,
-        description: dto.description || '',
-        isActive: true,
-        createdBy,
-      });
-
-      return mapRawMaterialToResponse(created);
-    } catch (err: unknown) {
-      if (err instanceof DuplicateRawMaterialKeyError) {
+    return this.withMaterialNameLocks([normalizedName], async () => {
+      const existing =
+        await this.repository.findByNormalizedName(normalizedName);
+      if (existing) {
         throw new RawMaterialAlreadyExistsError(cleanName);
       }
-      throw err;
-    }
+
+      try {
+        const created = await this.repository.create({
+          name: cleanName,
+          normalizedName,
+          category: dto.category ?? null,
+          unit: dto.unit,
+          quantityOnHand: dto.quantityOnHand ?? 0,
+          description: dto.description || '',
+          isActive: true,
+          createdBy,
+        });
+
+        return mapRawMaterialToResponse(created);
+      } catch (err: unknown) {
+        if (err instanceof DuplicateRawMaterialKeyError) {
+          throw new RawMaterialAlreadyExistsError(cleanName);
+        }
+        throw err;
+      }
+    });
   }
 
   async listRawMaterials(
