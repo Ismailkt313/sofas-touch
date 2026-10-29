@@ -18,6 +18,7 @@ import {
   PurchasesPage,
 } from './features/purchases'
 import { RawMaterialsPage } from './features/raw-materials'
+import { ProjectReportPage, ReportsPage } from './features/reports'
 import { UserManagementPage } from './features/users'
 
 const ROUTE_CHANGE_EVENT = 'sts:routechange'
@@ -88,7 +89,17 @@ function App() {
   const isUsersRoute = isNavItemActive(pathname, '/users')
   const isUserApprovalsRoute = isNavItemActive(pathname, '/user-approvals')
   const isProjectsListRoute = pathname === '/projects'
-  const projectDetailsMatch = pathname.match(/^\/projects\/([^/]+)$/)
+  const projectReportMatch =
+    pathname.match(/^\/projects\/([^/]+)\/report$/) ||
+    pathname.match(/^\/reports\/projects\/([^/]+)$/) ||
+    pathname.match(/^\/reports\/([^/]+)$/)
+  const projectReportIdentifier = projectReportMatch
+    ? decodeURIComponent(projectReportMatch[1])
+    : ''
+  const isReportsListRoute = pathname === '/reports'
+  const projectDetailsMatch = !projectReportIdentifier
+    ? pathname.match(/^\/projects\/([^/]+)$/)
+    : null
   const projectDetailsIdentifier = projectDetailsMatch
     ? decodeURIComponent(projectDetailsMatch[1])
     : ''
@@ -114,6 +125,10 @@ function App() {
       document.title = 'Soft Touch Sofas — User Approvals'
     } else if (isUsersRoute) {
       document.title = 'Soft Touch Sofas — User Management'
+    } else if (projectReportIdentifier) {
+      document.title = 'Soft Touch Sofas — Project Financial Report'
+    } else if (isReportsListRoute) {
+      document.title = 'Soft Touch Sofas — Project Reports'
     } else if (projectDetailsIdentifier) {
       document.title = 'Soft Touch Sofas — Project Details'
     } else if (isProjectsListRoute) {
@@ -138,6 +153,8 @@ function App() {
   }, [
     isUserApprovalsRoute,
     isUsersRoute,
+    projectReportIdentifier,
+    isReportsListRoute,
     projectDetailsIdentifier,
     isProjectsListRoute,
     isPurchaseCreateRoute,
@@ -234,6 +251,18 @@ function App() {
             />
           ) : isExpensesRoute ? (
             <ExpensesPage
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : projectReportIdentifier ? (
+            <ProjectReportPage
+              key={`report-${projectReportIdentifier}`}
+              projectId={projectReportIdentifier}
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : isReportsListRoute ? (
+            <ReportsPage
               currentUser={currentUser}
               onNavigate={navigate}
             />
