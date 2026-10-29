@@ -336,7 +336,6 @@ const PurchaseVoucherSchema = new Schema<IPurchaseVoucher>(
     clientRequestId: {
       type: String,
       default: null,
-      index: true,
     },
     createdBy: {
       type: String,
