@@ -30,12 +30,6 @@ export const ADMIN_NAV_ITEMS = [
     description: 'Manage upholstery fabrics, timber, foam, and drapery stock.',
   },
   {
-    id: 'expense-heads',
-    label: 'Expense Heads',
-    path: '/expense-heads',
-    description: 'Configure operational and workshop expense categories.',
-  },
-  {
     id: 'purchases',
     label: 'Purchases',
     path: '/purchases',

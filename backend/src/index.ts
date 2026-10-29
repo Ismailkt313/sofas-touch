@@ -9,6 +9,7 @@ import adminRoutes from './routes/adminRoutes';
 import projectRoutes from './routes/projectRoutes';
 import rawMaterialRoutes from './routes/rawMaterialRoutes';
 import purchaseRoutes from './routes/purchaseRoutes';
+import expenseRoutes from './routes/expenseRoutes';
 
 const app = express();
 const PORT = env.PORT;
@@ -68,6 +69,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/raw-materials', rawMaterialRoutes);
 app.use('/api/purchases', purchaseRoutes);
+app.use('/api/expenses', expenseRoutes);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({
