@@ -11,6 +11,7 @@ import {
   getStoredSession,
 } from './features/auth'
 import { ProjectDetailsPage, ProjectsPage } from './features/projects'
+import { ExpensesPage } from './features/expenses'
 import {
   PurchaseDetailsPage,
   PurchaseVoucherFormPage,
@@ -92,6 +93,7 @@ function App() {
     ? decodeURIComponent(projectDetailsMatch[1])
     : ''
   const isRawMaterialsRoute = isNavItemActive(pathname, '/raw-materials')
+  const isExpensesRoute = isNavItemActive(pathname, '/expenses')
   const isPurchasesListRoute = pathname === '/purchases'
   const isPurchaseCreateRoute = pathname === '/purchases/new'
   const purchaseEditMatch = pathname.match(/^\/purchases\/([^/]+)\/edit$/)
@@ -124,6 +126,8 @@ function App() {
       document.title = 'Soft Touch Sofas — Purchase Details'
     } else if (isPurchasesListRoute) {
       document.title = 'Soft Touch Sofas — Purchases'
+    } else if (isExpensesRoute) {
+      document.title = 'Soft Touch Sofas — Expenses'
     } else if (matchedAdminNav) {
       document.title = `Soft Touch Sofas — ${matchedAdminNav.label}`
     } else if (isSignupRoute) {
@@ -140,6 +144,7 @@ function App() {
     purchaseEditIdentifier,
     purchaseDetailsIdentifier,
     isPurchasesListRoute,
+    isExpensesRoute,
     matchedAdminNav,
     isSignupRoute,
   ])
@@ -224,6 +229,11 @@ function App() {
             />
           ) : isPurchasesListRoute ? (
             <PurchasesPage
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          ) : isExpensesRoute ? (
+            <ExpensesPage
               currentUser={currentUser}
               onNavigate={navigate}
             />
