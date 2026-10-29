@@ -1,11 +1,18 @@
 import {
+  normalizeMaterialDisplayName,
+  normalizeMaterialNameKey,
+  normalizeRawMaterialCategory,
   normalizeRawMaterialUnit,
+  RAW_MATERIAL_CATEGORIES,
   RAW_MATERIAL_UNITS,
+  RawMaterialCategory,
+  RawMaterialUnit,
 } from '../../raw-materials/models/raw-material.model';
 import { normalizePurchaseText } from '../models/purchase-voucher.model';
 import {
   CreatePurchaseVoucherDto,
   PurchaseEntryMethod,
+  PurchaseInlineNewMaterialDto,
   PurchaseLineItemInputDto,
   ValidationResult,
 } from '../types';
@@ -126,6 +133,30 @@ export function parseNonNegativeCharge(
   return { value: roundPurchaseMoney(num) };
 }
 
+const ALLOWED_INLINE_NEW_MATERIAL_FIELDS = new Set([
+  'name',
+  'unit',
+  'category',
+  'description',
+]);
+
+const FORBIDDEN_INLINE_NEW_MATERIAL_STOCK_FIELDS = new Set([
+  'quantityOnHand',
+  'initialQuantity',
+]);
+
+const SYSTEM_INLINE_NEW_MATERIAL_FIELDS = new Set([
+  '_id',
+  'id',
+  'normalizedName',
+  'isActive',
+  'status',
+  'createdBy',
+  'createdAt',
+  'updatedAt',
+  '__v',
+]);
+
 export function parseLineItemsInput(
   rawLineItems: unknown,
 ): { items: PurchaseLineItemInputDto[]; error?: string; itemErrors?: Record<string, string> } {
@@ -156,6 +187,10 @@ export function parseLineItemsInput(
 
   const parsedItems: PurchaseLineItemInputDto[] = [];
   const itemErrors: Record<string, string> = {};
+  const seenNewMaterialsByNameKey = new Map<
+    string,
+    { name: string; unit: RawMaterialUnit }
+  >();
 
   candidateList.forEach((rawEntry, idx) => {
     const prefix = `lineItems[${idx}]`;
@@ -167,9 +202,15 @@ export function parseLineItemsInput(
     const entry = rawEntry as Record<string, unknown>;
     const materialId =
       typeof entry.materialId === 'string' ? entry.materialId.trim() : '';
-    if (!materialId) {
+    const hasNewMaterial =
+      entry.newMaterial !== undefined && entry.newMaterial !== null;
+
+    if (materialId && hasNewMaterial) {
       itemErrors[`${prefix}.materialId`] =
-        `Line item #${idx + 1}: select a raw material.`;
+        `Line item #${idx + 1}: provide either an existing materialId or newMaterial, not both.`;
+    } else if (!materialId && !hasNewMaterial) {
+      itemErrors[`${prefix}.materialId`] =
+        `Line item #${idx + 1}: select a raw material or define a new material.`;
     }
 
     let unitValue: PurchaseLineItemInputDto['unit'] = null;
@@ -184,6 +225,136 @@ export function parseLineItemsInput(
           `Line item #${idx + 1}: unit must be one of ${RAW_MATERIAL_UNITS.join(', ')}.`;
       } else {
         unitValue = normalizedUnit;
+      }
+    }
+
+    let parsedNewMaterial: PurchaseInlineNewMaterialDto | null = null;
+    if (hasNewMaterial && !materialId) {
+      if (
+        typeof entry.newMaterial !== 'object' ||
+        Array.isArray(entry.newMaterial)
+      ) {
+        itemErrors[`${prefix}.newMaterial`] =
+          `Line item #${idx + 1}: newMaterial must be an object.`;
+      } else {
+        const rawNewMat = entry.newMaterial as Record<string, unknown>;
+        for (const key of Object.keys(rawNewMat)) {
+          if (FORBIDDEN_INLINE_NEW_MATERIAL_STOCK_FIELDS.has(key)) {
+            itemErrors[`${prefix}.newMaterial.${key}`] =
+              `Line item #${idx + 1}: '${key}' cannot be set separately; stock is initialized from the purchased quantity.`;
+          } else if (SYSTEM_INLINE_NEW_MATERIAL_FIELDS.has(key)) {
+            itemErrors[`${prefix}.newMaterial.${key}`] =
+              `Line item #${idx + 1}: '${key}' is system-managed and cannot be supplied.`;
+          } else if (!ALLOWED_INLINE_NEW_MATERIAL_FIELDS.has(key)) {
+            itemErrors[`${prefix}.newMaterial.${key}`] =
+              `Line item #${idx + 1}: '${key}' is not a valid new material field.`;
+          }
+        }
+
+        let newMatName = '';
+        if (typeof rawNewMat.name !== 'string') {
+          itemErrors[`${prefix}.newMaterial.name`] =
+            `Line item #${idx + 1}: new material name is required.`;
+        } else {
+          const cleanName = normalizeMaterialDisplayName(rawNewMat.name);
+          if (!cleanName) {
+            itemErrors[`${prefix}.newMaterial.name`] =
+              `Line item #${idx + 1}: new material name is required.`;
+          } else if (cleanName.length > 150) {
+            itemErrors[`${prefix}.newMaterial.name`] =
+              `Line item #${idx + 1}: new material name cannot exceed 150 characters.`;
+          } else {
+            newMatName = cleanName;
+          }
+        }
+
+        let newMatUnit: RawMaterialUnit | null = null;
+        if (
+          typeof rawNewMat.unit !== 'string' ||
+          !rawNewMat.unit.trim()
+        ) {
+          itemErrors[`${prefix}.newMaterial.unit`] =
+            `Line item #${idx + 1}: new material unit is required.`;
+        } else {
+          const normalizedNewUnit = normalizeRawMaterialUnit(rawNewMat.unit);
+          if (!normalizedNewUnit) {
+            itemErrors[`${prefix}.newMaterial.unit`] =
+              `Line item #${idx + 1}: new material unit must be one of ${RAW_MATERIAL_UNITS.join(', ')}.`;
+          } else {
+            newMatUnit = normalizedNewUnit;
+          }
+        }
+
+        let newMatCategory: RawMaterialCategory | null = null;
+        if (
+          rawNewMat.category !== undefined &&
+          rawNewMat.category !== null &&
+          rawNewMat.category !== ''
+        ) {
+          if (typeof rawNewMat.category !== 'string') {
+            itemErrors[`${prefix}.newMaterial.category`] =
+              `Line item #${idx + 1}: category must be one of ${RAW_MATERIAL_CATEGORIES.join(', ')}.`;
+          } else if (rawNewMat.category.trim()) {
+            const normalizedCategory = normalizeRawMaterialCategory(
+              rawNewMat.category,
+            );
+            if (!normalizedCategory) {
+              itemErrors[`${prefix}.newMaterial.category`] =
+                `Line item #${idx + 1}: category must be one of ${RAW_MATERIAL_CATEGORIES.join(', ')}.`;
+            } else {
+              newMatCategory = normalizedCategory;
+            }
+          }
+        }
+
+        let newMatDescription = '';
+        if (
+          rawNewMat.description !== undefined &&
+          rawNewMat.description !== null
+        ) {
+          if (typeof rawNewMat.description !== 'string') {
+            itemErrors[`${prefix}.newMaterial.description`] =
+              `Line item #${idx + 1}: description must be text.`;
+          } else if (rawNewMat.description.trim().length > 1000) {
+            itemErrors[`${prefix}.newMaterial.description`] =
+              `Line item #${idx + 1}: description cannot exceed 1000 characters.`;
+          } else {
+            newMatDescription = rawNewMat.description.trim();
+          }
+        }
+
+        if (unitValue && newMatUnit && unitValue !== newMatUnit) {
+          itemErrors[`${prefix}.unit`] =
+            `Line item #${idx + 1}: unit '${unitValue}' conflicts with new material unit '${newMatUnit}'.`;
+        }
+
+        if (newMatName && newMatUnit) {
+          const nameKey = normalizeMaterialNameKey(newMatName);
+          const previousSpec = seenNewMaterialsByNameKey.get(nameKey);
+          if (previousSpec && previousSpec.unit !== newMatUnit) {
+            itemErrors[`${prefix}.unit`] =
+              `Line item #${idx + 1}: new material '${newMatName}' has conflicting units ('${previousSpec.unit}' vs '${newMatUnit}') within this voucher.`;
+          } else if (!previousSpec) {
+            seenNewMaterialsByNameKey.set(nameKey, {
+              name: newMatName,
+              unit: newMatUnit,
+            });
+          }
+
+          if (
+            !Object.keys(itemErrors).some((errKey) =>
+              errKey.startsWith(`${prefix}.newMaterial`) ||
+              errKey === `${prefix}.unit`,
+            )
+          ) {
+            parsedNewMaterial = {
+              name: newMatName,
+              unit: newMatUnit,
+              category: newMatCategory,
+              description: newMatDescription,
+            };
+          }
+        }
       }
     }
 
@@ -241,15 +412,16 @@ export function parseLineItemsInput(
     }
 
     if (
-      materialId &&
+      (materialId || parsedNewMaterial) &&
       Number.isFinite(qtyNum) &&
       qtyNum > 0 &&
       Number.isFinite(priceNum) &&
       priceNum > 0
     ) {
       parsedItems.push({
-        materialId,
-        unit: unitValue,
+        ...(materialId ? { materialId } : {}),
+        ...(parsedNewMaterial ? { newMaterial: parsedNewMaterial } : {}),
+        unit: parsedNewMaterial ? parsedNewMaterial.unit : unitValue,
         quantity: roundPurchaseQuantity(qtyNum),
         unitPrice: roundPurchaseMoney(priceNum),
         remarks,

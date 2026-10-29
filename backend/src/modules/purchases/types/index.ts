@@ -158,8 +158,16 @@ export interface IBillAttachmentStorage {
   deleteBillFile(storageKey: string): Promise<void>;
 }
 
+export interface PurchaseInlineNewMaterialDto {
+  name: string;
+  unit: RawMaterialUnit;
+  category: RawMaterialCategory | null;
+  description: string;
+}
+
 export interface PurchaseLineItemInputDto {
-  materialId: string;
+  materialId?: string;
+  newMaterial?: PurchaseInlineNewMaterialDto | null;
   unit?: RawMaterialUnit | null;
   quantity: number;
   unitPrice: number;
@@ -311,6 +319,11 @@ export interface IPurchaseVoucherRepository {
   listStockMovementsForVoucher(
     voucherId: string,
   ): Promise<IPurchaseStockMovement[]>;
+  deleteByRecordId(recordId: string): Promise<boolean>;
+  deleteStockMovementsForVoucherRevision(
+    voucherId: string,
+    revision: number,
+  ): Promise<void>;
 }
 
 export interface IPurchaseVoucherService {

@@ -96,6 +96,7 @@ export interface IRawMaterialsRepository {
     id: string,
     delta: number,
   ): Promise<IRawMaterial | null>;
+  deleteById(id: string): Promise<boolean>;
 }
 
 export interface IRawMaterialsService {
@@ -139,6 +140,10 @@ export interface IRawMaterialsService {
   ): Promise<Map<string, RawMaterialPurchaseReferenceDto>>;
   withMaterialStockLocks<T>(
     materialIds: string[],
+    operation: () => Promise<T>,
+  ): Promise<T>;
+  withMaterialNameLocks<T>(
+    materialNames: string[],
     operation: () => Promise<T>,
   ): Promise<T>;
   adjustStockForPurchaseUnlocked(

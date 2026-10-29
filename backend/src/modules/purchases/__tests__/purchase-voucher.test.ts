@@ -10,14 +10,23 @@ import app from '../../../index';
 import { generateToken } from '../../../middleware/auth';
 import { sharedUserMemoryStore } from '../../auth/models/user.model';
 import {
+  projectRepository,
+  projectService,
   sharedProjectActivityWarningMemoryStore,
   sharedProjectCostAlertMemoryStore,
   sharedProjectCounterMemoryStore,
   sharedProjectMemoryStore,
 } from '../../projects';
-import { sharedRawMaterialMemoryStore } from '../../raw-materials';
 import {
+  rawMaterialsRepository,
+  rawMaterialsService,
+  sharedRawMaterialMemoryStore,
+} from '../../raw-materials';
+import {
+  billAttachmentStorage,
   LocalProtectedBillStorageService,
+  PurchaseVoucherRepository,
+  PurchaseVoucherService,
   registerPurchaseProjectFinancialIntegration,
   sharedPurchaseCounterMemoryStore,
   sharedPurchaseStockMovementMemoryStore,
@@ -855,6 +864,602 @@ async function runTests(): Promise<void> {
     assert.strictEqual(cancelledList.status, 200);
     assert.strictEqual(cancelledList.body.total, 1);
 
+    console.log(
+      '8. Testing inline new Raw Material creation, mixed vouchers, single-count stock, conflicts, rollback, concurrency, edits & cancellation...',
+    );
+
+    const createCottonSpongeRes = await jsonReq(
+      baseUrl,
+      'POST',
+      '/api/raw-materials',
+      {
+        token: adminToken,
+        body: {
+          name: 'Cotton Sponge',
+          category: 'Foam',
+          unit: 'Kilogram',
+          quantityOnHand: 20,
+        },
+      },
+    );
+    assert.strictEqual(createCottonSpongeRes.status, 201);
+    const cottonSpongeId = String(
+      (createCottonSpongeRes.body.rawMaterial as Record<string, unknown>).id,
+    );
+
+    const sneakyStockDto = validateCreatePurchaseVoucherDto({
+      purchaseDate: '2026-10-28',
+      supplierName: 'Kochi Fabrics',
+      lineItems: [
+        {
+          newMaterial: {
+            name: 'Sneaky Material',
+            unit: 'Meter',
+            quantityOnHand: 500,
+          },
+          quantity: 10,
+          unitPrice: 100,
+        },
+      ],
+    });
+    assert.strictEqual(sneakyStockDto.isValid, false);
+    assert.ok(sneakyStockDto.errors?.['lineItems[0].newMaterial.quantityOnHand']);
+
+    const bothIdAndNewDto = validateCreatePurchaseVoucherDto({
+      purchaseDate: '2026-10-28',
+      supplierName: 'Kochi Fabrics',
+      lineItems: [
+        {
+          materialId: cottonSpongeId,
+          newMaterial: {
+            name: 'Curtain',
+            unit: 'Meter',
+          },
+          quantity: 10,
+          unitPrice: 100,
+        },
+      ],
+    });
+    assert.strictEqual(bothIdAndNewDto.isValid, false);
+    assert.ok(bothIdAndNewDto.errors?.['lineItems[0].materialId']);
+
+    const projABeforeMixed = await jsonReq(
+      baseUrl,
+      'GET',
+      `/api/projects/${projectARecordId}`,
+      { token: operatorToken },
+    );
+    const projAPurchasesBefore = Number(
+      (projABeforeMixed.body.project as Record<string, unknown>).totalPurchases,
+    );
+
+    const mixedVoucherRes = await jsonReq(baseUrl, 'POST', '/api/purchases', {
+      token: operatorToken,
+      body: {
+        purchaseDate: '2026-10-28',
+        supplierName: 'Cochin Drapery & Foam Mart',
+        supplierInvoiceNumber: 'CDFM-2026-901',
+        projectId: projectARecordId,
+        entryMethod: 'upload_bill',
+        clientRequestId: 'mixed-curtain-req-1',
+        lineItems: [
+          {
+            materialId: cottonSpongeId,
+            unit: 'kg',
+            quantity: 10,
+            unitPrice: 180,
+          },
+          {
+            newMaterial: {
+              name: '  Curtain  ',
+              unit: 'm',
+              category: 'Curtain',
+              description: 'Heavy blackout drape fabric',
+            },
+            quantity: 15,
+            unitPrice: 320,
+          },
+        ],
+        taxAmount: 400,
+      },
+    });
+    assert.strictEqual(mixedVoucherRes.status, 201);
+    const mixedVoucher = mixedVoucherRes.body.voucher as Record<string, unknown>;
+    const mixedVoucherId = String(mixedVoucher.id);
+    assert.strictEqual(mixedVoucher.subtotal, 6600);
+    assert.strictEqual(mixedVoucher.finalTotal, 7000);
+    assert.strictEqual(mixedVoucher.stockSynchronized, true);
+
+    const mixedLineItems = mixedVoucher.lineItems as Array<
+      Record<string, unknown>
+    >;
+    assert.strictEqual(mixedLineItems.length, 2);
+    assert.strictEqual(mixedLineItems[0].materialId, cottonSpongeId);
+    assert.strictEqual(mixedLineItems[0].unit, 'Kilogram');
+    const curtainId = String(mixedLineItems[1].materialId);
+    assert.ok(/^[a-f0-9]{24}$/i.test(curtainId));
+    assert.strictEqual(mixedLineItems[1].materialName, 'Curtain');
+    assert.strictEqual(mixedLineItems[1].unit, 'Meter');
+
+    const cottonAfterMixed = await jsonReq(
+      baseUrl,
+      'GET',
+      `/api/raw-materials/${cottonSpongeId}`,
+      { token: operatorToken },
+    );
+    assert.strictEqual(cottonAfterMixed.status, 200);
+    assert.strictEqual(
+      (cottonAfterMixed.body.rawMaterial as Record<string, unknown>)
+        .quantityOnHand,
+      30,
+    );
+
+    const curtainAfterMixed = await jsonReq(
+      baseUrl,
+      'GET',
+      `/api/raw-materials/${curtainId}`,
+      { token: operatorToken },
+    );
+    assert.strictEqual(curtainAfterMixed.status, 200);
+    const curtainDoc = curtainAfterMixed.body.rawMaterial as Record<
+      string,
+      unknown
+    >;
+    assert.strictEqual(curtainDoc.name, 'Curtain');
+    assert.strictEqual(curtainDoc.unit, 'Meter');
+    assert.strictEqual(curtainDoc.quantityOnHand, 15);
+
+    const mixedDetailRes = await jsonReq(
+      baseUrl,
+      'GET',
+      `/api/purchases/${mixedVoucherId}`,
+      { token: operatorToken },
+    );
+    assert.strictEqual(mixedDetailRes.status, 200);
+    const mixedMovements = mixedDetailRes.body.stockMovements as Array<
+      Record<string, unknown>
+    >;
+    assert.strictEqual(mixedMovements.length, 2);
+    const curtainMovement = mixedMovements.find(
+      (m) => m.materialId === curtainId,
+    );
+    assert.ok(curtainMovement);
+    assert.strictEqual(curtainMovement?.quantityDelta, 15);
+    assert.strictEqual(curtainMovement?.resultingQuantityOnHand, 15);
+
+    const projAAfterMixed = await jsonReq(
+      baseUrl,
+      'GET',
+      `/api/projects/${projectARecordId}`,
+      { token: operatorToken },
+    );
+    assert.strictEqual(
+      Number(
+        (projAAfterMixed.body.project as Record<string, unknown>)
+          .totalPurchases,
+      ),
+      projAPurchasesBefore + 7000,
+    );
+
+    const mixedReplayRes = await jsonReq(baseUrl, 'POST', '/api/purchases', {
+      token: operatorToken,
+      body: {
+        purchaseDate: '2026-10-28',
+        supplierName: 'Cochin Drapery & Foam Mart',
+        supplierInvoiceNumber: 'CDFM-2026-901',
+        projectId: projectARecordId,
+        entryMethod: 'upload_bill',
+        clientRequestId: 'mixed-curtain-req-1',
+        lineItems: [
+          {
+            materialId: cottonSpongeId,
+            unit: 'kg',
+            quantity: 10,
+            unitPrice: 180,
+          },
+          {
+            newMaterial: {
+              name: 'Curtain',
+              unit: 'Meter',
+            },
+            quantity: 15,
+            unitPrice: 320,
+          },
+        ],
+        taxAmount: 400,
+      },
+    });
+    assert.strictEqual(mixedReplayRes.status, 200);
+    assert.strictEqual(mixedReplayRes.body.idempotentReplay, true);
+
+    const curtainAfterReplay = await rawMaterialsRepository.findById(curtainId);
+    assert.strictEqual(curtainAfterReplay?.quantityOnHand, 15);
+    const cottonAfterReplay =
+      await rawMaterialsRepository.findById(cottonSpongeId);
+    assert.strictEqual(cottonAfterReplay?.quantityOnHand, 30);
+
+    const compatibleDupNameRes = await jsonReq(
+      baseUrl,
+      'POST',
+      '/api/purchases',
+      {
+        token: operatorToken,
+        body: {
+          purchaseDate: '2026-10-28',
+          supplierName: 'Cochin Drapery & Foam Mart',
+          supplierInvoiceNumber: 'CDFM-2026-902',
+          lineItems: [
+            {
+              newMaterial: {
+                name: '  curtain ',
+                unit: 'Meter',
+              },
+              quantity: 5,
+              unitPrice: 330,
+            },
+          ],
+        },
+      },
+    );
+    assert.strictEqual(compatibleDupNameRes.status, 201);
+    const dupReuseLines = (
+      compatibleDupNameRes.body.voucher as Record<string, unknown>
+    ).lineItems as Array<Record<string, unknown>>;
+    assert.strictEqual(dupReuseLines[0].materialId, curtainId);
+    const curtainAfterReuse = await rawMaterialsRepository.findById(curtainId);
+    assert.strictEqual(curtainAfterReuse?.quantityOnHand, 20);
+
+    const unitConflictNewMatRes = await jsonReq(
+      baseUrl,
+      'POST',
+      '/api/purchases',
+      {
+        token: operatorToken,
+        body: {
+          purchaseDate: '2026-10-28',
+          supplierName: 'Cochin Drapery & Foam Mart',
+          supplierInvoiceNumber: 'CDFM-2026-903',
+          lineItems: [
+            {
+              newMaterial: {
+                name: ' cotton   sponge ',
+                unit: 'Meter',
+              },
+              quantity: 8,
+              unitPrice: 210,
+            },
+          ],
+        },
+      },
+    );
+    assert.strictEqual(unitConflictNewMatRes.status, 409);
+    assert.ok(
+      (unitConflictNewMatRes.body.errors as Record<string, string>)?.[
+        'lineItems[0].unit'
+      ],
+    );
+    assert.strictEqual(
+      (await rawMaterialsRepository.findById(cottonSpongeId))?.quantityOnHand,
+      30,
+    );
+
+    const createJuteRes = await jsonReq(
+      baseUrl,
+      'POST',
+      '/api/raw-materials',
+      {
+        token: adminToken,
+        body: {
+          name: 'Discontinued Jute Webbing',
+          unit: 'Meter',
+        },
+      },
+    );
+    assert.strictEqual(createJuteRes.status, 201);
+    const juteId = String(
+      (createJuteRes.body.rawMaterial as Record<string, unknown>).id,
+    );
+    await jsonReq(baseUrl, 'PATCH', `/api/raw-materials/${juteId}/status`, {
+      token: adminToken,
+      body: { isActive: false },
+    });
+
+    const inactiveCollisionRes = await jsonReq(
+      baseUrl,
+      'POST',
+      '/api/purchases',
+      {
+        token: operatorToken,
+        body: {
+          purchaseDate: '2026-10-28',
+          supplierName: 'Webbing Traders',
+          lineItems: [
+            {
+              newMaterial: {
+                name: 'discontinued jute webbing',
+                unit: 'Meter',
+              },
+              quantity: 10,
+              unitPrice: 55,
+            },
+          ],
+        },
+      },
+    );
+    assert.strictEqual(inactiveCollisionRes.status, 409);
+
+    const intraConflictRes = await jsonReq(baseUrl, 'POST', '/api/purchases', {
+      token: operatorToken,
+      body: {
+        purchaseDate: '2026-10-28',
+        supplierName: 'Sheer House',
+        lineItems: [
+          {
+            newMaterial: { name: 'Linen Sheer', unit: 'Meter' },
+            quantity: 6,
+            unitPrice: 240,
+          },
+          {
+            newMaterial: { name: ' linen  sheer ', unit: 'Piece' },
+            quantity: 4,
+            unitPrice: 240,
+          },
+        ],
+      },
+    });
+    assert.strictEqual(intraConflictRes.status, 400);
+    assert.strictEqual(
+      await rawMaterialsRepository.findByNormalizedName('linen sheer'),
+      null,
+    );
+
+    const intraSameNewMatRes = await jsonReq(
+      baseUrl,
+      'POST',
+      '/api/purchases',
+      {
+        token: operatorToken,
+        body: {
+          purchaseDate: '2026-10-28',
+          supplierName: 'Sheer House',
+          supplierInvoiceNumber: 'SH-100',
+          lineItems: [
+            {
+              newMaterial: { name: 'Linen Sheer', unit: 'Meter' },
+              quantity: 6,
+              unitPrice: 240,
+            },
+            {
+              newMaterial: { name: ' linen  sheer ', unit: 'm' },
+              quantity: 4,
+              unitPrice: 250,
+            },
+          ],
+        },
+      },
+    );
+    assert.strictEqual(intraSameNewMatRes.status, 201);
+    const linenSheerDoc =
+      await rawMaterialsRepository.findByNormalizedName('linen sheer');
+    assert.ok(linenSheerDoc);
+    assert.strictEqual(linenSheerDoc?.quantityOnHand, 10);
+
+    const failedDiscountWithNewMatRes = await jsonReq(
+      baseUrl,
+      'POST',
+      '/api/purchases',
+      {
+        token: operatorToken,
+        body: {
+          purchaseDate: '2026-10-28',
+          supplierName: 'Orphan Test Supplier',
+          discountAmount: 99999,
+          lineItems: [
+            {
+              materialId: cottonSpongeId,
+              quantity: 5,
+              unitPrice: 180,
+            },
+            {
+              newMaterial: { name: 'Orphaned Silk', unit: 'Meter' },
+              quantity: 12,
+              unitPrice: 400,
+            },
+          ],
+        },
+      },
+    );
+    assert.strictEqual(failedDiscountWithNewMatRes.status, 400);
+    assert.strictEqual(
+      await rawMaterialsRepository.findByNormalizedName('orphaned silk'),
+      null,
+    );
+    assert.strictEqual(
+      (await rawMaterialsRepository.findById(cottonSpongeId))?.quantityOnHand,
+      30,
+    );
+
+    const voucherCountBeforeSimulatedFailure =
+      sharedPurchaseVoucherMemoryStore.size;
+    const movementCountBeforeSimulatedFailure =
+      sharedPurchaseStockMovementMemoryStore.size;
+    const realPurchaseRepo = new PurchaseVoucherRepository();
+    const failingMovementRepo: PurchaseVoucherRepository = Object.create(
+      realPurchaseRepo,
+    );
+    let movementCallCounter = 0;
+    failingMovementRepo.recordStockMovement = async (entry) => {
+      movementCallCounter += 1;
+      if (movementCallCounter >= 2) {
+        throw new Error('Simulated ledger persistence failure');
+      }
+      return realPurchaseRepo.recordStockMovement(entry);
+    };
+
+    const failingPurchaseService = new PurchaseVoucherService(
+      failingMovementRepo,
+      rawMaterialsRepository,
+      rawMaterialsService,
+      projectRepository,
+      projectService,
+      billAttachmentStorage,
+    );
+
+    await assert.rejects(
+      () =>
+        failingPurchaseService.createPurchaseVoucher(
+          {
+            purchaseDate: '2026-10-28',
+            supplierName: 'Rollback Trim Supplier',
+            supplierInvoiceNumber: 'RB-501',
+            lineItems: [
+              {
+                materialId: cottonSpongeId,
+                quantity: 7,
+                unitPrice: 180,
+              },
+              {
+                newMaterial: {
+                  name: 'Rollback Tassel Trim',
+                  unit: 'Meter',
+                },
+                quantity: 25,
+                unitPrice: 90,
+              },
+            ],
+          },
+          [],
+          {
+            id: 'op-rollback',
+            email: 'op@softtouch.test',
+            name: 'Operator',
+            role: 'data_entry',
+          },
+        ),
+      /Simulated ledger persistence failure/,
+    );
+
+    assert.strictEqual(
+      await rawMaterialsRepository.findByNormalizedName('rollback tassel trim'),
+      null,
+    );
+    assert.strictEqual(
+      (await rawMaterialsRepository.findById(cottonSpongeId))?.quantityOnHand,
+      30,
+    );
+    assert.strictEqual(
+      sharedPurchaseVoucherMemoryStore.size,
+      voucherCountBeforeSimulatedFailure,
+    );
+    assert.strictEqual(
+      sharedPurchaseStockMovementMemoryStore.size,
+      movementCountBeforeSimulatedFailure,
+    );
+
+    const concurrentQuantities = [2, 3, 4, 5];
+    const concurrentResponses = await Promise.all(
+      concurrentQuantities.map((qty, idx) =>
+        jsonReq(baseUrl, 'POST', '/api/purchases', {
+          token: operatorToken,
+          body: {
+            purchaseDate: '2026-10-28',
+            supplierName: 'Hardware Concurrent Co',
+            supplierInvoiceNumber: `HCC-${idx + 1}`,
+            lineItems: [
+              {
+                newMaterial: {
+                  name: 'Brass Piping Nail',
+                  unit: 'Box',
+                  category: 'Hardware',
+                },
+                quantity: qty,
+                unitPrice: 150,
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    for (const res of concurrentResponses) {
+      assert.strictEqual(res.status, 201);
+    }
+
+    const matchingBrassRecords = Array.from(
+      sharedRawMaterialMemoryStore.values(),
+    ).filter((m) => m.normalizedName === 'brass piping nail');
+    assert.strictEqual(matchingBrassRecords.length, 1);
+    assert.strictEqual(matchingBrassRecords[0].quantityOnHand, 14);
+
+    const editedMixedRes = await jsonReq(
+      baseUrl,
+      'PATCH',
+      `/api/purchases/${mixedVoucherId}`,
+      {
+        token: operatorToken,
+        body: {
+          lineItems: [
+            {
+              materialId: cottonSpongeId,
+              quantity: 6,
+              unitPrice: 180,
+            },
+            {
+              materialId: curtainId,
+              quantity: 11,
+              unitPrice: 320,
+            },
+            {
+              newMaterial: {
+                name: '  Buckram Tape ',
+                unit: 'm',
+                category: 'Curtain',
+              },
+              quantity: 20,
+              unitPrice: 45,
+            },
+          ],
+        },
+      },
+    );
+    assert.strictEqual(editedMixedRes.status, 200);
+    assert.strictEqual(
+      (await rawMaterialsRepository.findById(cottonSpongeId))?.quantityOnHand,
+      26,
+    );
+    assert.strictEqual(
+      (await rawMaterialsRepository.findById(curtainId))?.quantityOnHand,
+      16,
+    );
+    const buckramDoc =
+      await rawMaterialsRepository.findByNormalizedName('buckram tape');
+    assert.ok(buckramDoc);
+    assert.strictEqual(buckramDoc?.quantityOnHand, 20);
+
+    const cancelMixedRes = await jsonReq(
+      baseUrl,
+      'POST',
+      `/api/purchases/${mixedVoucherId}/cancel`,
+      {
+        token: adminToken,
+        body: { reason: 'Testing full reversal on mixed existing + new items' },
+      },
+    );
+    assert.strictEqual(cancelMixedRes.status, 200);
+    assert.strictEqual(
+      (await rawMaterialsRepository.findById(cottonSpongeId))?.quantityOnHand,
+      20,
+    );
+    assert.strictEqual(
+      (await rawMaterialsRepository.findById(curtainId))?.quantityOnHand,
+      5,
+    );
+    assert.strictEqual(
+      (
+        await rawMaterialsRepository.findById(String(buckramDoc?._id))
+      )?.quantityOnHand,
+      0,
+    );
+
     console.log('✓ All HTTP, stock sync, project sync, attachment & RBAC tests passed.');
   } finally {
     for (const v of sharedPurchaseVoucherMemoryStore.values()) {
@@ -877,7 +1482,11 @@ async function runTests(): Promise<void> {
   console.log('=== ALL PURCHASE VOUCHER MODULE TESTS PASSED ===');
 }
 
-runTests().catch((err) => {
-  console.error('Purchase Voucher test suite failed:', err);
-  process.exit(1);
-});
+runTests()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error('Purchase Voucher test suite failed:', err);
+    process.exit(1);
+  });

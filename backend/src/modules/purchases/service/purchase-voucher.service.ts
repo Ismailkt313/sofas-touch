@@ -6,6 +6,7 @@ import {
   VoucherMutationEvent,
 } from '../../projects';
 import {
+  DuplicateRawMaterialKeyError,
   InsufficientRawMaterialStockError,
   IRawMaterial,
   IRawMaterialsRepository,
@@ -13,7 +14,11 @@ import {
   RawMaterialUnitConflictError,
   RawMaterialsService,
 } from '../../raw-materials';
-import { RawMaterialUnit } from '../../raw-materials/models/raw-material.model';
+import {
+  normalizeMaterialDisplayName,
+  normalizeMaterialNameKey,
+  RawMaterialUnit,
+} from '../../raw-materials/models/raw-material.model';
 import {
   roundPurchaseMoney,
   roundPurchaseQuantity,
@@ -43,6 +48,8 @@ import {
   PaginatedResult,
   PurchaseBillAttachmentResponseDto,
   PurchaseCallerIdentity,
+  PurchaseInlineNewMaterialDto,
+  PurchaseLineItemInputDto,
   PurchaseStockMovementResponseDto,
   PurchaseStockMovementType,
   PurchaseVoucherListSummary,
@@ -73,12 +80,33 @@ export class PurchaseNotFoundError extends Error {
 
 export class PurchaseConflictError extends Error {
   public readonly statusCode = 409;
+  public readonly errors?: Record<string, string>;
 
-  constructor(message: string) {
+  constructor(message: string, errors?: Record<string, string>) {
     super(message);
     this.name = 'PurchaseConflictError';
+    if (errors && Object.keys(errors).length > 0) {
+      this.errors = errors;
+    }
   }
 }
+
+type PreparedPurchaseLine =
+  | {
+      kind: 'existing';
+      index: number;
+      lineItem: IPurchaseLineItem;
+    }
+  | {
+      kind: 'new';
+      index: number;
+      nameKey: string;
+      spec: PurchaseInlineNewMaterialDto;
+      quantity: number;
+      unitPrice: number;
+      lineTotal: number;
+      remarks: string;
+    };
 
 export class DuplicateSupplierInvoiceError extends PurchaseConflictError {
   constructor(
@@ -330,34 +358,112 @@ export class PurchaseVoucherService {
     };
   }
 
-  private async resolveAndCalculateLineItems(
-    lineInputs: CreatePurchaseVoucherDto['lineItems'],
+  private async prepareLineItemsBeforeSave(
+    lineInputs: PurchaseLineItemInputDto[],
     previouslyIncludedMaterialIds: Set<string> = new Set(),
   ): Promise<{
-    lineItems: IPurchaseLineItem[];
+    preparedLines: PreparedPurchaseLine[];
     subtotal: number;
+    newMaterialNameKeys: string[];
   }> {
     const fieldErrors: Record<string, string> = {};
+    const conflictErrors: Record<string, string> = {};
     const materialCache = new Map<string, IRawMaterial>();
+    const existingByNameCache = new Map<string, IRawMaterial>();
 
     const uniqueIds = Array.from(
-      new Set(lineInputs.map((item) => item.materialId)),
+      new Set(
+        lineInputs
+          .map((item) => (item.materialId ? item.materialId.trim() : ''))
+          .filter(Boolean),
+      ),
     );
-    await Promise.all(
-      uniqueIds.map(async (matId) => {
+    const uniqueNewNameKeys = Array.from(
+      new Set(
+        lineInputs
+          .map((item) =>
+            item.newMaterial?.name
+              ? normalizeMaterialNameKey(item.newMaterial.name)
+              : '',
+          )
+          .filter(Boolean),
+      ),
+    );
+
+    await Promise.all([
+      ...uniqueIds.map(async (matId) => {
         const found = await this.rawMaterialsRepository.findById(matId);
         if (found) {
           materialCache.set(matId, found);
         }
       }),
-    );
+      ...uniqueNewNameKeys.map(async (nameKey) => {
+        const found =
+          await this.rawMaterialsRepository.findByNormalizedName(nameKey);
+        if (found) {
+          existingByNameCache.set(nameKey, found);
+        }
+      }),
+    ]);
 
-    const calculatedLines: IPurchaseLineItem[] = [];
+    const preparedLines: PreparedPurchaseLine[] = [];
     let runningSubtotal = 0;
 
     lineInputs.forEach((input, idx) => {
       const prefix = `lineItems[${idx}]`;
-      const material = materialCache.get(input.materialId);
+      const quantity = roundPurchaseQuantity(input.quantity);
+      const unitPrice = roundPurchaseMoney(input.unitPrice);
+      const lineTotal = roundPurchaseMoney(quantity * unitPrice);
+
+      if (lineTotal <= 0) {
+        fieldErrors[`${prefix}.lineTotal`] =
+          `Line item #${idx + 1}: calculated line total must be greater than zero.`;
+        return;
+      }
+
+      if (input.newMaterial && !input.materialId) {
+        const cleanName = normalizeMaterialDisplayName(input.newMaterial.name);
+        const nameKey = normalizeMaterialNameKey(cleanName);
+        const existingMatch = existingByNameCache.get(nameKey);
+
+        if (existingMatch) {
+          const existingId = String(existingMatch._id);
+          if (existingMatch.unit !== input.newMaterial.unit) {
+            conflictErrors[`${prefix}.unit`] =
+              `Line item #${idx + 1}: material '${existingMatch.name}' already exists with unit '${existingMatch.unit}', which conflicts with '${input.newMaterial.unit}'. Select the existing material or use a distinct material name.`;
+            return;
+          }
+          if (
+            !existingMatch.isActive &&
+            !previouslyIncludedMaterialIds.has(existingId)
+          ) {
+            conflictErrors[`${prefix}.materialId`] =
+              `Line item #${idx + 1}: an inactive raw material named '${existingMatch.name}' already exists. Reactivate it in Raw Materials or use a distinct material name.`;
+            return;
+          }
+        }
+
+        runningSubtotal = roundPurchaseMoney(runningSubtotal + lineTotal);
+        preparedLines.push({
+          kind: 'new',
+          index: idx,
+          nameKey,
+          spec: {
+            name: cleanName,
+            unit: input.newMaterial.unit,
+            category: input.newMaterial.category ?? null,
+            description: input.newMaterial.description || '',
+          },
+          quantity,
+          unitPrice,
+          lineTotal,
+          remarks: input.remarks || '',
+        });
+        return;
+      }
+
+      const materialId = input.materialId ? input.materialId.trim() : '';
+      const material = materialCache.get(materialId);
 
       if (!material) {
         fieldErrors[`${prefix}.materialId`] =
@@ -381,27 +487,21 @@ export class PurchaseVoucherService {
         return;
       }
 
-      const quantity = roundPurchaseQuantity(input.quantity);
-      const unitPrice = roundPurchaseMoney(input.unitPrice);
-      const lineTotal = roundPurchaseMoney(quantity * unitPrice);
-
-      if (lineTotal <= 0) {
-        fieldErrors[`${prefix}.lineTotal`] =
-          `Line item #${idx + 1}: calculated line total must be greater than zero.`;
-        return;
-      }
-
       runningSubtotal = roundPurchaseMoney(runningSubtotal + lineTotal);
 
-      calculatedLines.push({
-        materialId: canonicalMaterialId,
-        materialName: material.name,
-        materialCategory: material.category || null,
-        unit: material.unit,
-        quantity,
-        unitPrice,
-        lineTotal,
-        remarks: input.remarks || '',
+      preparedLines.push({
+        kind: 'existing',
+        index: idx,
+        lineItem: {
+          materialId: canonicalMaterialId,
+          materialName: material.name,
+          materialCategory: material.category || null,
+          unit: material.unit,
+          quantity,
+          unitPrice,
+          lineTotal,
+          remarks: input.remarks || '',
+        },
       });
     });
 
@@ -410,10 +510,159 @@ export class PurchaseVoucherService {
       throw new PurchaseValidationError(fieldErrors, firstError);
     }
 
+    if (Object.keys(conflictErrors).length > 0) {
+      const firstConflict = Object.values(conflictErrors)[0];
+      throw new PurchaseConflictError(firstConflict, conflictErrors);
+    }
+
     return {
-      lineItems: calculatedLines,
+      preparedLines,
       subtotal: runningSubtotal,
+      newMaterialNameKeys: uniqueNewNameKeys,
     };
+  }
+
+  private async cleanupNewlyCreatedMaterials(
+    materialIds: Iterable<string>,
+  ): Promise<void> {
+    for (const id of materialIds) {
+      try {
+        await this.rawMaterialsRepository.deleteById(id);
+      } catch {
+        void 0;
+      }
+    }
+  }
+
+  private async materializePreparedLinesUnderNameLocks(
+    preparedLines: PreparedPurchaseLine[],
+    callerId: string,
+    previouslyIncludedMaterialIds: Set<string> = new Set(),
+  ): Promise<{
+    lineItems: IPurchaseLineItem[];
+    newlyCreatedMaterialIds: Set<string>;
+  }> {
+    const newlyCreatedMaterialIds = new Set<string>();
+    const groupedNewSpecs = new Map<
+      string,
+      {
+        firstIndex: number;
+        spec: PurchaseInlineNewMaterialDto;
+        totalQuantity: number;
+      }
+    >();
+
+    for (const entry of preparedLines) {
+      if (entry.kind !== 'new') {
+        continue;
+      }
+      const existingGroup = groupedNewSpecs.get(entry.nameKey);
+      if (existingGroup) {
+        existingGroup.totalQuantity = roundPurchaseQuantity(
+          existingGroup.totalQuantity + entry.quantity,
+        );
+      } else {
+        groupedNewSpecs.set(entry.nameKey, {
+          firstIndex: entry.index,
+          spec: entry.spec,
+          totalQuantity: roundPurchaseQuantity(entry.quantity),
+        });
+      }
+    }
+
+    const resolvedNewByNameKey = new Map<string, IRawMaterial>();
+
+    const validateMatchedExisting = (
+      existingMat: IRawMaterial,
+      spec: PurchaseInlineNewMaterialDto,
+      firstIndex: number,
+    ): IRawMaterial => {
+      const prefix = `lineItems[${firstIndex}]`;
+      const existingId = String(existingMat._id);
+
+      if (existingMat.unit !== spec.unit) {
+        const msg = `Line item #${firstIndex + 1}: material '${existingMat.name}' already exists with unit '${existingMat.unit}', which conflicts with '${spec.unit}'. Select the existing material or use a distinct material name.`;
+        throw new PurchaseConflictError(msg, { [`${prefix}.unit`]: msg });
+      }
+
+      if (
+        !existingMat.isActive &&
+        !previouslyIncludedMaterialIds.has(existingId)
+      ) {
+        const msg = `Line item #${firstIndex + 1}: an inactive raw material named '${existingMat.name}' already exists. Reactivate it in Raw Materials or use a distinct material name.`;
+        throw new PurchaseConflictError(msg, { [`${prefix}.materialId`]: msg });
+      }
+
+      return existingMat;
+    };
+
+    try {
+      for (const [nameKey, group] of groupedNewSpecs.entries()) {
+        const existingMat =
+          await this.rawMaterialsRepository.findByNormalizedName(nameKey);
+        if (existingMat) {
+          resolvedNewByNameKey.set(
+            nameKey,
+            validateMatchedExisting(existingMat, group.spec, group.firstIndex),
+          );
+          continue;
+        }
+
+        try {
+          const created = await this.rawMaterialsRepository.create({
+            name: group.spec.name,
+            normalizedName: nameKey,
+            category: group.spec.category ?? null,
+            unit: group.spec.unit,
+            quantityOnHand: group.totalQuantity,
+            description: group.spec.description || '',
+            isActive: true,
+            createdBy: callerId,
+          });
+          const createdId = String(created._id);
+          newlyCreatedMaterialIds.add(createdId);
+          resolvedNewByNameKey.set(nameKey, created);
+        } catch (err) {
+          if (err instanceof DuplicateRawMaterialKeyError) {
+            const raced =
+              await this.rawMaterialsRepository.findByNormalizedName(nameKey);
+            if (raced) {
+              resolvedNewByNameKey.set(
+                nameKey,
+                validateMatchedExisting(raced, group.spec, group.firstIndex),
+              );
+              continue;
+            }
+          }
+          throw err;
+        }
+      }
+
+      const lineItems: IPurchaseLineItem[] = preparedLines.map((entry) => {
+        if (entry.kind === 'existing') {
+          return entry.lineItem;
+        }
+        const resolved = resolvedNewByNameKey.get(entry.nameKey);
+        if (!resolved || !resolved._id) {
+          throw new Error('Failed to resolve newly created raw material.');
+        }
+        return {
+          materialId: String(resolved._id),
+          materialName: resolved.name,
+          materialCategory: resolved.category || null,
+          unit: resolved.unit,
+          quantity: entry.quantity,
+          unitPrice: entry.unitPrice,
+          lineTotal: entry.lineTotal,
+          remarks: entry.remarks,
+        };
+      });
+
+      return { lineItems, newlyCreatedMaterialIds };
+    } catch (err) {
+      await this.cleanupNewlyCreatedMaterials(newlyCreatedMaterialIds);
+      throw err;
+    }
   }
 
   private computeFinalTotal(
@@ -452,6 +701,7 @@ export class PurchaseVoucherService {
     movementType: PurchaseStockMovementType;
     previousAppliedLines: IPurchaseAppliedStockLine[];
     desiredAppliedLines: IPurchaseAppliedStockLine[];
+    alreadyInitializedMaterialIds?: ReadonlySet<string>;
     performedBy: string;
   }): Promise<void> {
     const prevMap = new Map<string, IPurchaseAppliedStockLine>();
@@ -506,18 +756,37 @@ export class PurchaseVoucherService {
               continue;
             }
 
-            const stockResult =
-              await this.rawMaterialsService.adjustStockForPurchaseUnlocked(
-                materialId,
-                expectedUnit,
-                delta,
-              );
+            let resultingQuantityOnHand = 0;
 
-            appliedInRun.push({
-              materialId,
-              unit: expectedUnit,
-              delta,
-            });
+            if (params.alreadyInitializedMaterialIds?.has(materialId)) {
+              const createdRef =
+                await this.rawMaterialsService.getMaterialReferenceById(
+                  materialId,
+                );
+              if (!createdRef) {
+                throw new RawMaterialNotFoundError(materialId);
+              }
+              if (createdRef.unit !== expectedUnit) {
+                throw new RawMaterialUnitConflictError(
+                  `Incompatible unit '${expectedUnit}' for material '${createdRef.name}'. Expected '${createdRef.unit}'.`,
+                );
+              }
+              resultingQuantityOnHand = createdRef.quantityOnHand;
+            } else {
+              const stockResult =
+                await this.rawMaterialsService.adjustStockForPurchaseUnlocked(
+                  materialId,
+                  expectedUnit,
+                  delta,
+                );
+
+              appliedInRun.push({
+                materialId,
+                unit: expectedUnit,
+                delta,
+              });
+              resultingQuantityOnHand = stockResult.quantityOnHand;
+            }
 
             await this.repository.recordStockMovement({
               idempotencyKey,
@@ -529,7 +798,7 @@ export class PurchaseVoucherService {
               materialName,
               unit: expectedUnit,
               quantityDelta: delta,
-              resultingQuantityOnHand: stockResult.quantityOnHand,
+              resultingQuantityOnHand,
               performedBy: params.performedBy,
               createdAt: new Date(),
             });
@@ -547,6 +816,13 @@ export class PurchaseVoucherService {
               void 0;
             }
           }
+
+          await this.repository
+            .deleteStockMovementsForVoucherRevision(
+              params.voucherId,
+              params.revision,
+            )
+            .catch(() => undefined);
 
           if (err instanceof InsufficientRawMaterialStockError) {
             throw new PurchaseConflictError(err.message);
@@ -569,6 +845,9 @@ export class PurchaseVoucherService {
   private async rollbackStockTransition(params: {
     previousAppliedLines: IPurchaseAppliedStockLine[];
     desiredAppliedLines: IPurchaseAppliedStockLine[];
+    alreadyInitializedMaterialIds?: ReadonlySet<string>;
+    voucherId?: string;
+    revision?: number;
   }): Promise<void> {
     const prevMap = new Map<string, IPurchaseAppliedStockLine>();
     for (const line of params.previousAppliedLines) {
@@ -580,37 +859,46 @@ export class PurchaseVoucherService {
     }
     const allMaterialIds = Array.from(
       new Set([...prevMap.keys(), ...nextMap.keys()]),
-    ).sort();
+    )
+      .filter((id) => !params.alreadyInitializedMaterialIds?.has(id))
+      .sort();
 
-    if (allMaterialIds.length === 0) {
-      return;
+    if (allMaterialIds.length > 0) {
+      await this.rawMaterialsService.withMaterialStockLocks(
+        allMaterialIds,
+        async () => {
+          for (const materialId of allMaterialIds) {
+            const prevLine = prevMap.get(materialId);
+            const nextLine = nextMap.get(materialId);
+            const delta = roundPurchaseQuantity(
+              (nextLine?.quantity ?? 0) - (prevLine?.quantity ?? 0),
+            );
+            if (delta === 0) {
+              continue;
+            }
+            const unit = (nextLine?.unit || prevLine?.unit) as RawMaterialUnit;
+            try {
+              await this.rawMaterialsService.adjustStockForPurchaseUnlocked(
+                materialId,
+                unit,
+                roundPurchaseQuantity(-delta),
+              );
+            } catch {
+              void 0;
+            }
+          }
+        },
+      );
     }
 
-    await this.rawMaterialsService.withMaterialStockLocks(
-      allMaterialIds,
-      async () => {
-        for (const materialId of allMaterialIds) {
-          const prevLine = prevMap.get(materialId);
-          const nextLine = nextMap.get(materialId);
-          const delta = roundPurchaseQuantity(
-            (nextLine?.quantity ?? 0) - (prevLine?.quantity ?? 0),
-          );
-          if (delta === 0) {
-            continue;
-          }
-          const unit = (nextLine?.unit || prevLine?.unit) as RawMaterialUnit;
-          try {
-            await this.rawMaterialsService.adjustStockForPurchaseUnlocked(
-              materialId,
-              unit,
-              roundPurchaseQuantity(-delta),
-            );
-          } catch {
-            void 0;
-          }
-        }
-      },
-    );
+    if (params.voucherId && params.revision !== undefined) {
+      await this.repository
+        .deleteStockMovementsForVoucherRevision(
+          params.voucherId,
+          params.revision,
+        )
+        .catch(() => undefined);
+    }
   }
 
   private async syncProjectsQuietly(
@@ -703,13 +991,13 @@ export class PurchaseVoucherService {
         }
       }
 
-      const [projectRef, calculated] = await Promise.all([
+      const [projectRef, prepared] = await Promise.all([
         this.resolveAndValidateProject(dto.projectId),
-        this.resolveAndCalculateLineItems(dto.lineItems),
+        this.prepareLineItemsBeforeSave(dto.lineItems),
       ]);
 
       const finalTotal = this.computeFinalTotal(
-        calculated.subtotal,
+        prepared.subtotal,
         dto.discountAmount,
         dto.taxAmount,
         dto.otherCharges,
@@ -729,140 +1017,210 @@ export class PurchaseVoucherService {
           });
         }
 
-        let createdVoucher: IPurchaseVoucher | null = null;
-        for (let attempt = 0; attempt < 4; attempt += 1) {
-          const voucherNumber =
-            await this.repository.generateNextVoucherNumber();
-          try {
-            createdVoucher = await this.repository.create({
-              voucherNumber,
-              purchaseDate: dto.purchaseDate,
-              supplierName: dto.supplierName,
-              normalizedSupplierName,
-              supplierInvoiceNumber: dto.supplierInvoiceNumber,
-              normalizedInvoiceNumber,
-              projectRecordId: projectRef.projectRecordId,
-              projectCode: projectRef.projectCode,
-              projectName: projectRef.projectName,
-              entryMethod:
-                savedAttachments.length > 0 && dto.entryMethod === 'upload_bill'
-                  ? 'upload_bill'
-                  : dto.entryMethod,
-              lineItems: calculated.lineItems,
-              subtotal: calculated.subtotal,
-              discountAmount: dto.discountAmount,
-              taxAmount: dto.taxAmount,
-              otherCharges: dto.otherCharges,
-              finalTotal,
-              notes: dto.notes,
-              attachments: savedAttachments,
-              status: 'active',
-              revision: 1,
-              stockSync: {
-                applied: false,
-                appliedRevision: 0,
-                appliedLines: [],
-                lastSyncedAt: null,
-              },
-              clientRequestId: dto.clientRequestId,
-              createdBy: caller.id,
-              createdByName: actorName,
-              updatedBy: caller.id,
-              updatedByName: actorName,
-              cancelledAt: null,
-              cancelledBy: null,
-              cancelReason: null,
-            });
-            break;
-          } catch (err) {
-            if (err instanceof DuplicatePurchaseVoucherError) {
-              if (dto.clientRequestId) {
-                const replayed = await this.repository.findByClientRequestId(
-                  dto.clientRequestId,
+        const persistedResult =
+          await this.rawMaterialsService.withMaterialNameLocks(
+            prepared.newMaterialNameKeys,
+            async () => {
+              const materialized =
+                await this.materializePreparedLinesUnderNameLocks(
+                  prepared.preparedLines,
+                  caller.id,
                 );
-                if (replayed) {
-                  for (const att of savedAttachments) {
-                    await this.billStorage.deleteBillFile(att.storageKey);
+
+              let createdVoucher: IPurchaseVoucher | null = null;
+              let stockApplied = false;
+              let desiredAppliedLines: IPurchaseAppliedStockLine[] = [];
+
+              try {
+                for (let attempt = 0; attempt < 4; attempt += 1) {
+                  const voucherNumber =
+                    await this.repository.generateNextVoucherNumber();
+                  try {
+                    createdVoucher = await this.repository.create({
+                      voucherNumber,
+                      purchaseDate: dto.purchaseDate,
+                      supplierName: dto.supplierName,
+                      normalizedSupplierName,
+                      supplierInvoiceNumber: dto.supplierInvoiceNumber,
+                      normalizedInvoiceNumber,
+                      projectRecordId: projectRef.projectRecordId,
+                      projectCode: projectRef.projectCode,
+                      projectName: projectRef.projectName,
+                      entryMethod:
+                        savedAttachments.length > 0 &&
+                        dto.entryMethod === 'upload_bill'
+                          ? 'upload_bill'
+                          : dto.entryMethod,
+                      lineItems: materialized.lineItems,
+                      subtotal: prepared.subtotal,
+                      discountAmount: dto.discountAmount,
+                      taxAmount: dto.taxAmount,
+                      otherCharges: dto.otherCharges,
+                      finalTotal,
+                      notes: dto.notes,
+                      attachments: savedAttachments,
+                      status: 'active',
+                      revision: 1,
+                      stockSync: {
+                        applied: false,
+                        appliedRevision: 0,
+                        appliedLines: [],
+                        lastSyncedAt: null,
+                      },
+                      clientRequestId: dto.clientRequestId,
+                      createdBy: caller.id,
+                      createdByName: actorName,
+                      updatedBy: caller.id,
+                      updatedByName: actorName,
+                      cancelledAt: null,
+                      cancelledBy: null,
+                      cancelReason: null,
+                    });
+                    break;
+                  } catch (err) {
+                    if (err instanceof DuplicatePurchaseVoucherError) {
+                      if (dto.clientRequestId) {
+                        const replayed =
+                          await this.repository.findByClientRequestId(
+                            dto.clientRequestId,
+                          );
+                        if (replayed) {
+                          await this.cleanupNewlyCreatedMaterials(
+                            materialized.newlyCreatedMaterialIds,
+                          );
+                          for (const att of savedAttachments) {
+                            await this.billStorage.deleteBillFile(
+                              att.storageKey,
+                            );
+                          }
+                          return {
+                            voucher: this.toSafePurchaseVoucher(replayed),
+                            created: false,
+                          };
+                        }
+                      }
+
+                      if (normalizedInvoiceNumber) {
+                        const dupInv =
+                          await this.repository.findActiveBySupplierInvoice(
+                            normalizedSupplierName,
+                            normalizedInvoiceNumber,
+                          );
+                        if (dupInv) {
+                          throw new DuplicateSupplierInvoiceError(
+                            dto.supplierName,
+                            dto.supplierInvoiceNumber,
+                            dupInv.voucherNumber,
+                          );
+                        }
+                      }
+
+                      if (attempt === 3) {
+                        throw new PurchaseConflictError(err.message);
+                      }
+                      continue;
+                    }
+                    throw err;
                   }
-                  return {
-                    voucher: this.toSafePurchaseVoucher(replayed),
-                    created: false,
-                  };
                 }
-              }
 
-              if (normalizedInvoiceNumber) {
-                const dupInv =
-                  await this.repository.findActiveBySupplierInvoice(
-                    normalizedSupplierName,
-                    normalizedInvoiceNumber,
-                  );
-                if (dupInv) {
-                  throw new DuplicateSupplierInvoiceError(
-                    dto.supplierName,
-                    dto.supplierInvoiceNumber,
-                    dupInv.voucherNumber,
+                if (!createdVoucher || !createdVoucher._id) {
+                  throw new Error('Failed to persist purchase voucher.');
+                }
+
+                const voucherId = String(createdVoucher._id);
+                desiredAppliedLines = aggregateStockByMaterial(
+                  materialized.lineItems,
+                );
+
+                await this.applyStockTransition({
+                  voucherId,
+                  voucherNumber: createdVoucher.voucherNumber,
+                  revision: 1,
+                  movementType: 'purchase_created',
+                  previousAppliedLines: [],
+                  desiredAppliedLines,
+                  alreadyInitializedMaterialIds:
+                    materialized.newlyCreatedMaterialIds,
+                  performedBy: caller.id,
+                });
+                stockApplied = true;
+
+                const syncedVoucher = await this.repository.updateByRecordId(
+                  voucherId,
+                  {
+                    stockSync: {
+                      applied: true,
+                      appliedRevision: 1,
+                      appliedLines: desiredAppliedLines,
+                      lastSyncedAt: new Date(),
+                    },
+                  },
+                );
+
+                if (!syncedVoucher) {
+                  throw new Error(
+                    'Failed to finalize purchase voucher stock sync state.',
                   );
                 }
+
+                return {
+                  voucher: this.toSafePurchaseVoucher(syncedVoucher),
+                  created: true,
+                };
+              } catch (innerErr) {
+                if (createdVoucher && createdVoucher._id) {
+                  const failedVoucherId = String(createdVoucher._id);
+                  if (stockApplied) {
+                    await this.rollbackStockTransition({
+                      previousAppliedLines: [],
+                      desiredAppliedLines,
+                      alreadyInitializedMaterialIds:
+                        materialized.newlyCreatedMaterialIds,
+                      voucherId: failedVoucherId,
+                      revision: 1,
+                    });
+                  } else {
+                    await this.repository
+                      .deleteStockMovementsForVoucherRevision(
+                        failedVoucherId,
+                        1,
+                      )
+                      .catch(() => undefined);
+                  }
+
+                  const deleted = await this.repository
+                    .deleteByRecordId(failedVoucherId)
+                    .catch(() => false);
+                  if (!deleted) {
+                    await this.repository
+                      .updateByRecordId(failedVoucherId, {
+                        status: 'cancelled',
+                        cancelledAt: new Date(),
+                        cancelledBy: caller.id,
+                        cancelReason:
+                          'Automatic rollback after stock synchronization failure.',
+                      })
+                      .catch(() => undefined);
+                  }
+                }
+
+                await this.cleanupNewlyCreatedMaterials(
+                  materialized.newlyCreatedMaterialIds,
+                );
+                throw innerErr;
               }
-
-              if (attempt === 3) {
-                throw new PurchaseConflictError(err.message);
-              }
-              continue;
-            }
-            throw err;
-          }
-        }
-
-        if (!createdVoucher || !createdVoucher._id) {
-          throw new Error('Failed to persist purchase voucher.');
-        }
-
-        const voucherId = String(createdVoucher._id);
-        const desiredAppliedLines = aggregateStockByMaterial(
-          calculated.lineItems,
-        );
-
-        try {
-          await this.applyStockTransition({
-            voucherId,
-            voucherNumber: createdVoucher.voucherNumber,
-            revision: 1,
-            movementType: 'purchase_created',
-            previousAppliedLines: [],
-            desiredAppliedLines,
-            performedBy: caller.id,
-          });
-        } catch (stockErr) {
-          await this.repository.updateByRecordId(voucherId, {
-            status: 'cancelled',
-            cancelledAt: new Date(),
-            cancelledBy: caller.id,
-            cancelReason:
-              'Automatic rollback after stock synchronization failure.',
-          });
-          throw stockErr;
-        }
-
-        const syncedVoucher = await this.repository.updateByRecordId(
-          voucherId,
-          {
-            stockSync: {
-              applied: true,
-              appliedRevision: 1,
-              appliedLines: desiredAppliedLines,
-              lastSyncedAt: new Date(),
             },
-          },
-        );
+          );
 
-        await this.syncProjectsQuietly([projectRef.projectRecordId], 'created');
+        if (persistedResult.created) {
+          await this.syncProjectsQuietly(
+            [projectRef.projectRecordId],
+            'created',
+          );
+        }
 
-        return {
-          voucher: this.toSafePurchaseVoucher(syncedVoucher || createdVoucher),
-          created: true,
-        };
+        return persistedResult;
       } catch (err) {
         for (const att of savedAttachments) {
           await this.billStorage.deleteBillFile(att.storageKey);
@@ -983,19 +1341,20 @@ export class PurchaseVoucherService {
         }
       }
 
-      let nextLineItems = existing.lineItems;
+      const previousMaterialIds = new Set(
+        existing.lineItems.map((li) => li.materialId),
+      );
+      let preparedUpdate: Awaited<
+        ReturnType<PurchaseVoucherService['prepareLineItemsBeforeSave']>
+      > | null = null;
       let nextSubtotal = existing.subtotal;
 
       if (dto.lineItems !== undefined) {
-        const previousMaterialIds = new Set(
-          existing.lineItems.map((li) => li.materialId),
-        );
-        const resolved = await this.resolveAndCalculateLineItems(
+        preparedUpdate = await this.prepareLineItemsBeforeSave(
           dto.lineItems,
           previousMaterialIds,
         );
-        nextLineItems = resolved.lineItems;
-        nextSubtotal = resolved.subtotal;
+        nextSubtotal = preparedUpdate.subtotal;
       }
 
       const nextDiscount =
@@ -1030,91 +1389,137 @@ export class PurchaseVoucherService {
           });
         }
 
-        const nextRevision = (existing.revision || 1) + 1;
-        const previousAppliedLines = existing.stockSync?.applied
-          ? existing.stockSync.appliedLines
-          : [];
-        const desiredAppliedLines = aggregateStockByMaterial(nextLineItems);
+        const updatedVoucher =
+          await this.rawMaterialsService.withMaterialNameLocks(
+            preparedUpdate ? preparedUpdate.newMaterialNameKeys : [],
+            async () => {
+              let nextLineItems = existing.lineItems;
+              let newlyCreatedMaterialIds = new Set<string>();
 
-        await this.applyStockTransition({
-          voucherId: recordId,
-          voucherNumber: existing.voucherNumber,
-          revision: nextRevision,
-          movementType: 'purchase_revised',
-          previousAppliedLines,
-          desiredAppliedLines,
-          performedBy: caller.id,
-        });
+              if (preparedUpdate) {
+                const materialized =
+                  await this.materializePreparedLinesUnderNameLocks(
+                    preparedUpdate.preparedLines,
+                    caller.id,
+                    previousMaterialIds,
+                  );
+                nextLineItems = materialized.lineItems;
+                newlyCreatedMaterialIds = materialized.newlyCreatedMaterialIds;
+              }
 
-        try {
-          const combinedAttachments = [
-            ...retainedAttachments,
-            ...newSavedAttachments,
-          ];
+              const nextRevision = (existing.revision || 1) + 1;
+              const previousAppliedLines = existing.stockSync?.applied
+                ? existing.stockSync.appliedLines
+                : [];
+              const desiredAppliedLines =
+                aggregateStockByMaterial(nextLineItems);
 
-          const updated = await this.repository.updateByRecordId(recordId, {
-            purchaseDate:
-              dto.purchaseDate !== undefined
-                ? dto.purchaseDate
-                : existing.purchaseDate,
-            supplierName: nextSupplierName,
-            normalizedSupplierName,
-            supplierInvoiceNumber: nextInvoiceNumber,
-            normalizedInvoiceNumber,
-            projectRecordId: projectRef.projectRecordId,
-            projectCode: projectRef.projectCode,
-            projectName: projectRef.projectName,
-            entryMethod:
-              dto.entryMethod !== undefined
-                ? dto.entryMethod
-                : existing.entryMethod,
-            lineItems: nextLineItems,
-            subtotal: nextSubtotal,
-            discountAmount: nextDiscount,
-            taxAmount: nextTax,
-            otherCharges: nextOtherCharges,
-            finalTotal: nextFinalTotal,
-            notes: dto.notes !== undefined ? dto.notes : existing.notes,
-            attachments: combinedAttachments,
-            revision: nextRevision,
-            stockSync: {
-              applied: true,
-              appliedRevision: nextRevision,
-              appliedLines: desiredAppliedLines,
-              lastSyncedAt: new Date(),
+              let stockApplied = false;
+
+              try {
+                await this.applyStockTransition({
+                  voucherId: recordId,
+                  voucherNumber: existing.voucherNumber,
+                  revision: nextRevision,
+                  movementType: 'purchase_revised',
+                  previousAppliedLines,
+                  desiredAppliedLines,
+                  alreadyInitializedMaterialIds: newlyCreatedMaterialIds,
+                  performedBy: caller.id,
+                });
+                stockApplied = true;
+
+                const combinedAttachments = [
+                  ...retainedAttachments,
+                  ...newSavedAttachments,
+                ];
+
+                const updated = await this.repository.updateByRecordId(
+                  recordId,
+                  {
+                    purchaseDate:
+                      dto.purchaseDate !== undefined
+                        ? dto.purchaseDate
+                        : existing.purchaseDate,
+                    supplierName: nextSupplierName,
+                    normalizedSupplierName,
+                    supplierInvoiceNumber: nextInvoiceNumber,
+                    normalizedInvoiceNumber,
+                    projectRecordId: projectRef.projectRecordId,
+                    projectCode: projectRef.projectCode,
+                    projectName: projectRef.projectName,
+                    entryMethod:
+                      dto.entryMethod !== undefined
+                        ? dto.entryMethod
+                        : existing.entryMethod,
+                    lineItems: nextLineItems,
+                    subtotal: nextSubtotal,
+                    discountAmount: nextDiscount,
+                    taxAmount: nextTax,
+                    otherCharges: nextOtherCharges,
+                    finalTotal: nextFinalTotal,
+                    notes: dto.notes !== undefined ? dto.notes : existing.notes,
+                    attachments: combinedAttachments,
+                    revision: nextRevision,
+                    stockSync: {
+                      applied: true,
+                      appliedRevision: nextRevision,
+                      appliedLines: desiredAppliedLines,
+                      lastSyncedAt: new Date(),
+                    },
+                    updatedBy: caller.id,
+                    updatedByName: actorName,
+                  },
+                );
+
+                if (!updated) {
+                  throw new PurchaseNotFoundError();
+                }
+
+                return updated;
+              } catch (persistErr) {
+                if (stockApplied) {
+                  await this.rollbackStockTransition({
+                    previousAppliedLines,
+                    desiredAppliedLines,
+                    alreadyInitializedMaterialIds: newlyCreatedMaterialIds,
+                    voucherId: recordId,
+                    revision: nextRevision,
+                  });
+                } else {
+                  await this.repository
+                    .deleteStockMovementsForVoucherRevision(
+                      recordId,
+                      nextRevision,
+                    )
+                    .catch(() => undefined);
+                }
+
+                await this.cleanupNewlyCreatedMaterials(
+                  newlyCreatedMaterialIds,
+                );
+
+                if (persistErr instanceof DuplicatePurchaseVoucherError) {
+                  throw new DuplicateSupplierInvoiceError(
+                    nextSupplierName,
+                    nextInvoiceNumber,
+                  );
+                }
+                throw persistErr;
+              }
             },
-            updatedBy: caller.id,
-            updatedByName: actorName,
-          });
-
-          if (!updated) {
-            throw new PurchaseNotFoundError();
-          }
-
-          for (const removed of removedAttachments) {
-            await this.billStorage.deleteBillFile(removed.storageKey);
-          }
-
-          await this.syncProjectsQuietly(
-            [existing.projectRecordId, projectRef.projectRecordId],
-            'updated',
           );
 
-          return this.toSafePurchaseVoucher(updated);
-        } catch (persistErr) {
-          await this.rollbackStockTransition({
-            previousAppliedLines,
-            desiredAppliedLines,
-          });
-
-          if (persistErr instanceof DuplicatePurchaseVoucherError) {
-            throw new DuplicateSupplierInvoiceError(
-              nextSupplierName,
-              nextInvoiceNumber,
-            );
-          }
-          throw persistErr;
+        for (const removed of removedAttachments) {
+          await this.billStorage.deleteBillFile(removed.storageKey);
         }
+
+        await this.syncProjectsQuietly(
+          [existing.projectRecordId, projectRef.projectRecordId],
+          'updated',
+        );
+
+        return this.toSafePurchaseVoucher(updatedVoucher);
       } catch (err) {
         for (const att of newSavedAttachments) {
           await this.billStorage.deleteBillFile(att.storageKey);

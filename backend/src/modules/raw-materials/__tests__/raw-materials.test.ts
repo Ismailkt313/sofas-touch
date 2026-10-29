@@ -456,6 +456,9 @@ async function runTests(): Promise<void> {
         async adjustQuantityOnHand() {
           return null;
         },
+        async deleteById() {
+          return false;
+        },
       };
       const raceService = new RawMaterialsService(simulatedRaceRepo);
       await assert.rejects(

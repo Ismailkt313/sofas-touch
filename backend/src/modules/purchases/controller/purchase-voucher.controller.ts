@@ -166,6 +166,9 @@ export class PurchaseVoucherController {
       res.status(409).json({
         error: 'Conflict',
         message: err.message,
+        ...(err instanceof PurchaseConflictError && err.errors
+          ? { errors: err.errors }
+          : {}),
       });
       return;
     }

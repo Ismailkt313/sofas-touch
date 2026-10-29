@@ -11,9 +11,11 @@ import './dropdown.css'
 
 const DROPDOWN_OPEN_EVENT = 'sts:dropdown-open'
 const MAX_MENU_HEIGHT = 260
+const MAX_SEARCHABLE_MENU_HEIGHT = 308
 const MENU_OFFSET_GAP = 4
 const VIEWPORT_MARGIN = 8
 const ESTIMATED_OPTION_HEIGHT = 38
+const SEARCH_BAR_HEIGHT = 48
 const MENU_VERTICAL_PADDING = 12
 
 function isTriggerClippedByScrollParent(triggerEl, rect) {
@@ -57,11 +59,19 @@ function isTriggerClippedByScrollParent(triggerEl, rect) {
   return false
 }
 
-function computeDropdownCoords(triggerEl, optionCount, measuredMenuHeight = 0) {
+function computeDropdownCoords(
+  triggerEl,
+  optionCount,
+  measuredMenuHeight = 0,
+  searchable = false,
+) {
   if (!triggerEl || typeof window === 'undefined') {
     return null
   }
 
+  const maxAllowedHeight = searchable
+    ? MAX_SEARCHABLE_MENU_HEIGHT
+    : MAX_MENU_HEIGHT
   const rect = triggerEl.getBoundingClientRect()
   const viewportHeight = window.innerHeight
   const viewportWidth = window.innerWidth
@@ -76,8 +86,8 @@ function computeDropdownCoords(triggerEl, optionCount, measuredMenuHeight = 0) {
       top: MENU_OFFSET_GAP,
       bottom: null,
       left: VIEWPORT_MARGIN,
-      width: 200,
-      maxHeight: MAX_MENU_HEIGHT,
+      width: 220,
+      maxHeight: maxAllowedHeight,
       openUpward: false,
     }
   }
@@ -95,12 +105,15 @@ function computeDropdownCoords(triggerEl, optionCount, measuredMenuHeight = 0) {
   const spaceBelow = viewportHeight - rect.bottom - MENU_OFFSET_GAP - VIEWPORT_MARGIN
   const spaceAbove = rect.top - MENU_OFFSET_GAP - VIEWPORT_MARGIN
 
+  const extraSearchHeight = searchable ? SEARCH_BAR_HEIGHT : 0
   const estimatedContentHeight = Math.max(
-    46,
-    Math.max(1, optionCount) * ESTIMATED_OPTION_HEIGHT + MENU_VERTICAL_PADDING,
+    46 + extraSearchHeight,
+    Math.max(1, optionCount) * ESTIMATED_OPTION_HEIGHT +
+      MENU_VERTICAL_PADDING +
+      extraSearchHeight,
   )
   const desiredHeight = Math.min(
-    MAX_MENU_HEIGHT,
+    maxAllowedHeight,
     measuredMenuHeight > 0 ? measuredMenuHeight : estimatedContentHeight,
   )
 
@@ -108,12 +121,13 @@ function computeDropdownCoords(triggerEl, optionCount, measuredMenuHeight = 0) {
 
   const availableVerticalSpace = openUpward ? spaceAbove : spaceBelow
   const maxHeight = Math.max(
-    72,
-    Math.min(MAX_MENU_HEIGHT, Math.floor(availableVerticalSpace)),
+    searchable ? 120 : 72,
+    Math.min(maxAllowedHeight, Math.floor(availableVerticalSpace)),
   )
 
   const maxAllowedWidth = Math.max(120, viewportWidth - VIEWPORT_MARGIN * 2)
-  const width = Math.min(Math.max(rect.width, 160), maxAllowedWidth)
+  const minWidth = searchable ? 230 : 160
+  const width = Math.min(Math.max(rect.width, minWidth), maxAllowedWidth)
 
   let left = rect.left
   if (left + width > viewportWidth - VIEWPORT_MARGIN) {
@@ -161,13 +175,20 @@ export function Dropdown({
   className = '',
   portal = true,
   ariaLabel,
+  searchable = false,
+  searchPlaceholder = 'Search...',
+  createOption = null,
+  onCreateOption = null,
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [coords, setCoords] = useState(null)
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const triggerRef = useRef(null)
   const menuRef = useRef(null)
+  const searchInputRef = useRef(null)
+  const optionsListRef = useRef(null)
   const autoId = useId()
   const dropdownId = id || `sts-dropdown-${autoId}`
   const listboxId = `sts-listbox-${autoId}`
@@ -180,14 +201,20 @@ export function Dropdown({
           value: opt.value,
           label: opt.label !== undefined ? String(opt.label) : String(opt.value),
           description: opt.description || null,
+          searchText: opt.searchText ? String(opt.searchText) : '',
+          badge: opt.badge || null,
           disabled: Boolean(opt.disabled),
+          isCreateAction: Boolean(opt.isCreateAction),
         }
       }
       return {
         value: opt,
         label: String(opt),
         description: null,
+        searchText: '',
+        badge: null,
         disabled: false,
+        isCreateAction: false,
       }
     })
   }, [options])
@@ -199,9 +226,47 @@ export function Dropdown({
     )
   }, [normalizedOptions, value])
 
+  const effectiveOptions = useMemo(() => {
+    let baseList = normalizedOptions
+
+    if (searchable && searchQuery.trim()) {
+      const tokens = searchQuery
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean)
+      baseList = normalizedOptions.filter((opt) => {
+        const haystack = `${opt.label} ${opt.searchText || ''} ${opt.description || ''}`.toLowerCase()
+        return tokens.every((tok) => haystack.includes(tok))
+      })
+    }
+
+    if (typeof createOption === 'function') {
+      const dynamicCreate = createOption(searchQuery, baseList)
+      if (dynamicCreate && dynamicCreate.label) {
+        const actionItem = {
+          value: dynamicCreate.value || '__create__',
+          label: String(dynamicCreate.label),
+          description: dynamicCreate.description || null,
+          disabled: Boolean(dynamicCreate.disabled),
+          isCreateAction: true,
+          createName: dynamicCreate.createName ?? searchQuery.trim(),
+          rawAction: dynamicCreate,
+        }
+        if (dynamicCreate.position === 'top') {
+          return [actionItem, ...baseList]
+        }
+        return [...baseList, actionItem]
+      }
+    }
+
+    return baseList
+  }, [normalizedOptions, searchable, searchQuery, createOption])
+
   const closeDropdown = useCallback((restoreFocus = false) => {
     setIsOpen(false)
     setHighlightedIndex(-1)
+    setSearchQuery('')
     if (restoreFocus) {
       window.requestAnimationFrame(() => {
         triggerRef.current?.focus()
@@ -210,13 +275,17 @@ export function Dropdown({
   }, [])
 
   const updateCoords = useCallback(() => {
+    const fallbackMax = searchable
+      ? MAX_SEARCHABLE_MENU_HEIGHT
+      : MAX_MENU_HEIGHT
+
     if (!portal) {
       setCoords({
         top: null,
         bottom: null,
         left: 0,
         width: 0,
-        maxHeight: MAX_MENU_HEIGHT,
+        maxHeight: fallbackMax,
         openUpward: false,
       })
       return true
@@ -227,8 +296,9 @@ export function Dropdown({
     const measuredHeight = menuRef.current ? menuRef.current.scrollHeight : 0
     const next = computeDropdownCoords(
       triggerRef.current,
-      normalizedOptions.length,
+      effectiveOptions.length,
       measuredHeight,
+      searchable,
     )
 
     if (next) {
@@ -251,7 +321,7 @@ export function Dropdown({
 
     setIsOpen(false)
     return false
-  }, [portal, normalizedOptions.length])
+  }, [portal, effectiveOptions.length, searchable])
 
   const handleMenuRef = useCallback(
     (node) => {
@@ -262,6 +332,26 @@ export function Dropdown({
     },
     [portal, updateCoords],
   )
+
+  useEffect(() => {
+    if (!isOpen || !searchable) {
+      return undefined
+    }
+    const raf = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(raf)
+  }, [isOpen, searchable])
+
+  useEffect(() => {
+    if (!isOpen || highlightedIndex < 0 || !optionsListRef.current) {
+      return
+    }
+    const activeItem = optionsListRef.current.children[highlightedIndex]
+    if (activeItem && typeof activeItem.scrollIntoView === 'function') {
+      activeItem.scrollIntoView({ block: 'nearest' })
+    }
+  }, [isOpen, highlightedIndex])
 
   useEffect(() => {
     if (!isOpen) return undefined
@@ -328,13 +418,19 @@ export function Dropdown({
         new CustomEvent(DROPDOWN_OPEN_EVENT, { detail: { id: dropdownId } }),
       )
     }
+    setSearchQuery('')
     const positioned = updateCoords()
     if (!positioned) return
     setIsOpen(true)
-    const selectedIdx = normalizedOptions.findIndex(
-      (opt) => String(opt.value) === String(value),
+    const selectedIdx = effectiveOptions.findIndex(
+      (opt) => !opt.isCreateAction && String(opt.value) === String(value),
     )
-    setHighlightedIndex(selectedIdx >= 0 ? selectedIdx : 0)
+    if (selectedIdx >= 0) {
+      setHighlightedIndex(selectedIdx)
+    } else {
+      const firstEnabled = effectiveOptions.findIndex((opt) => !opt.disabled)
+      setHighlightedIndex(firstEnabled >= 0 ? firstEnabled : 0)
+    }
   }
 
   const handleToggle = () => {
@@ -348,6 +444,14 @@ export function Dropdown({
 
   const handleSelect = (opt) => {
     if (disabled || opt.disabled) return
+
+    if (opt.isCreateAction) {
+      const currentQuery = searchQuery
+      closeDropdown(false)
+      onCreateOption?.(opt.rawAction || opt, currentQuery)
+      return
+    }
+
     closeDropdown(true)
 
     if (typeof onChange === 'function') {
@@ -369,7 +473,22 @@ export function Dropdown({
     }
   }
 
-  const handleKeyDown = (event) => {
+  const moveHighlight = (direction) => {
+    setHighlightedIndex((prev) => {
+      if (effectiveOptions.length === 0) return -1
+      let next = prev + direction
+      while (
+        next >= 0 &&
+        next < effectiveOptions.length &&
+        effectiveOptions[next]?.disabled
+      ) {
+        next += direction
+      }
+      return next >= 0 && next < effectiveOptions.length ? next : prev
+    })
+  }
+
+  const handleTriggerKeyDown = (event) => {
     if (disabled) return
 
     if (!isOpen) {
@@ -388,39 +507,24 @@ export function Dropdown({
     switch (event.key) {
       case 'ArrowDown': {
         event.preventDefault()
-        setHighlightedIndex((prev) => {
-          let next = prev + 1
-          while (
-            next < normalizedOptions.length &&
-            normalizedOptions[next]?.disabled
-          ) {
-            next += 1
-          }
-          return next < normalizedOptions.length ? next : prev
-        })
+        moveHighlight(1)
         break
       }
       case 'ArrowUp': {
         event.preventDefault()
-        setHighlightedIndex((prev) => {
-          let next = prev - 1
-          while (next >= 0 && normalizedOptions[next]?.disabled) {
-            next -= 1
-          }
-          return next >= 0 ? next : prev
-        })
+        moveHighlight(-1)
         break
       }
       case 'Home': {
         event.preventDefault()
-        const first = normalizedOptions.findIndex((o) => !o.disabled)
+        const first = effectiveOptions.findIndex((o) => !o.disabled)
         if (first >= 0) setHighlightedIndex(first)
         break
       }
       case 'End': {
         event.preventDefault()
-        for (let i = normalizedOptions.length - 1; i >= 0; i--) {
-          if (!normalizedOptions[i]?.disabled) {
+        for (let i = effectiveOptions.length - 1; i >= 0; i--) {
+          if (!effectiveOptions[i]?.disabled) {
             setHighlightedIndex(i)
             break
           }
@@ -432,9 +536,9 @@ export function Dropdown({
         event.preventDefault()
         if (
           highlightedIndex >= 0 &&
-          highlightedIndex < normalizedOptions.length
+          highlightedIndex < effectiveOptions.length
         ) {
-          const targetOpt = normalizedOptions[highlightedIndex]
+          const targetOpt = effectiveOptions[highlightedIndex]
           if (targetOpt && !targetOpt.disabled) {
             handleSelect(targetOpt)
           }
@@ -442,9 +546,14 @@ export function Dropdown({
         break
       }
       default: {
-        if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+        if (
+          !searchable &&
+          event.key.length === 1 &&
+          !event.ctrlKey &&
+          !event.metaKey
+        ) {
           const char = event.key.toLowerCase()
-          const matchIdx = normalizedOptions.findIndex(
+          const matchIdx = effectiveOptions.findIndex(
             (o) => !o.disabled && o.label.toLowerCase().startsWith(char),
           )
           if (matchIdx >= 0) {
@@ -456,9 +565,39 @@ export function Dropdown({
     }
   }
 
+  const handleSearchInputKeyDown = (event) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      moveHighlight(1)
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      moveHighlight(-1)
+    } else if (event.key === 'Enter') {
+      event.preventDefault()
+      if (
+        highlightedIndex >= 0 &&
+        highlightedIndex < effectiveOptions.length
+      ) {
+        const targetOpt = effectiveOptions[highlightedIndex]
+        if (targetOpt && !targetOpt.disabled) {
+          handleSelect(targetOpt)
+        }
+      }
+    }
+  }
+
+  const handleSearchChange = (event) => {
+    const nextVal = event.target.value
+    setSearchQuery(nextVal)
+    setHighlightedIndex(0)
+  }
+
   const menuStyle = portal
     ? {
-        top: coords?.top !== null && coords?.top !== undefined ? `${coords.top}px` : 'auto',
+        top:
+          coords?.top !== null && coords?.top !== undefined
+            ? `${coords.top}px`
+            : 'auto',
         bottom:
           coords?.bottom !== null && coords?.bottom !== undefined
             ? `${coords.bottom}px`
@@ -469,74 +608,141 @@ export function Dropdown({
       }
     : undefined
 
-  const menuContent = isOpen && (portal ? Boolean(coords) : true) ? (
-    <div
-      ref={handleMenuRef}
-      id={listboxId}
-      role="listbox"
-      aria-label={ariaLabel || placeholder}
-      className={`sts-dropdown__menu${
-        !portal ? ' sts-dropdown__menu--inline' : ''
-      }${coords?.openUpward ? ' sts-dropdown__menu--upward' : ''}`}
-      style={menuStyle}
-    >
-      {normalizedOptions.length === 0 ? (
-        <div className="sts-dropdown__empty">No options available</div>
-      ) : (
-        <ul className="sts-dropdown__options-list" role="presentation">
-          {normalizedOptions.map((opt, idx) => {
-            const isSelected = String(opt.value) === String(value)
-            const isHighlighted = idx === highlightedIndex
-
-            return (
-              <li
-                key={`${opt.value}-${idx}`}
-                role="option"
-                aria-selected={isSelected}
-                aria-disabled={opt.disabled}
-                className={`sts-dropdown__option ${
-                  isSelected ? 'sts-dropdown__option--selected' : ''
-                } ${
-                  isHighlighted ? 'sts-dropdown__option--highlighted' : ''
-                } ${opt.disabled ? 'sts-dropdown__option--disabled' : ''}`}
-                onClick={() => handleSelect(opt)}
-                onMouseEnter={() => {
-                  if (!opt.disabled) setHighlightedIndex(idx)
+  const menuContent =
+    isOpen && (portal ? Boolean(coords) : true) ? (
+      <div
+        ref={handleMenuRef}
+        id={listboxId}
+        role="listbox"
+        aria-label={ariaLabel || placeholder}
+        className={`sts-dropdown__menu${
+          searchable ? ' sts-dropdown__menu--searchable' : ''
+        }${!portal ? ' sts-dropdown__menu--inline' : ''}${
+          coords?.openUpward ? ' sts-dropdown__menu--upward' : ''
+        }`}
+        style={menuStyle}
+      >
+        {searchable ? (
+          <div className="sts-dropdown__search-wrap">
+            <svg
+              className="sts-dropdown__search-icon"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                cx="7"
+                cy="7"
+                r="4.75"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              />
+              <path
+                d="M10.6 10.6L13.75 13.75"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="sts-dropdown__search-input"
+              placeholder={searchPlaceholder}
+              value={searchQuery}
+              onChange={handleSearchChange}
+              onKeyDown={handleSearchInputKeyDown}
+              aria-label={searchPlaceholder}
+              autoComplete="off"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                className="sts-dropdown__search-clear"
+                onClick={() => {
+                  setSearchQuery('')
+                  setHighlightedIndex(0)
+                  searchInputRef.current?.focus({ preventScroll: true })
                 }}
+                aria-label="Clear search"
               >
-                <div className="sts-dropdown__option-content">
-                  <span className="sts-dropdown__option-label">
-                    {opt.label}
-                  </span>
-                  {opt.description ? (
-                    <span className="sts-dropdown__option-desc">
-                      {opt.description}
+                ×
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {effectiveOptions.length === 0 ? (
+          <div className="sts-dropdown__empty">
+            {searchable && searchQuery.trim()
+              ? 'No matching materials'
+              : 'No options available'}
+          </div>
+        ) : (
+          <ul
+            ref={optionsListRef}
+            className="sts-dropdown__options-list"
+            role="presentation"
+          >
+            {effectiveOptions.map((opt, idx) => {
+              const isSelected =
+                !opt.isCreateAction && String(opt.value) === String(value)
+              const isHighlighted = idx === highlightedIndex
+
+              return (
+                <li
+                  key={`${opt.value}-${idx}`}
+                  role="option"
+                  aria-selected={isSelected}
+                  aria-disabled={opt.disabled}
+                  className={`sts-dropdown__option${
+                    opt.isCreateAction ? ' sts-dropdown__option--create' : ''
+                  }${isSelected ? ' sts-dropdown__option--selected' : ''}${
+                    isHighlighted ? ' sts-dropdown__option--highlighted' : ''
+                  }${opt.disabled ? ' sts-dropdown__option--disabled' : ''}`}
+                  onClick={() => handleSelect(opt)}
+                  onMouseEnter={() => {
+                    if (!opt.disabled) setHighlightedIndex(idx)
+                  }}
+                >
+                  <div className="sts-dropdown__option-content">
+                    <span className="sts-dropdown__option-label">
+                      {opt.label}
+                      {opt.badge ? (
+                        <span className="sts-dropdown__option-badge">
+                          {opt.badge}
+                        </span>
+                      ) : null}
                     </span>
+                    {opt.description ? (
+                      <span className="sts-dropdown__option-desc">
+                        {opt.description}
+                      </span>
+                    ) : null}
+                  </div>
+                  {isSelected ? (
+                    <svg
+                      className="sts-dropdown__option-check"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M5 10.5L8.5 14L15 6.5"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
                   ) : null}
-                </div>
-                {isSelected ? (
-                  <svg
-                    className="sts-dropdown__option-check"
-                    viewBox="0 0 20 20"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M5 10.5L8.5 14L15 6.5"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                ) : null}
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </div>
-  ) : null
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    ) : null
 
   return (
     <div
@@ -553,7 +759,7 @@ export function Dropdown({
         aria-label={ariaLabel}
         disabled={disabled}
         onClick={handleToggle}
-        onKeyDown={handleKeyDown}
+        onKeyDown={handleTriggerKeyDown}
         className={`sts-dropdown__trigger sts-dropdown__trigger--${variant} ${
           size ? `sts-dropdown__trigger--${size}` : ''
         } ${error ? 'sts-dropdown__trigger--error' : ''} ${
@@ -566,6 +772,11 @@ export function Dropdown({
           <span className="sts-dropdown__value-text">
             {selectedOption ? selectedOption.label : placeholder}
           </span>
+          {selectedOption?.badge ? (
+            <span className="sts-dropdown__trigger-badge">
+              {selectedOption.badge}
+            </span>
+          ) : null}
         </span>
         <svg
           className="sts-dropdown__chevron"
