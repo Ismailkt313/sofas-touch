@@ -1,4 +1,10 @@
 import {
+  ExpenseHeadsRepository,
+  IExpenseHead,
+  IExpenseHeadsRepository,
+  isValidExpenseHeadObjectId,
+} from '../../expense-heads';
+import {
   IProjectRepository,
   IProjectService,
   IVoucherTotalsProvider,
@@ -10,6 +16,7 @@ import {
   InsufficientRawMaterialStockError,
   IRawMaterial,
   IRawMaterialsRepository,
+  isValidRawMaterialObjectId,
   RawMaterialNotFoundError,
   RawMaterialUnitConflictError,
   RawMaterialsService,
@@ -21,6 +28,7 @@ import {
 } from '../../raw-materials/models/raw-material.model';
 import {
   roundPurchaseMoney,
+  roundPurchasePercentage,
   roundPurchaseQuantity,
   validateCreatePurchaseVoucherDto,
 } from '../dto/create-purchase-voucher.dto';
@@ -37,11 +45,11 @@ import {
 } from '../storage/bill-storage.service';
 import {
   BillStorageProvider,
-  CreatePurchaseVoucherDto,
   IBillAttachmentStorage,
   IPurchaseAppliedStockLine,
   IPurchaseBillAttachment,
   IPurchaseLineItem,
+  IPurchasePrintedInvoiceSummary,
   IPurchaseVoucher,
   IPurchaseVoucherRepository,
   ListPurchaseVouchersDto,
@@ -50,8 +58,10 @@ import {
   PurchaseCallerIdentity,
   PurchaseInlineNewMaterialDto,
   PurchaseLineItemInputDto,
+  PurchaseLineItemType,
   PurchaseStockMovementResponseDto,
   PurchaseStockMovementType,
+  PurchaseTaxMode,
   PurchaseVoucherListSummary,
   PurchaseVoucherResponseDto,
   UpdatePurchaseVoucherDto,
@@ -93,19 +103,26 @@ export class PurchaseConflictError extends Error {
 
 type PreparedPurchaseLine =
   | {
-      kind: 'existing';
+      kind: 'existing_material';
       index: number;
       lineItem: IPurchaseLineItem;
     }
   | {
-      kind: 'new';
+      kind: 'new_material';
       index: number;
       nameKey: string;
       spec: PurchaseInlineNewMaterialDto;
+      description: string;
       quantity: number;
       unitPrice: number;
       lineTotal: number;
+      taxRate: number | null;
       remarks: string;
+    }
+  | {
+      kind: 'expense';
+      index: number;
+      lineItem: IPurchaseLineItem;
     };
 
 export class DuplicateSupplierInvoiceError extends PurchaseConflictError {
@@ -121,6 +138,243 @@ export class DuplicateSupplierInvoiceError extends PurchaseConflictError {
     );
     this.name = 'DuplicateSupplierInvoiceError';
   }
+}
+
+export interface ComputedPurchaseVoucherFinancials {
+  materialSubtotal: number;
+  expenseSubtotal: number;
+  subtotal: number;
+  discountAmount: number;
+  taxableSubtotal: number;
+  taxMode: PurchaseTaxMode;
+  taxRatePercent: number | null;
+  taxAmount: number;
+  otherCharges: number;
+  finalTotal: number;
+  materialAllocatedTotal: number;
+  expenseAllocatedTotal: number;
+}
+
+export function computePurchaseVoucherFinancials(params: {
+  lines: ReadonlyArray<{
+    itemType: PurchaseLineItemType;
+    lineTotal: number;
+    taxRate?: number | null;
+  }>;
+  discountAmount: number;
+  taxMode: PurchaseTaxMode;
+  taxRatePercent: number | null;
+  taxAmount: number;
+  otherCharges: number;
+}): ComputedPurchaseVoucherFinancials {
+  let materialSubtotal = 0;
+  let expenseSubtotal = 0;
+
+  for (const line of params.lines) {
+    const cleanLineTotal = roundPurchaseMoney(line.lineTotal);
+    if (line.itemType === 'expense') {
+      expenseSubtotal = roundPurchaseMoney(expenseSubtotal + cleanLineTotal);
+    } else {
+      materialSubtotal = roundPurchaseMoney(materialSubtotal + cleanLineTotal);
+    }
+  }
+
+  const subtotal = roundPurchaseMoney(materialSubtotal + expenseSubtotal);
+  const discountAmount = roundPurchaseMoney(params.discountAmount || 0);
+  const otherCharges = roundPurchaseMoney(params.otherCharges || 0);
+
+  if (discountAmount > subtotal) {
+    throw new PurchaseValidationError(
+      {
+        discountAmount:
+          'Discount amount cannot exceed the voucher line items subtotal.',
+      },
+      'Discount amount cannot exceed the voucher line items subtotal.',
+    );
+  }
+
+  const taxableSubtotal = roundPurchaseMoney(
+    Math.max(0, subtotal - discountAmount),
+  );
+
+  let resolvedTaxMode: PurchaseTaxMode =
+    params.taxMode === 'percentage' ? 'percentage' : 'bill_amount';
+  let resolvedTaxRatePercent: number | null = null;
+  let resolvedTaxAmount = 0;
+
+  if (resolvedTaxMode === 'percentage') {
+    if (
+      params.taxRatePercent === null ||
+      params.taxRatePercent === undefined ||
+      !Number.isFinite(params.taxRatePercent) ||
+      params.taxRatePercent < 0 ||
+      params.taxRatePercent > 100
+    ) {
+      throw new PurchaseValidationError(
+        {
+          taxRatePercent:
+            'Enter a valid tax percentage between 0% and 100%.',
+        },
+        'Enter a valid tax percentage between 0% and 100%.',
+      );
+    }
+    resolvedTaxRatePercent = roundPurchasePercentage(params.taxRatePercent);
+    resolvedTaxAmount = roundPurchaseMoney(
+      (taxableSubtotal * resolvedTaxRatePercent) / 100,
+    );
+  } else {
+    resolvedTaxMode = 'bill_amount';
+    resolvedTaxAmount = roundPurchaseMoney(params.taxAmount || 0);
+    resolvedTaxRatePercent =
+      params.taxRatePercent !== null &&
+      params.taxRatePercent !== undefined &&
+      Number.isFinite(params.taxRatePercent)
+        ? roundPurchasePercentage(params.taxRatePercent)
+        : null;
+  }
+
+  const finalTotal = roundPurchaseMoney(
+    taxableSubtotal + resolvedTaxAmount + otherCharges,
+  );
+  if (finalTotal < 0) {
+    throw new PurchaseValidationError(
+      { finalTotal: 'Final voucher total cannot be negative.' },
+      'Final voucher total cannot be negative.',
+    );
+  }
+
+  let materialAllocatedTotal = 0;
+  let expenseAllocatedTotal = 0;
+
+  if (expenseSubtotal <= 0) {
+    materialAllocatedTotal = finalTotal;
+    expenseAllocatedTotal = 0;
+  } else if (materialSubtotal <= 0) {
+    materialAllocatedTotal = 0;
+    expenseAllocatedTotal = finalTotal;
+  } else if (subtotal > 0) {
+    const materialShare = materialSubtotal / subtotal;
+    const discountMat = discountAmount * materialShare;
+    const otherChargesMat = otherCharges * materialShare;
+
+    const allLinesCarryTaxRate =
+      params.lines.length > 0 &&
+      params.lines.every(
+        (l) =>
+          typeof l.taxRate === 'number' &&
+          Number.isFinite(l.taxRate) &&
+          l.taxRate >= 0,
+      );
+
+    let taxMat = resolvedTaxAmount * materialShare;
+    if (allLinesCarryTaxRate && resolvedTaxAmount > 0) {
+      const postDiscountFactor =
+        subtotal > 0 ? (subtotal - discountAmount) / subtotal : 0;
+      let theoreticalMatTax = 0;
+      let theoreticalExpTax = 0;
+      for (const l of params.lines) {
+        const rate = Number(l.taxRate || 0);
+        const lineTax = l.lineTotal * postDiscountFactor * (rate / 100);
+        if (l.itemType === 'expense') {
+          theoreticalExpTax += lineTax;
+        } else {
+          theoreticalMatTax += lineTax;
+        }
+      }
+      const theoreticalSum = theoreticalMatTax + theoreticalExpTax;
+      if (theoreticalSum > 0) {
+        taxMat = resolvedTaxAmount * (theoreticalMatTax / theoreticalSum);
+      }
+    }
+
+    const rawMatAlloc = roundPurchaseMoney(
+      materialSubtotal - discountMat + taxMat + otherChargesMat,
+    );
+    materialAllocatedTotal = Math.min(finalTotal, Math.max(0, rawMatAlloc));
+    expenseAllocatedTotal = roundPurchaseMoney(
+      finalTotal - materialAllocatedTotal,
+    );
+  }
+
+  return {
+    materialSubtotal,
+    expenseSubtotal,
+    subtotal,
+    discountAmount,
+    taxableSubtotal,
+    taxMode: resolvedTaxMode,
+    taxRatePercent: resolvedTaxRatePercent,
+    taxAmount: resolvedTaxAmount,
+    otherCharges,
+    finalTotal,
+    materialAllocatedTotal,
+    expenseAllocatedTotal,
+  };
+}
+
+export function computePrintedInvoiceWarnings(
+  financials: {
+    subtotal: number;
+    discountAmount: number;
+    taxAmount: number;
+    otherCharges: number;
+    finalTotal: number;
+  },
+  printed: IPurchasePrintedInvoiceSummary | null | undefined,
+  tolerance = 0.5,
+): string[] {
+  if (!printed) {
+    return [];
+  }
+  const warnings: string[] = [];
+
+  if (
+    typeof printed.printedSubtotal === 'number' &&
+    Math.abs(financials.subtotal - printed.printedSubtotal) > tolerance
+  ) {
+    warnings.push(
+      `Calculated items subtotal (₹${financials.subtotal.toFixed(2)}) differs from printed bill subtotal (₹${printed.printedSubtotal.toFixed(2)}).`,
+    );
+  }
+
+  if (
+    typeof printed.printedDiscountAmount === 'number' &&
+    Math.abs(financials.discountAmount - printed.printedDiscountAmount) >
+      tolerance
+  ) {
+    warnings.push(
+      `Voucher discount (₹${financials.discountAmount.toFixed(2)}) differs from printed bill discount (₹${printed.printedDiscountAmount.toFixed(2)}).`,
+    );
+  }
+
+  if (
+    typeof printed.printedTaxAmount === 'number' &&
+    Math.abs(financials.taxAmount - printed.printedTaxAmount) > tolerance
+  ) {
+    warnings.push(
+      `Voucher GST/tax (₹${financials.taxAmount.toFixed(2)}) differs from printed bill tax (₹${printed.printedTaxAmount.toFixed(2)}).`,
+    );
+  }
+
+  if (
+    typeof printed.printedOtherCharges === 'number' &&
+    Math.abs(financials.otherCharges - printed.printedOtherCharges) > tolerance
+  ) {
+    warnings.push(
+      `Voucher other charges (₹${financials.otherCharges.toFixed(2)}) differs from printed bill charges (₹${printed.printedOtherCharges.toFixed(2)}).`,
+    );
+  }
+
+  if (
+    typeof printed.printedGrandTotal === 'number' &&
+    Math.abs(financials.finalTotal - printed.printedGrandTotal) > tolerance
+  ) {
+    warnings.push(
+      `Calculated final total (₹${financials.finalTotal.toFixed(2)}) differs from printed bill grand total (₹${printed.printedGrandTotal.toFixed(2)}).`,
+    );
+  }
+
+  return warnings;
 }
 
 const voucherOperationLocks = new Map<string, Promise<void>>();
@@ -148,12 +402,17 @@ async function withSerializedKey<T>(
   }
 }
 
-function aggregateStockByMaterial(
+export function aggregateStockByMaterial(
   lines: IPurchaseLineItem[],
 ): IPurchaseAppliedStockLine[] {
   const byMaterial = new Map<string, IPurchaseAppliedStockLine>();
 
   for (const line of lines) {
+    const itemType = line.itemType || 'material';
+    if (itemType !== 'material' || !line.materialId || !line.quantity) {
+      continue;
+    }
+
     const existing = byMaterial.get(line.materialId);
     if (existing) {
       existing.quantity = roundPurchaseQuantity(
@@ -163,7 +422,7 @@ function aggregateStockByMaterial(
       byMaterial.set(line.materialId, {
         materialId: line.materialId,
         materialName: line.materialName,
-        unit: line.unit,
+        unit: line.unit as RawMaterialUnit,
         quantity: roundPurchaseQuantity(line.quantity),
       });
     }
@@ -225,9 +484,20 @@ export class PurchaseVoucherTotalsProvider implements IVoucherTotalsProvider {
           )
         : null;
 
+    const matAmount =
+      typeof purchases.materialAmount === 'number'
+        ? purchases.materialAmount
+        : purchases.totalAmount;
+    const expAmount =
+      typeof purchases.expenseAmount === 'number' ? purchases.expenseAmount : 0;
+
     return {
-      totalPurchases: roundPurchaseMoney(purchases.totalAmount),
-      totalOtherExpenses: roundPurchaseMoney(delegated.totalOtherExpenses),
+      totalPurchases: roundPurchaseMoney(
+        matAmount + (delegated.totalPurchases || 0),
+      ),
+      totalOtherExpenses: roundPurchaseMoney(
+        expAmount + (delegated.totalOtherExpenses || 0),
+      ),
       latestVoucherActivityAt,
     };
   }
@@ -241,6 +511,7 @@ export class PurchaseVoucherService {
     private readonly projectRepository: IProjectRepository,
     private readonly projectService: IProjectService,
     private readonly billStorage: IBillAttachmentStorage = new LocalProtectedBillStorageService(),
+    private readonly expenseHeadsRepository: IExpenseHeadsRepository = new ExpenseHeadsRepository(),
   ) {}
 
   toSafeAttachment(
@@ -271,6 +542,96 @@ export class PurchaseVoucherService {
       this.toSafeAttachment(id, att),
     );
 
+    const normalizedLines: IPurchaseLineItem[] = (voucher.lineItems || []).map(
+      (item) => {
+        const itemType: PurchaseLineItemType =
+          item.itemType === 'expense' ? 'expense' : 'material';
+        return {
+          itemType,
+          materialId: item.materialId || null,
+          materialName: item.materialName || '',
+          materialCategory: item.materialCategory || null,
+          expenseHeadId: item.expenseHeadId || null,
+          expenseHeadName: item.expenseHeadName || '',
+          expenseHeadCategory: item.expenseHeadCategory || null,
+          description: item.description || '',
+          unit: item.unit || null,
+          quantity:
+            item.quantity !== null && item.quantity !== undefined
+              ? roundPurchaseQuantity(item.quantity)
+              : null,
+          unitPrice:
+            item.unitPrice !== null && item.unitPrice !== undefined
+              ? roundPurchaseMoney(item.unitPrice)
+              : null,
+          lineTotal: roundPurchaseMoney(item.lineTotal),
+          taxRate:
+            item.taxRate !== null && item.taxRate !== undefined
+              ? roundPurchasePercentage(item.taxRate)
+              : null,
+          remarks: item.remarks || '',
+        };
+      },
+    );
+
+    const computedMaterialSub = roundPurchaseMoney(
+      normalizedLines
+        .filter((l) => l.itemType === 'material')
+        .reduce((acc, l) => acc + l.lineTotal, 0),
+    );
+    const computedExpenseSub = roundPurchaseMoney(
+      normalizedLines
+        .filter((l) => l.itemType === 'expense')
+        .reduce((acc, l) => acc + l.lineTotal, 0),
+    );
+
+    const subtotal = roundPurchaseMoney(voucher.subtotal);
+    const discountAmount = roundPurchaseMoney(voucher.discountAmount);
+    const taxAmount = roundPurchaseMoney(voucher.taxAmount);
+    const otherCharges = roundPurchaseMoney(voucher.otherCharges);
+    const finalTotal = roundPurchaseMoney(voucher.finalTotal);
+    const materialSubtotal =
+      typeof voucher.materialSubtotal === 'number'
+        ? roundPurchaseMoney(voucher.materialSubtotal)
+        : computedMaterialSub;
+    const expenseSubtotal =
+      typeof voucher.expenseSubtotal === 'number'
+        ? roundPurchaseMoney(voucher.expenseSubtotal)
+        : computedExpenseSub;
+    const taxableSubtotal =
+      typeof voucher.taxableSubtotal === 'number'
+        ? roundPurchaseMoney(voucher.taxableSubtotal)
+        : roundPurchaseMoney(Math.max(0, subtotal - discountAmount));
+    const taxMode: PurchaseTaxMode =
+      voucher.taxMode === 'percentage' ? 'percentage' : 'bill_amount';
+    const taxRatePercent =
+      voucher.taxRatePercent !== null && voucher.taxRatePercent !== undefined
+        ? roundPurchasePercentage(voucher.taxRatePercent)
+        : null;
+
+    const materialAllocatedTotal =
+      typeof voucher.materialAllocatedTotal === 'number'
+        ? roundPurchaseMoney(voucher.materialAllocatedTotal)
+        : expenseSubtotal <= 0
+          ? finalTotal
+          : 0;
+    const expenseAllocatedTotal =
+      typeof voucher.expenseAllocatedTotal === 'number'
+        ? roundPurchaseMoney(voucher.expenseAllocatedTotal)
+        : roundPurchaseMoney(finalTotal - materialAllocatedTotal);
+
+    const printedInvoiceSummary = voucher.printedInvoiceSummary || null;
+    const reconciliationWarnings = computePrintedInvoiceWarnings(
+      {
+        subtotal,
+        discountAmount,
+        taxAmount,
+        otherCharges,
+        finalTotal,
+      },
+      printedInvoiceSummary,
+    );
+
     return {
       id,
       voucherNumber: voucher.voucherNumber,
@@ -281,21 +642,33 @@ export class PurchaseVoucherService {
       projectCode: voucher.projectCode || null,
       projectName: voucher.projectName || null,
       entryMethod: voucher.entryMethod,
-      lineItems: (voucher.lineItems || []).map((item) => ({
-        materialId: item.materialId,
-        materialName: item.materialName,
-        materialCategory: item.materialCategory || null,
-        unit: item.unit,
-        quantity: roundPurchaseQuantity(item.quantity),
-        unitPrice: roundPurchaseMoney(item.unitPrice),
-        lineTotal: roundPurchaseMoney(item.lineTotal),
-        remarks: item.remarks || '',
-      })),
-      subtotal: roundPurchaseMoney(voucher.subtotal),
-      discountAmount: roundPurchaseMoney(voucher.discountAmount),
-      taxAmount: roundPurchaseMoney(voucher.taxAmount),
-      otherCharges: roundPurchaseMoney(voucher.otherCharges),
-      finalTotal: roundPurchaseMoney(voucher.finalTotal),
+      lineItems: normalizedLines,
+      materialSubtotal,
+      expenseSubtotal,
+      subtotal,
+      discountAmount,
+      taxableSubtotal,
+      taxMode,
+      taxRatePercent,
+      cgstAmount:
+        voucher.cgstAmount !== null && voucher.cgstAmount !== undefined
+          ? roundPurchaseMoney(voucher.cgstAmount)
+          : null,
+      sgstAmount:
+        voucher.sgstAmount !== null && voucher.sgstAmount !== undefined
+          ? roundPurchaseMoney(voucher.sgstAmount)
+          : null,
+      igstAmount:
+        voucher.igstAmount !== null && voucher.igstAmount !== undefined
+          ? roundPurchaseMoney(voucher.igstAmount)
+          : null,
+      taxAmount,
+      otherCharges,
+      finalTotal,
+      materialAllocatedTotal,
+      expenseAllocatedTotal,
+      printedInvoiceSummary,
+      reconciliationWarnings,
       notes: voucher.notes || '',
       attachments,
       hasAttachments: attachments.length > 0,
@@ -361,37 +734,58 @@ export class PurchaseVoucherService {
   private async prepareLineItemsBeforeSave(
     lineInputs: PurchaseLineItemInputDto[],
     previouslyIncludedMaterialIds: Set<string> = new Set(),
+    previouslyIncludedExpenseHeadIds: Set<string> = new Set(),
   ): Promise<{
     preparedLines: PreparedPurchaseLine[];
-    subtotal: number;
+    lineFinancialRefs: Array<{
+      itemType: PurchaseLineItemType;
+      lineTotal: number;
+      taxRate: number | null;
+    }>;
     newMaterialNameKeys: string[];
   }> {
     const fieldErrors: Record<string, string> = {};
     const conflictErrors: Record<string, string> = {};
     const materialCache = new Map<string, IRawMaterial>();
     const existingByNameCache = new Map<string, IRawMaterial>();
+    const expenseHeadCache = new Map<string, IExpenseHead>();
 
-    const uniqueIds = Array.from(
+    const uniqueMatIds = Array.from(
       new Set(
         lineInputs
-          .map((item) => (item.materialId ? item.materialId.trim() : ''))
-          .filter(Boolean),
+          .map((item) =>
+            item.itemType === 'material' && item.materialId
+              ? item.materialId.trim()
+              : '',
+          )
+          .filter((id) => isValidRawMaterialObjectId(id)),
       ),
     );
     const uniqueNewNameKeys = Array.from(
       new Set(
         lineInputs
           .map((item) =>
-            item.newMaterial?.name
+            item.itemType === 'material' && item.newMaterial?.name
               ? normalizeMaterialNameKey(item.newMaterial.name)
               : '',
           )
           .filter(Boolean),
       ),
     );
+    const uniqueExpenseHeadIds = Array.from(
+      new Set(
+        lineInputs
+          .map((item) =>
+            item.itemType === 'expense' && item.expenseHeadId
+              ? item.expenseHeadId.trim()
+              : '',
+          )
+          .filter((id) => isValidExpenseHeadObjectId(id)),
+      ),
+    );
 
     await Promise.all([
-      ...uniqueIds.map(async (matId) => {
+      ...uniqueMatIds.map(async (matId) => {
         const found = await this.rawMaterialsRepository.findById(matId);
         if (found) {
           materialCache.set(matId, found);
@@ -404,16 +798,114 @@ export class PurchaseVoucherService {
           existingByNameCache.set(nameKey, found);
         }
       }),
+      ...uniqueExpenseHeadIds.map(async (headId) => {
+        const found = await this.expenseHeadsRepository.findById(headId);
+        if (found) {
+          expenseHeadCache.set(headId, found);
+        }
+      }),
     ]);
 
     const preparedLines: PreparedPurchaseLine[] = [];
-    let runningSubtotal = 0;
+    const lineFinancialRefs: Array<{
+      itemType: PurchaseLineItemType;
+      lineTotal: number;
+      taxRate: number | null;
+    }> = [];
 
     lineInputs.forEach((input, idx) => {
       const prefix = `lineItems[${idx}]`;
-      const quantity = roundPurchaseQuantity(input.quantity);
-      const unitPrice = roundPurchaseMoney(input.unitPrice);
+
+      if (input.itemType === 'expense') {
+        const headId = input.expenseHeadId ? input.expenseHeadId.trim() : '';
+        if (!isValidExpenseHeadObjectId(headId)) {
+          fieldErrors[`${prefix}.expenseHeadId`] =
+            `Line item #${idx + 1}: selected Expense Head does not exist.`;
+          return;
+        }
+
+        const expenseHead = expenseHeadCache.get(headId);
+        if (!expenseHead) {
+          fieldErrors[`${prefix}.expenseHeadId`] =
+            `Line item #${idx + 1}: selected Expense Head does not exist.`;
+          return;
+        }
+
+        const canonicalHeadId = String(expenseHead._id);
+        if (
+          !expenseHead.isActive &&
+          !previouslyIncludedExpenseHeadIds.has(canonicalHeadId)
+        ) {
+          fieldErrors[`${prefix}.expenseHeadId`] =
+            `Line item #${idx + 1}: Expense Head '${expenseHead.name}' is inactive and cannot be added to new vouchers.`;
+          return;
+        }
+
+        const hasQtyAndPrice =
+          input.quantity !== null &&
+          input.quantity !== undefined &&
+          input.unitPrice !== null &&
+          input.unitPrice !== undefined;
+
+        const quantity =
+          input.quantity !== null && input.quantity !== undefined
+            ? roundPurchaseQuantity(input.quantity)
+            : null;
+        const unitPrice =
+          input.unitPrice !== null && input.unitPrice !== undefined
+            ? roundPurchaseMoney(input.unitPrice)
+            : null;
+        const lineTotal = hasQtyAndPrice
+          ? roundPurchaseMoney((quantity as number) * (unitPrice as number))
+          : roundPurchaseMoney(Number(input.amount || 0));
+
+        if (lineTotal <= 0) {
+          fieldErrors[`${prefix}.amount`] =
+            `Line item #${idx + 1}: expense amount must be greater than zero.`;
+          return;
+        }
+
+        const taxRate =
+          input.taxRate !== null && input.taxRate !== undefined
+            ? roundPurchasePercentage(input.taxRate)
+            : null;
+
+        lineFinancialRefs.push({
+          itemType: 'expense',
+          lineTotal,
+          taxRate,
+        });
+
+        preparedLines.push({
+          kind: 'expense',
+          index: idx,
+          lineItem: {
+            itemType: 'expense',
+            materialId: null,
+            materialName: '',
+            materialCategory: null,
+            expenseHeadId: canonicalHeadId,
+            expenseHeadName: expenseHead.name,
+            expenseHeadCategory: expenseHead.category || 'General',
+            description: input.description || expenseHead.name,
+            unit: input.unit || null,
+            quantity,
+            unitPrice,
+            lineTotal,
+            taxRate,
+            remarks: input.remarks || '',
+          },
+        });
+        return;
+      }
+
+      const quantity = roundPurchaseQuantity(Number(input.quantity || 0));
+      const unitPrice = roundPurchaseMoney(Number(input.unitPrice || 0));
       const lineTotal = roundPurchaseMoney(quantity * unitPrice);
+      const taxRate =
+        input.taxRate !== null && input.taxRate !== undefined
+          ? roundPurchasePercentage(input.taxRate)
+          : null;
 
       if (lineTotal <= 0) {
         fieldErrors[`${prefix}.lineTotal`] =
@@ -443,9 +935,14 @@ export class PurchaseVoucherService {
           }
         }
 
-        runningSubtotal = roundPurchaseMoney(runningSubtotal + lineTotal);
+        lineFinancialRefs.push({
+          itemType: 'material',
+          lineTotal,
+          taxRate,
+        });
+
         preparedLines.push({
-          kind: 'new',
+          kind: 'new_material',
           index: idx,
           nameKey,
           spec: {
@@ -454,9 +951,11 @@ export class PurchaseVoucherService {
             category: input.newMaterial.category ?? null,
             description: input.newMaterial.description || '',
           },
+          description: input.description || cleanName,
           quantity,
           unitPrice,
           lineTotal,
+          taxRate,
           remarks: input.remarks || '',
         });
         return;
@@ -487,19 +986,29 @@ export class PurchaseVoucherService {
         return;
       }
 
-      runningSubtotal = roundPurchaseMoney(runningSubtotal + lineTotal);
+      lineFinancialRefs.push({
+        itemType: 'material',
+        lineTotal,
+        taxRate,
+      });
 
       preparedLines.push({
-        kind: 'existing',
+        kind: 'existing_material',
         index: idx,
         lineItem: {
+          itemType: 'material',
           materialId: canonicalMaterialId,
           materialName: material.name,
           materialCategory: material.category || null,
+          expenseHeadId: null,
+          expenseHeadName: '',
+          expenseHeadCategory: null,
+          description: input.description || material.name,
           unit: material.unit,
           quantity,
           unitPrice,
           lineTotal,
+          taxRate,
           remarks: input.remarks || '',
         },
       });
@@ -517,7 +1026,7 @@ export class PurchaseVoucherService {
 
     return {
       preparedLines,
-      subtotal: runningSubtotal,
+      lineFinancialRefs,
       newMaterialNameKeys: uniqueNewNameKeys,
     };
   }
@@ -548,24 +1057,17 @@ export class PurchaseVoucherService {
       {
         firstIndex: number;
         spec: PurchaseInlineNewMaterialDto;
-        totalQuantity: number;
       }
     >();
 
     for (const entry of preparedLines) {
-      if (entry.kind !== 'new') {
+      if (entry.kind !== 'new_material') {
         continue;
       }
-      const existingGroup = groupedNewSpecs.get(entry.nameKey);
-      if (existingGroup) {
-        existingGroup.totalQuantity = roundPurchaseQuantity(
-          existingGroup.totalQuantity + entry.quantity,
-        );
-      } else {
+      if (!groupedNewSpecs.has(entry.nameKey)) {
         groupedNewSpecs.set(entry.nameKey, {
           firstIndex: entry.index,
           spec: entry.spec,
-          totalQuantity: roundPurchaseQuantity(entry.quantity),
         });
       }
     }
@@ -614,7 +1116,7 @@ export class PurchaseVoucherService {
             normalizedName: nameKey,
             category: group.spec.category ?? null,
             unit: group.spec.unit,
-            quantityOnHand: group.totalQuantity,
+            quantityOnHand: 0,
             description: group.spec.description || '',
             isActive: true,
             createdBy: callerId,
@@ -639,7 +1141,7 @@ export class PurchaseVoucherService {
       }
 
       const lineItems: IPurchaseLineItem[] = preparedLines.map((entry) => {
-        if (entry.kind === 'existing') {
+        if (entry.kind === 'existing_material' || entry.kind === 'expense') {
           return entry.lineItem;
         }
         const resolved = resolvedNewByNameKey.get(entry.nameKey);
@@ -647,13 +1149,19 @@ export class PurchaseVoucherService {
           throw new Error('Failed to resolve newly created raw material.');
         }
         return {
+          itemType: 'material',
           materialId: String(resolved._id),
           materialName: resolved.name,
           materialCategory: resolved.category || null,
+          expenseHeadId: null,
+          expenseHeadName: '',
+          expenseHeadCategory: null,
+          description: entry.description || resolved.name,
           unit: resolved.unit,
           quantity: entry.quantity,
           unitPrice: entry.unitPrice,
           lineTotal: entry.lineTotal,
+          taxRate: entry.taxRate,
           remarks: entry.remarks,
         };
       });
@@ -665,35 +1173,6 @@ export class PurchaseVoucherService {
     }
   }
 
-  private computeFinalTotal(
-    subtotal: number,
-    discountAmount: number,
-    taxAmount: number,
-    otherCharges: number,
-  ): number {
-    if (discountAmount > subtotal) {
-      throw new PurchaseValidationError(
-        {
-          discountAmount:
-            'Discount amount cannot exceed the material line items subtotal.',
-        },
-        'Discount amount cannot exceed the material line items subtotal.',
-      );
-    }
-
-    const finalTotal = roundPurchaseMoney(
-      subtotal - discountAmount + taxAmount + otherCharges,
-    );
-    if (finalTotal < 0) {
-      throw new PurchaseValidationError(
-        { finalTotal: 'Final voucher total cannot be negative.' },
-        'Final voucher total cannot be negative.',
-      );
-    }
-
-    return finalTotal;
-  }
-
   private async applyStockTransition(params: {
     voucherId: string;
     voucherNumber: string;
@@ -701,7 +1180,6 @@ export class PurchaseVoucherService {
     movementType: PurchaseStockMovementType;
     previousAppliedLines: IPurchaseAppliedStockLine[];
     desiredAppliedLines: IPurchaseAppliedStockLine[];
-    alreadyInitializedMaterialIds?: ReadonlySet<string>;
     performedBy: string;
   }): Promise<void> {
     const prevMap = new Map<string, IPurchaseAppliedStockLine>();
@@ -756,37 +1234,18 @@ export class PurchaseVoucherService {
               continue;
             }
 
-            let resultingQuantityOnHand = 0;
-
-            if (params.alreadyInitializedMaterialIds?.has(materialId)) {
-              const createdRef =
-                await this.rawMaterialsService.getMaterialReferenceById(
-                  materialId,
-                );
-              if (!createdRef) {
-                throw new RawMaterialNotFoundError(materialId);
-              }
-              if (createdRef.unit !== expectedUnit) {
-                throw new RawMaterialUnitConflictError(
-                  `Incompatible unit '${expectedUnit}' for material '${createdRef.name}'. Expected '${createdRef.unit}'.`,
-                );
-              }
-              resultingQuantityOnHand = createdRef.quantityOnHand;
-            } else {
-              const stockResult =
-                await this.rawMaterialsService.adjustStockForPurchaseUnlocked(
-                  materialId,
-                  expectedUnit,
-                  delta,
-                );
-
-              appliedInRun.push({
+            const stockResult =
+              await this.rawMaterialsService.adjustStockForPurchaseUnlocked(
                 materialId,
-                unit: expectedUnit,
+                expectedUnit,
                 delta,
-              });
-              resultingQuantityOnHand = stockResult.quantityOnHand;
-            }
+              );
+
+            appliedInRun.push({
+              materialId,
+              unit: expectedUnit,
+              delta,
+            });
 
             await this.repository.recordStockMovement({
               idempotencyKey,
@@ -798,7 +1257,7 @@ export class PurchaseVoucherService {
               materialName,
               unit: expectedUnit,
               quantityDelta: delta,
-              resultingQuantityOnHand,
+              resultingQuantityOnHand: stockResult.quantityOnHand,
               performedBy: params.performedBy,
               createdAt: new Date(),
             });
@@ -845,7 +1304,7 @@ export class PurchaseVoucherService {
   private async rollbackStockTransition(params: {
     previousAppliedLines: IPurchaseAppliedStockLine[];
     desiredAppliedLines: IPurchaseAppliedStockLine[];
-    alreadyInitializedMaterialIds?: ReadonlySet<string>;
+    skipMaterialIds?: ReadonlySet<string>;
     voucherId?: string;
     revision?: number;
   }): Promise<void> {
@@ -860,7 +1319,7 @@ export class PurchaseVoucherService {
     const allMaterialIds = Array.from(
       new Set([...prevMap.keys(), ...nextMap.keys()]),
     )
-      .filter((id) => !params.alreadyInitializedMaterialIds?.has(id))
+      .filter((id) => !params.skipMaterialIds?.has(id))
       .sort();
 
     if (allMaterialIds.length > 0) {
@@ -996,12 +1455,14 @@ export class PurchaseVoucherService {
         this.prepareLineItemsBeforeSave(dto.lineItems),
       ]);
 
-      const finalTotal = this.computeFinalTotal(
-        prepared.subtotal,
-        dto.discountAmount,
-        dto.taxAmount,
-        dto.otherCharges,
-      );
+      const financials = computePurchaseVoucherFinancials({
+        lines: prepared.lineFinancialRefs,
+        discountAmount: dto.discountAmount,
+        taxMode: dto.taxMode,
+        taxRatePercent: dto.taxRatePercent,
+        taxAmount: dto.taxAmount,
+        otherCharges: dto.otherCharges,
+      });
 
       const actorName = caller.name || caller.email || caller.id;
       const savedAttachments: IPurchaseBillAttachment[] = [];
@@ -1052,11 +1513,31 @@ export class PurchaseVoucherService {
                           ? 'upload_bill'
                           : dto.entryMethod,
                       lineItems: materialized.lineItems,
-                      subtotal: prepared.subtotal,
-                      discountAmount: dto.discountAmount,
-                      taxAmount: dto.taxAmount,
-                      otherCharges: dto.otherCharges,
-                      finalTotal,
+                      materialSubtotal: financials.materialSubtotal,
+                      expenseSubtotal: financials.expenseSubtotal,
+                      subtotal: financials.subtotal,
+                      discountAmount: financials.discountAmount,
+                      taxableSubtotal: financials.taxableSubtotal,
+                      taxMode: financials.taxMode,
+                      taxRatePercent: financials.taxRatePercent,
+                      cgstAmount:
+                        financials.taxMode === 'bill_amount'
+                          ? dto.cgstAmount
+                          : null,
+                      sgstAmount:
+                        financials.taxMode === 'bill_amount'
+                          ? dto.sgstAmount
+                          : null,
+                      igstAmount:
+                        financials.taxMode === 'bill_amount'
+                          ? dto.igstAmount
+                          : null,
+                      taxAmount: financials.taxAmount,
+                      otherCharges: financials.otherCharges,
+                      finalTotal: financials.finalTotal,
+                      materialAllocatedTotal: financials.materialAllocatedTotal,
+                      expenseAllocatedTotal: financials.expenseAllocatedTotal,
+                      printedInvoiceSummary: dto.printedInvoiceSummary,
                       notes: dto.notes,
                       attachments: savedAttachments,
                       status: 'active',
@@ -1140,8 +1621,6 @@ export class PurchaseVoucherService {
                   movementType: 'purchase_created',
                   previousAppliedLines: [],
                   desiredAppliedLines,
-                  alreadyInitializedMaterialIds:
-                    materialized.newlyCreatedMaterialIds,
                   performedBy: caller.id,
                 });
                 stockApplied = true;
@@ -1175,8 +1654,6 @@ export class PurchaseVoucherService {
                     await this.rollbackStockTransition({
                       previousAppliedLines: [],
                       desiredAppliedLines,
-                      alreadyInitializedMaterialIds:
-                        materialized.newlyCreatedMaterialIds,
                       voucherId: failedVoucherId,
                       revision: 1,
                     });
@@ -1313,6 +1790,17 @@ export class PurchaseVoucherService {
         );
       }
 
+      const hasFinancialEdit =
+        dto.lineItems !== undefined ||
+        dto.discountAmount !== undefined ||
+        dto.taxMode !== undefined ||
+        dto.taxRatePercent !== undefined ||
+        dto.cgstAmount !== undefined ||
+        dto.sgstAmount !== undefined ||
+        dto.igstAmount !== undefined ||
+        dto.taxAmount !== undefined ||
+        dto.otherCharges !== undefined;
+
       let projectRef = {
         projectRecordId: existing.projectRecordId,
         projectCode: existing.projectCode,
@@ -1327,14 +1815,7 @@ export class PurchaseVoucherService {
         const currentProj = await this.projectRepository.findByIdOrCode(
           existing.projectRecordId,
         );
-        if (
-          currentProj &&
-          currentProj.status === 'Completed' &&
-          (dto.lineItems !== undefined ||
-            dto.discountAmount !== undefined ||
-            dto.taxAmount !== undefined ||
-            dto.otherCharges !== undefined)
-        ) {
+        if (currentProj && currentProj.status === 'Completed' && hasFinancialEdit) {
           throw new PurchaseConflictError(
             `Project '${currentProj.projectId}' is marked Completed. Reopen the project before modifying financial amounts on linked voucher ${existing.voucherNumber}.`,
           );
@@ -1342,38 +1823,116 @@ export class PurchaseVoucherService {
       }
 
       const previousMaterialIds = new Set(
-        existing.lineItems.map((li) => li.materialId),
+        existing.lineItems
+          .map((li) => li.materialId || '')
+          .filter(Boolean),
       );
+      const previousExpenseHeadIds = new Set(
+        existing.lineItems
+          .map((li) => li.expenseHeadId || '')
+          .filter(Boolean),
+      );
+
       let preparedUpdate: Awaited<
         ReturnType<PurchaseVoucherService['prepareLineItemsBeforeSave']>
       > | null = null;
-      let nextSubtotal = existing.subtotal;
+
+      let lineFinancialRefs: Array<{
+        itemType: PurchaseLineItemType;
+        lineTotal: number;
+        taxRate: number | null;
+      }> = existing.lineItems.map((li) => ({
+        itemType: li.itemType === 'expense' ? 'expense' : 'material',
+        lineTotal: li.lineTotal,
+        taxRate: li.taxRate ?? null,
+      }));
 
       if (dto.lineItems !== undefined) {
         preparedUpdate = await this.prepareLineItemsBeforeSave(
           dto.lineItems,
           previousMaterialIds,
+          previousExpenseHeadIds,
         );
-        nextSubtotal = preparedUpdate.subtotal;
+        lineFinancialRefs = preparedUpdate.lineFinancialRefs;
       }
 
       const nextDiscount =
         dto.discountAmount !== undefined
           ? dto.discountAmount
           : existing.discountAmount;
-      const nextTax =
+      const nextTaxMode: PurchaseTaxMode =
+        dto.taxMode !== undefined
+          ? dto.taxMode
+          : existing.taxMode === 'percentage'
+            ? 'percentage'
+            : 'bill_amount';
+      const nextTaxRatePercent =
+        dto.taxRatePercent !== undefined
+          ? dto.taxRatePercent
+          : (existing.taxRatePercent ?? null);
+
+      const nextCgst =
+        nextTaxMode === 'percentage'
+          ? null
+          : dto.cgstAmount !== undefined
+            ? dto.cgstAmount
+            : (existing.cgstAmount ?? null);
+      const nextSgst =
+        nextTaxMode === 'percentage'
+          ? null
+          : dto.sgstAmount !== undefined
+            ? dto.sgstAmount
+            : (existing.sgstAmount ?? null);
+      const nextIgst =
+        nextTaxMode === 'percentage'
+          ? null
+          : dto.igstAmount !== undefined
+            ? dto.igstAmount
+            : (existing.igstAmount ?? null);
+
+      let nextBillTaxAmount =
         dto.taxAmount !== undefined ? dto.taxAmount : existing.taxAmount;
+
+      if (
+        nextTaxMode === 'bill_amount' &&
+        (nextCgst !== null || nextSgst !== null || nextIgst !== null)
+      ) {
+        const compSum = roundPurchaseMoney(
+          (nextCgst || 0) + (nextSgst || 0) + (nextIgst || 0),
+        );
+        if (dto.taxAmount === undefined &&
+          (dto.cgstAmount !== undefined ||
+            dto.sgstAmount !== undefined ||
+            dto.igstAmount !== undefined)) {
+          nextBillTaxAmount = compSum;
+        } else if (Math.abs(nextBillTaxAmount - compSum) > 0.05) {
+          throw new PurchaseValidationError(
+            {
+              taxAmount:
+                'Combined tax amount conflicts with CGST + SGST + IGST components — ensure tax is not counted twice.',
+            },
+            'Combined tax amount conflicts with CGST + SGST + IGST components — ensure tax is not counted twice.',
+          );
+        }
+      }
+
       const nextOtherCharges =
         dto.otherCharges !== undefined
           ? dto.otherCharges
           : existing.otherCharges;
+      const nextPrintedSummary =
+        dto.printedInvoiceSummary !== undefined
+          ? dto.printedInvoiceSummary
+          : (existing.printedInvoiceSummary ?? null);
 
-      const nextFinalTotal = this.computeFinalTotal(
-        nextSubtotal,
-        nextDiscount,
-        nextTax,
-        nextOtherCharges,
-      );
+      const financials = computePurchaseVoucherFinancials({
+        lines: lineFinancialRefs,
+        discountAmount: nextDiscount,
+        taxMode: nextTaxMode,
+        taxRatePercent: nextTaxRatePercent,
+        taxAmount: nextBillTaxAmount,
+        otherCharges: nextOtherCharges,
+      });
 
       const actorName = caller.name || caller.email || caller.id;
       const newSavedAttachments: IPurchaseBillAttachment[] = [];
@@ -1424,7 +1983,6 @@ export class PurchaseVoucherService {
                   movementType: 'purchase_revised',
                   previousAppliedLines,
                   desiredAppliedLines,
-                  alreadyInitializedMaterialIds: newlyCreatedMaterialIds,
                   performedBy: caller.id,
                 });
                 stockApplied = true;
@@ -1453,11 +2011,22 @@ export class PurchaseVoucherService {
                         ? dto.entryMethod
                         : existing.entryMethod,
                     lineItems: nextLineItems,
-                    subtotal: nextSubtotal,
-                    discountAmount: nextDiscount,
-                    taxAmount: nextTax,
-                    otherCharges: nextOtherCharges,
-                    finalTotal: nextFinalTotal,
+                    materialSubtotal: financials.materialSubtotal,
+                    expenseSubtotal: financials.expenseSubtotal,
+                    subtotal: financials.subtotal,
+                    discountAmount: financials.discountAmount,
+                    taxableSubtotal: financials.taxableSubtotal,
+                    taxMode: financials.taxMode,
+                    taxRatePercent: financials.taxRatePercent,
+                    cgstAmount: nextCgst,
+                    sgstAmount: nextSgst,
+                    igstAmount: nextIgst,
+                    taxAmount: financials.taxAmount,
+                    otherCharges: financials.otherCharges,
+                    finalTotal: financials.finalTotal,
+                    materialAllocatedTotal: financials.materialAllocatedTotal,
+                    expenseAllocatedTotal: financials.expenseAllocatedTotal,
+                    printedInvoiceSummary: nextPrintedSummary,
                     notes: dto.notes !== undefined ? dto.notes : existing.notes,
                     attachments: combinedAttachments,
                     revision: nextRevision,
@@ -1482,7 +2051,6 @@ export class PurchaseVoucherService {
                   await this.rollbackStockTransition({
                     previousAppliedLines,
                     desiredAppliedLines,
-                    alreadyInitializedMaterialIds: newlyCreatedMaterialIds,
                     voucherId: recordId,
                     revision: nextRevision,
                   });
@@ -1614,6 +2182,8 @@ export class PurchaseVoucherService {
         await this.rollbackStockTransition({
           previousAppliedLines,
           desiredAppliedLines: [],
+          voucherId: recordId,
+          revision: nextRevision,
         });
         throw err;
       }

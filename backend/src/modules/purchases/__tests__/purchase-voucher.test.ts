@@ -1460,6 +1460,559 @@ async function runTests(): Promise<void> {
       0,
     );
 
+    console.log(
+      '9. Testing Expense Heads RBAC, mixed Material/Expense vouchers, bulk missing materials, two-mode GST, printed reconciliation & dummy invoice (20110 + 3619.80 = 23729.80)...',
+    );
+
+    const unauthHeadsRes = await jsonReq(baseUrl, 'GET', '/api/expense-heads');
+    assert.strictEqual(unauthHeadsRes.status, 401);
+
+    const listHeadsOperatorRes = await jsonReq(
+      baseUrl,
+      'GET',
+      '/api/expense-heads',
+      { token: operatorToken },
+    );
+    assert.strictEqual(listHeadsOperatorRes.status, 200);
+    const seededHeads = listHeadsOperatorRes.body.expenseHeads as Array<{
+      id: string;
+      name: string;
+      category: string;
+    }>;
+    assert.ok(Array.isArray(seededHeads) && seededHeads.length >= 7);
+    const transportHead = seededHeads.find((h) =>
+      /transportation/i.test(h.name),
+    )!;
+    const rentalHead = seededHeads.find((h) => /rental/i.test(h.name))!;
+    const deliveryHead = seededHeads.find((h) => /delivery/i.test(h.name))!;
+    assert.ok(transportHead && rentalHead && deliveryHead);
+
+    const operatorCreateHeadRes = await jsonReq(
+      baseUrl,
+      'POST',
+      '/api/expense-heads',
+      {
+        token: operatorToken,
+        body: { name: 'Unauthorized Operator Head', category: 'General' },
+      },
+    );
+    assert.strictEqual(operatorCreateHeadRes.status, 403);
+
+    const adminMassAssignHeadRes = await jsonReq(
+      baseUrl,
+      'POST',
+      '/api/expense-heads',
+      {
+        token: adminToken,
+        body: {
+          name: 'Valid Name',
+          category: 'General',
+          isActive: false,
+        },
+      },
+    );
+    assert.strictEqual(adminMassAssignHeadRes.status, 400);
+
+    const adminCreateHeadRes = await jsonReq(
+      baseUrl,
+      'POST',
+      '/api/expense-heads',
+      {
+        token: adminToken,
+        body: {
+          name: '  Upholstery Steamer Rental  ',
+          category: 'Equipment Rental',
+          description: 'On-site steamer hire',
+        },
+      },
+    );
+    assert.strictEqual(adminCreateHeadRes.status, 201);
+    const customHeadId = (
+      adminCreateHeadRes.body.expenseHead as { id: string }
+    ).id;
+
+    const dupHeadRes = await jsonReq(baseUrl, 'POST', '/api/expense-heads', {
+      token: adminToken,
+      body: { name: 'upholstery steamer rental', category: 'General' },
+    });
+    assert.strictEqual(dupHeadRes.status, 409);
+
+    const deactivateCustomHeadRes = await jsonReq(
+      baseUrl,
+      'PATCH',
+      `/api/expense-heads/${customHeadId}/status`,
+      {
+        token: adminToken,
+        body: { isActive: false },
+      },
+    );
+    assert.strictEqual(deactivateCustomHeadRes.status, 200);
+
+    const inactiveHeadVoucherRes = await jsonReq(
+      baseUrl,
+      'POST',
+      '/api/purchases',
+      {
+        token: operatorToken,
+        body: {
+          purchaseDate: '2026-10-29',
+          supplierName: 'Inactive Head Check',
+          lineItems: [
+            {
+              itemType: 'expense',
+              expenseHeadId: customHeadId,
+              description: 'Steamer hire',
+              amount: 500,
+            },
+          ],
+        },
+      },
+    );
+    assert.strictEqual(inactiveHeadVoucherRes.status, 400);
+
+    const mixedProjRes = await jsonReq(baseUrl, 'POST', '/api/projects', {
+      token: adminToken,
+      body: {
+        name: 'Mixed Voucher Financial Integration Suite',
+        clientName: 'Panampilly Penthouse',
+        category: 'Modular Sofa',
+        contractValue: 100000,
+      },
+    });
+    assert.strictEqual(mixedProjRes.status, 201);
+    const mixedProjId = (mixedProjRes.body.project as { id: string }).id;
+
+    const pureExpenseRes = await jsonReq(baseUrl, 'POST', '/api/purchases', {
+      token: operatorToken,
+      body: {
+        purchaseDate: '2026-10-29',
+        supplierName: 'Kochi Logistics & Rentals',
+        supplierInvoiceNumber: 'KLR-101',
+        projectId: mixedProjId,
+        taxMode: 'percentage',
+        taxRatePercent: 18,
+        lineItems: [
+          {
+            itemType: 'expense',
+            expenseHeadId: transportHead.id,
+            description: 'Tempo delivery from Ernakulam',
+            amount: 1200,
+          },
+          {
+            itemType: 'expense',
+            expenseHeadId: rentalHead.id,
+            description: 'Compressor hire',
+            unit: 'Piece',
+            quantity: 2,
+            unitPrice: 900,
+            amount: 1800,
+          },
+        ],
+      },
+    });
+    assert.strictEqual(pureExpenseRes.status, 201);
+    const pureExpenseVoucher = pureExpenseRes.body.voucher as {
+      id: string;
+      materialSubtotal: number;
+      expenseSubtotal: number;
+      subtotal: number;
+      taxMode: string;
+      taxRatePercent: number;
+      taxAmount: number;
+      finalTotal: number;
+      materialAllocatedTotal: number;
+      expenseAllocatedTotal: number;
+    };
+    assert.strictEqual(pureExpenseVoucher.materialSubtotal, 0);
+    assert.strictEqual(pureExpenseVoucher.expenseSubtotal, 3000);
+    assert.strictEqual(pureExpenseVoucher.subtotal, 3000);
+    assert.strictEqual(pureExpenseVoucher.taxMode, 'percentage');
+    assert.strictEqual(pureExpenseVoucher.taxRatePercent, 18);
+    assert.strictEqual(pureExpenseVoucher.taxAmount, 540);
+    assert.strictEqual(pureExpenseVoucher.finalTotal, 3540);
+    assert.strictEqual(pureExpenseVoucher.materialAllocatedTotal, 0);
+    assert.strictEqual(pureExpenseVoucher.expenseAllocatedTotal, 3540);
+
+    const pureExpenseDetailRes = await jsonReq(
+      baseUrl,
+      'GET',
+      `/api/purchases/${pureExpenseVoucher.id}`,
+      { token: operatorToken },
+    );
+    assert.strictEqual(
+      (pureExpenseDetailRes.body.stockMovements as unknown[]).length,
+      0,
+    );
+
+    const projAfterPureExpense = await projectRepository.findByIdOrCode(
+      mixedProjId,
+    );
+    assert.strictEqual(projAfterPureExpense?.totalPurchases, 0);
+    assert.strictEqual(projAfterPureExpense?.totalOtherExpenses, 3540);
+    assert.strictEqual(projAfterPureExpense?.totalCost, 3540);
+    assert.strictEqual(projAfterPureExpense?.estimatedProfit, 96460);
+
+    const mixedMatExpRes = await jsonReq(baseUrl, 'POST', '/api/purchases', {
+      token: operatorToken,
+      body: {
+        purchaseDate: '2026-10-29',
+        supplierName: 'Vazhakkala Foam & Transport',
+        supplierInvoiceNumber: 'VFT-202',
+        projectId: mixedProjId,
+        discountAmount: 250,
+        taxMode: 'percentage',
+        taxRatePercent: 18,
+        otherCharges: 100,
+        lineItems: [
+          {
+            itemType: 'material',
+            materialId: cottonSpongeId,
+            quantity: 10,
+            unitPrice: 200,
+          },
+          {
+            itemType: 'expense',
+            expenseHeadId: deliveryHead.id,
+            description: 'Doorstep unloading & freight',
+            amount: 500,
+          },
+        ],
+      },
+    });
+    assert.strictEqual(mixedMatExpRes.status, 201);
+    const mixedMatExpVoucher = mixedMatExpRes.body.voucher as {
+      id: string;
+      materialSubtotal: number;
+      expenseSubtotal: number;
+      subtotal: number;
+      taxableSubtotal: number;
+      taxAmount: number;
+      finalTotal: number;
+      materialAllocatedTotal: number;
+      expenseAllocatedTotal: number;
+    };
+    assert.strictEqual(mixedMatExpVoucher.materialSubtotal, 2000);
+    assert.strictEqual(mixedMatExpVoucher.expenseSubtotal, 500);
+    assert.strictEqual(mixedMatExpVoucher.subtotal, 2500);
+    assert.strictEqual(mixedMatExpVoucher.taxableSubtotal, 2250);
+    assert.strictEqual(mixedMatExpVoucher.taxAmount, 405);
+    assert.strictEqual(mixedMatExpVoucher.finalTotal, 2755);
+    assert.strictEqual(mixedMatExpVoucher.materialAllocatedTotal, 2204);
+    assert.strictEqual(mixedMatExpVoucher.expenseAllocatedTotal, 551);
+    assert.strictEqual(
+      mixedMatExpVoucher.materialAllocatedTotal +
+        mixedMatExpVoucher.expenseAllocatedTotal,
+      mixedMatExpVoucher.finalTotal,
+    );
+
+    assert.strictEqual(
+      (await rawMaterialsRepository.findById(cottonSpongeId))?.quantityOnHand,
+      30,
+    );
+
+    const projAfterMixed = await projectRepository.findByIdOrCode(mixedProjId);
+    assert.strictEqual(projAfterMixed?.totalPurchases, 2204);
+    assert.strictEqual(projAfterMixed?.totalOtherExpenses, 4091);
+    assert.strictEqual(projAfterMixed?.totalCost, 6295);
+    assert.strictEqual(projAfterMixed?.estimatedProfit, 93705);
+
+    const editExpenseOnlyRes = await jsonReq(
+      baseUrl,
+      'PATCH',
+      `/api/purchases/${mixedMatExpVoucher.id}`,
+      {
+        token: operatorToken,
+        body: {
+          discountAmount: 0,
+          otherCharges: 0,
+          lineItems: [
+            {
+              itemType: 'material',
+              materialId: cottonSpongeId,
+              quantity: 10,
+              unitPrice: 200,
+            },
+            {
+              itemType: 'expense',
+              expenseHeadId: deliveryHead.id,
+              description: 'Doorstep unloading & freight revised',
+              amount: 1000,
+            },
+          ],
+        },
+      },
+    );
+    assert.strictEqual(editExpenseOnlyRes.status, 200);
+    assert.strictEqual(
+      (await rawMaterialsRepository.findById(cottonSpongeId))?.quantityOnHand,
+      30,
+    );
+
+    const reclassifyLinesRes = await jsonReq(
+      baseUrl,
+      'PATCH',
+      `/api/purchases/${mixedMatExpVoucher.id}`,
+      {
+        token: operatorToken,
+        body: {
+          taxMode: 'bill_amount',
+          taxAmount: 360,
+          lineItems: [
+            {
+              itemType: 'expense',
+              expenseHeadId: transportHead.id,
+              description: 'Reclassified from material to transport',
+              amount: 800,
+            },
+            {
+              itemType: 'material',
+              materialId: curtainId,
+              quantity: 4,
+              unitPrice: 300,
+            },
+          ],
+        },
+      },
+    );
+    assert.strictEqual(reclassifyLinesRes.status, 200);
+    assert.strictEqual(
+      (await rawMaterialsRepository.findById(cottonSpongeId))?.quantityOnHand,
+      20,
+    );
+    assert.strictEqual(
+      (await rawMaterialsRepository.findById(curtainId))?.quantityOnHand,
+      9,
+    );
+
+    const projAfterReclassify =
+      await projectRepository.findByIdOrCode(mixedProjId);
+    assert.strictEqual(projAfterReclassify?.totalPurchases, 1416);
+    assert.strictEqual(projAfterReclassify?.totalOtherExpenses, 4484);
+
+    const cancelPureExpRes = await jsonReq(
+      baseUrl,
+      'POST',
+      `/api/purchases/${pureExpenseVoucher.id}/cancel`,
+      {
+        token: adminToken,
+        body: { reason: 'Duplicate transport bill' },
+      },
+    );
+    assert.strictEqual(cancelPureExpRes.status, 200);
+    const projAfterExpCancel =
+      await projectRepository.findByIdOrCode(mixedProjId);
+    assert.strictEqual(projAfterExpCancel?.totalPurchases, 1416);
+    assert.strictEqual(projAfterExpCancel?.totalOtherExpenses, 944);
+
+    const smuggleStockInNewMatRes = await jsonReq(
+      baseUrl,
+      'POST',
+      '/api/purchases',
+      {
+        token: operatorToken,
+        body: {
+          purchaseDate: '2026-10-29',
+          supplierName: 'Smuggle Stock Co',
+          lineItems: [
+            {
+              itemType: 'material',
+              newMaterial: {
+                name: 'Smuggled Foam',
+                unit: 'Kilogram',
+                quantityOnHand: 999,
+              },
+              quantity: 5,
+              unitPrice: 100,
+            },
+          ],
+        },
+      },
+    );
+    assert.strictEqual(smuggleStockInNewMatRes.status, 400);
+
+    const bulkNewSaveRes = await jsonReq(baseUrl, 'POST', '/api/purchases', {
+      token: operatorToken,
+      body: {
+        purchaseDate: '2026-10-29',
+        supplierName: 'Malabar Bulk Fabrics & Hardware',
+        supplierInvoiceNumber: 'MBF-777',
+        lineItems: [
+          {
+            itemType: 'material',
+            materialId: cottonSpongeId,
+            quantity: 10,
+            unitPrice: 180,
+          },
+          {
+            itemType: 'material',
+            newMaterial: {
+              name: 'Jacquard Drapery Weave',
+              unit: 'Meter',
+              category: 'Curtain',
+            },
+            quantity: 15,
+            unitPrice: 420,
+          },
+          {
+            itemType: 'material',
+            newMaterial: {
+              name: 'Chrome Curtain Rod',
+              unit: 'Piece',
+              category: 'Hardware',
+            },
+            quantity: 6,
+            unitPrice: 350,
+          },
+          {
+            itemType: 'material',
+            newMaterial: {
+              name: 'Thermal Blackout Backing',
+              unit: 'Meter',
+              category: 'Curtain',
+            },
+            quantity: 15,
+            unitPrice: 190,
+          },
+          {
+            itemType: 'expense',
+            expenseHeadId: transportHead.id,
+            description: 'Mill to workshop tempo charge',
+            amount: 650,
+          },
+        ],
+      },
+    });
+    assert.strictEqual(bulkNewSaveRes.status, 201);
+    assert.strictEqual(
+      (await rawMaterialsRepository.findById(cottonSpongeId))?.quantityOnHand,
+      30,
+    );
+    assert.strictEqual(
+      (
+        await rawMaterialsRepository.findByNormalizedName(
+          'jacquard drapery weave',
+        )
+      )?.quantityOnHand,
+      15,
+    );
+    assert.strictEqual(
+      (await rawMaterialsRepository.findByNormalizedName('chrome curtain rod'))
+        ?.quantityOnHand,
+      6,
+    );
+    assert.strictEqual(
+      (
+        await rawMaterialsRepository.findByNormalizedName(
+          'thermal blackout backing',
+        )
+      )?.quantityOnHand,
+      15,
+    );
+
+    const doubleCountGstRes = await jsonReq(baseUrl, 'POST', '/api/purchases', {
+      token: operatorToken,
+      body: {
+        purchaseDate: '2026-10-29',
+        supplierName: 'Double GST Guard Co',
+        taxMode: 'bill_amount',
+        cgstAmount: 1809.9,
+        sgstAmount: 1809.9,
+        taxAmount: 7239.6,
+        lineItems: [
+          {
+            itemType: 'material',
+            materialId: cottonSpongeId,
+            quantity: 10,
+            unitPrice: 2011,
+          },
+        ],
+      },
+    });
+    assert.strictEqual(doubleCountGstRes.status, 400);
+
+    const dummyInvoiceRes = await jsonReq(baseUrl, 'POST', '/api/purchases', {
+      token: operatorToken,
+      body: {
+        purchaseDate: '2026-10-29',
+        supplierName: 'Kakkanad Upholstery Supplies',
+        supplierInvoiceNumber: 'KUS-20110',
+        taxMode: 'bill_amount',
+        cgstAmount: 1809.9,
+        sgstAmount: 1809.9,
+        taxAmount: 3619.8,
+        printedInvoiceSummary: {
+          printedSubtotal: 20110,
+          printedTaxAmount: 3619.8,
+          printedGrandTotal: 23729.8,
+        },
+        lineItems: [
+          {
+            itemType: 'material',
+            materialId: cottonSpongeId,
+            quantity: 10,
+            unitPrice: 1500,
+          },
+          {
+            itemType: 'expense',
+            expenseHeadId: deliveryHead.id,
+            description: 'Special sofa frame crating & delivery',
+            amount: 5110,
+          },
+        ],
+      },
+    });
+    assert.strictEqual(dummyInvoiceRes.status, 201);
+    const dummySaved = dummyInvoiceRes.body.voucher as {
+      id: string;
+      subtotal: number;
+      taxMode: string;
+      taxRatePercent: number | null;
+      taxAmount: number;
+      finalTotal: number;
+      reconciliationWarnings: string[];
+    };
+    assert.strictEqual(dummySaved.subtotal, 20110);
+    assert.strictEqual(dummySaved.taxMode, 'bill_amount');
+    assert.strictEqual(dummySaved.taxRatePercent, null);
+    assert.strictEqual(dummySaved.taxAmount, 3619.8);
+    assert.strictEqual(dummySaved.finalTotal, 23729.8);
+    assert.strictEqual(dummySaved.reconciliationWarnings.length, 0);
+
+    const dummyMismatchEditRes = await jsonReq(
+      baseUrl,
+      'PATCH',
+      `/api/purchases/${dummySaved.id}`,
+      {
+        token: operatorToken,
+        body: {
+          taxMode: 'percentage',
+          taxRatePercent: 12,
+        },
+      },
+    );
+    assert.strictEqual(dummyMismatchEditRes.status, 200);
+    const dummyMismatched = dummyMismatchEditRes.body.voucher as {
+      taxMode: string;
+      taxRatePercent: number;
+      taxAmount: number;
+      finalTotal: number;
+      printedInvoiceSummary: { printedGrandTotal: number; printedTaxAmount: number };
+      reconciliationWarnings: string[];
+    };
+    assert.strictEqual(dummyMismatched.taxMode, 'percentage');
+    assert.strictEqual(dummyMismatched.taxRatePercent, 12);
+    assert.strictEqual(dummyMismatched.taxAmount, 2413.2);
+    assert.strictEqual(dummyMismatched.finalTotal, 22523.2);
+    assert.strictEqual(
+      dummyMismatched.printedInvoiceSummary.printedTaxAmount,
+      3619.8,
+    );
+    assert.strictEqual(
+      dummyMismatched.printedInvoiceSummary.printedGrandTotal,
+      23729.8,
+    );
+    assert.ok(dummyMismatched.reconciliationWarnings.length >= 2);
+
     console.log('✓ All HTTP, stock sync, project sync, attachment & RBAC tests passed.');
   } finally {
     for (const v of sharedPurchaseVoucherMemoryStore.values()) {

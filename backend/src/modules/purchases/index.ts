@@ -4,6 +4,7 @@ import {
   requireDataEntryOrAdmin,
   verifyToken,
 } from '../../middleware/auth';
+import { expenseHeadsRepository } from '../expense-heads';
 import { projectRepository, projectService } from '../projects';
 import {
   rawMaterialsRepository,
@@ -39,6 +40,7 @@ export const purchaseVoucherService = new PurchaseVoucherService(
   projectRepository,
   projectService,
   billAttachmentStorage,
+  expenseHeadsRepository,
 );
 
 export const purchaseVoucherController = new PurchaseVoucherController(

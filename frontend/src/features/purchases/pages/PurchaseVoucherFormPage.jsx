@@ -22,6 +22,7 @@ import {
   MAX_BILL_ATTACHMENTS,
   calculateVoucherPreviewTotals,
   createPurchaseVoucher,
+  fetchExpenseHeads,
   fetchPurchaseVoucherById,
   formatInrCurrency,
   formatPurchaseDate,
@@ -34,6 +35,8 @@ import {
 import { parseBillOcrText } from '../utils/billOcrParser'
 import { extractBillTextLocally } from '../utils/ocrEngine'
 import {
+  applyBulkMaterialSelection,
+  buildBulkMissingMaterialAnalysis,
   buildNewMaterialDraft,
   buildVoucherLineItemPayload,
   nextStagedMaterialTempId,
@@ -53,6 +56,7 @@ import {
   mergeLineItemsWithOcr,
   nextVoucherLineKey,
   promoteSuggestedLineItemToRows,
+  switchLineItemType,
 } from '../utils/voucherOcrMerge'
 import '../styles/purchases.css'
 
@@ -74,6 +78,13 @@ function makeInitialOcrState() {
     rawText: '',
     warnings: [],
     detectedSubtotal: null,
+    printedDiscountAmount: null,
+    printedTaxAmount: null,
+    extractedTaxRatePercent: null,
+    cgstAmount: null,
+    sgstAmount: null,
+    igstAmount: null,
+    printedOtherCharges: null,
     detectedGrandTotal: null,
     averageConfidence: 0,
   }
@@ -140,6 +151,8 @@ export function PurchaseVoucherFormPage({
     supplierInvoiceNumber: '',
     projectId: '',
     discountAmount: '',
+    taxMode: 'bill_amount',
+    taxRatePercent: '',
     taxAmount: '',
     otherCharges: '',
     notes: '',
@@ -148,8 +161,11 @@ export function PurchaseVoucherFormPage({
     createInitialHeaderFieldMeta(),
   )
   const [fieldSuggestions, setFieldSuggestions] = useState({})
+  const [printedInvoiceSummary, setPrintedInvoiceSummary] = useState(null)
 
-  const [lineItems, setLineItems] = useState(() => [createEmptyLineItem()])
+  const [lineItems, setLineItems] = useState(() => [
+    createEmptyLineItem('material'),
+  ])
   const [suggestedLineItems, setSuggestedLineItems] = useState([])
   const [uncertainLineItems, setUncertainLineItems] = useState([])
   const [dismissedFingerprints, setDismissedFingerprints] = useState([])
@@ -168,10 +184,16 @@ export function PurchaseVoucherFormPage({
   const [rawMaterials, setRawMaterials] = useState([])
   const [allCatalogMaterials, setAllCatalogMaterials] = useState([])
   const [stagedNewMaterials, setStagedNewMaterials] = useState([])
+  const [expenseHeads, setExpenseHeads] = useState([])
   const [materialModalState, setMaterialModalState] = useState(null)
   const [projects, setProjects] = useState([])
   const [isLoadingRefs, setIsLoadingRefs] = useState(true)
   const [loadError, setLoadError] = useState('')
+
+  const [bulkDraftEdits, setBulkDraftEdits] = useState({})
+  const [selectedBulkRowKeys, setSelectedBulkRowKeys] = useState([])
+  const [bulkRowErrors, setBulkRowErrors] = useState({})
+  const [bulkFeedbackError, setBulkFeedbackError] = useState('')
 
   const [ocrState, setOcrState] = useState(() => makeInitialOcrState())
   const [showRawOcrText, setShowRawOcrText] = useState(false)
@@ -188,6 +210,8 @@ export function PurchaseVoucherFormPage({
   const formRef = useRef(null)
   const pendingFilesRef = useRef(pendingFiles)
   const rawMaterialsRef = useRef(rawMaterials)
+  const allCatalogMaterialsRef = useRef(allCatalogMaterials)
+  const stagedNewMaterialsRef = useRef(stagedNewMaterials)
   const latestFormSnapshotRef = useRef({
     headerValues,
     fieldMeta,
@@ -200,6 +224,8 @@ export function PurchaseVoucherFormPage({
   useEffect(() => {
     pendingFilesRef.current = pendingFiles
     rawMaterialsRef.current = rawMaterials
+    allCatalogMaterialsRef.current = allCatalogMaterials
+    stagedNewMaterialsRef.current = stagedNewMaterials
     latestFormSnapshotRef.current = {
       headerValues,
       fieldMeta,
@@ -211,6 +237,8 @@ export function PurchaseVoucherFormPage({
   }, [
     pendingFiles,
     rawMaterials,
+    allCatalogMaterials,
+    stagedNewMaterials,
     headerValues,
     fieldMeta,
     fieldSuggestions,
@@ -293,6 +321,9 @@ export function PurchaseVoucherFormPage({
     const loadPromises = [
       loadAllCatalogMaterials(adminAccess),
       fetchProjects({ page: 1, limit: 100 }),
+      fetchExpenseHeads({ includeInactive: isEditMode, limit: 100 }).catch(
+        () => ({ expenseHeads: [] }),
+      ),
     ]
 
     if (isEditMode && voucherIdentifier) {
@@ -300,12 +331,15 @@ export function PurchaseVoucherFormPage({
     }
 
     Promise.all(loadPromises)
-      .then(([allMats, projRes, voucherRes]) => {
+      .then(([allMats, projRes, expRes, voucherRes]) => {
         if (cancelled) return
 
         const catalogList = Array.isArray(allMats) ? allMats : []
         const activeMats = catalogList.filter((m) => m.isActive !== false)
         const loadedProjects = projRes?.projects || []
+        const loadedHeads = Array.isArray(expRes?.expenseHeads)
+          ? expRes.expenseHeads
+          : []
 
         if (isEditMode && voucherRes?.voucher) {
           const v = voucherRes.voucher
@@ -322,17 +356,41 @@ export function PurchaseVoucherFormPage({
             projectId: v.projectRecordId || '',
             discountAmount:
               v.discountAmount > 0 ? String(v.discountAmount) : '',
+            taxMode: v.taxMode === 'percentage' ? 'percentage' : 'bill_amount',
+            taxRatePercent:
+              v.taxRatePercent !== null && v.taxRatePercent !== undefined
+                ? String(v.taxRatePercent)
+                : '',
             taxAmount: v.taxAmount > 0 ? String(v.taxAmount) : '',
             otherCharges: v.otherCharges > 0 ? String(v.otherCharges) : '',
             notes: v.notes || '',
           })
+          setPrintedInvoiceSummary(v.printedInvoiceSummary || null)
           setFieldMeta(createSavedHeaderFieldMeta(v))
           setExistingAttachments(v.attachments || [])
 
           const existingMatMap = new Map(activeMats.map((m) => [m.id, m]))
           const fullCatalogMap = new Map(catalogList.map((m) => [m.id, m]))
+          const headMap = new Map(
+            loadedHeads
+              .filter((h) => h.isActive !== false)
+              .map((h) => [h.id, h]),
+          )
+          const fullHeadMap = new Map(loadedHeads.map((h) => [h.id, h]))
+
           v.lineItems.forEach((li) => {
-            if (li.materialId && !existingMatMap.has(li.materialId)) {
+            if (li.itemType === 'expense') {
+              if (li.expenseHeadId && !headMap.has(li.expenseHeadId)) {
+                const fallbackHead = fullHeadMap.get(li.expenseHeadId) || {
+                  id: li.expenseHeadId,
+                  name: li.expenseHeadName || li.description || 'Expense Head',
+                  category: li.expenseHeadCategory || 'General',
+                  description: '',
+                  isActive: false,
+                }
+                headMap.set(li.expenseHeadId, fallbackHead)
+              }
+            } else if (li.materialId && !existingMatMap.has(li.materialId)) {
               const fallbackMat = fullCatalogMap.get(li.materialId) || {
                 id: li.materialId,
                 name: li.materialName,
@@ -345,17 +403,20 @@ export function PurchaseVoucherFormPage({
               fullCatalogMap.set(li.materialId, fallbackMat)
             }
           })
+
           setRawMaterials(Array.from(existingMatMap.values()))
           setAllCatalogMaterials(Array.from(fullCatalogMap.values()))
+          setExpenseHeads(Array.from(headMap.values()))
 
           setLineItems(
             v.lineItems.length > 0
               ? v.lineItems.map((li) => createSavedLineItem(li))
-              : [createEmptyLineItem()],
+              : [createEmptyLineItem('material')],
           )
         } else {
           setRawMaterials(activeMats)
           setAllCatalogMaterials(catalogList)
+          setExpenseHeads(loadedHeads.filter((h) => h.isActive !== false))
         }
 
         setProjects(loadedProjects)
@@ -378,26 +439,44 @@ export function PurchaseVoucherFormPage({
     }
   }, [isEditMode, voucherIdentifier, adminAccess])
 
-  const materialById = useMemo(() => {
-    const map = new Map()
-    rawMaterials.forEach((mat) => {
-      map.set(mat.id, mat)
-    })
-    stagedNewMaterials.forEach((staged) => {
-      map.set(staged.tempId, {
-        id: staged.tempId,
-        tempId: staged.tempId,
-        name: staged.name,
-        category: staged.category || null,
-        unit: staged.unit,
-        description: staged.description || '',
-        quantityOnHand: 0,
-        isActive: true,
-        isStagedNew: true,
+  const buildMaterialMapWithStaged = useCallback(
+    (stagedList) => {
+      const map = new Map()
+      rawMaterials.forEach((mat) => {
+        map.set(mat.id, mat)
       })
+      stagedList.forEach((staged) => {
+        map.set(staged.tempId, {
+          id: staged.tempId,
+          tempId: staged.tempId,
+          name: staged.name,
+          category: staged.category || 'General',
+          unit: staged.unit,
+          description: staged.description || '',
+          quantityOnHand: 0,
+          isActive: true,
+          isStagedNew: true,
+        })
+      })
+      return map
+    },
+    [rawMaterials],
+  )
+
+  const materialById = useMemo(
+    () => buildMaterialMapWithStaged(stagedNewMaterials),
+    [buildMaterialMapWithStaged, stagedNewMaterials],
+  )
+
+  const expenseHeadById = useMemo(() => {
+    const map = new Map()
+    expenseHeads.forEach((head) => {
+      if (head?.id) {
+        map.set(head.id, head)
+      }
     })
     return map
-  }, [rawMaterials, stagedNewMaterials])
+  }, [expenseHeads])
 
   const materialOptions = useMemo(() => {
     const stagedOpts = stagedNewMaterials.map((mat) => {
@@ -407,7 +486,7 @@ export function PurchaseVoucherFormPage({
         label: shortUnit ? `${mat.name} (${shortUnit})` : mat.name,
         badge: 'New',
         searchText: `${mat.name} ${mat.unit} ${shortUnit || ''} ${mat.category || ''} new`,
-        description: `${mat.category || 'Uncategorized'} · Created when voucher is saved`,
+        description: `${mat.category || 'General'} · Created at 0 stock + purchase qty on save`,
       }
     })
 
@@ -430,12 +509,26 @@ export function PurchaseVoucherFormPage({
     return [...stagedOpts, ...catalogOpts]
   }, [rawMaterials, stagedNewMaterials])
 
+  const expenseHeadOptions = useMemo(
+    () =>
+      expenseHeads.map((head) => ({
+        value: head.id,
+        label: head.name,
+        searchText: `${head.name} ${head.category || ''} ${head.description || ''}`,
+        description: `${head.category || 'General'} · Non-stock expense${
+          head.isActive === false ? ' · Inactive' : ''
+        }`,
+      })),
+    [expenseHeads],
+  )
+
   const projectOptions = useMemo(() => {
     const base = [
       {
         value: '',
         label: 'None — General Workshop Stock',
-        description: 'Material added to general stock without a specific project',
+        description:
+          'Materials added to general stock without a specific project',
       },
     ]
     const mapped = projects.map((proj) => {
@@ -457,16 +550,45 @@ export function PurchaseVoucherFormPage({
     () =>
       calculateVoucherPreviewTotals(lineItems, {
         discountAmount: headerValues.discountAmount,
+        taxMode: headerValues.taxMode,
+        taxRatePercent: headerValues.taxRatePercent,
         taxAmount: headerValues.taxAmount,
         otherCharges: headerValues.otherCharges,
       }),
     [
       lineItems,
       headerValues.discountAmount,
+      headerValues.taxMode,
+      headerValues.taxRatePercent,
       headerValues.taxAmount,
       headerValues.otherCharges,
     ],
   )
+
+  const bulkAnalysis = useMemo(() => {
+    if (!hasUsedOcr && uncertainLineItems.length === 0) {
+      const hasAnyOcrExtractedRow = lineItems.some((r) =>
+        Boolean(r.extractedDescription),
+      )
+      if (!hasAnyOcrExtractedRow) {
+        return null
+      }
+    }
+    return buildBulkMissingMaterialAnalysis({
+      lineItems,
+      uncertainLineItems,
+      existingMaterials: allCatalogMaterials,
+      stagedNewMaterials,
+      draftEditsByRowKey: bulkDraftEdits,
+    })
+  }, [
+    hasUsedOcr,
+    lineItems,
+    uncertainLineItems,
+    allCatalogMaterials,
+    stagedNewMaterials,
+    bulkDraftEdits,
+  ])
 
   const retainedExistingAttachments = useMemo(
     () =>
@@ -581,19 +703,67 @@ export function PurchaseVoucherFormPage({
       setSuggestedLineItems(linesMerged.suggestedLineItems)
       setHasUsedOcr(true)
 
-      if (
+      if (parsed.printedInvoiceSummary) {
+        setPrintedInvoiceSummary((prev) => {
+          if (!isAdditionalBill || !prev) {
+            return parsed.printedInvoiceSummary
+          }
+          return {
+            printedSubtotal:
+              parsed.printedInvoiceSummary.printedSubtotal ??
+              prev.printedSubtotal,
+            printedDiscountAmount:
+              parsed.printedInvoiceSummary.printedDiscountAmount ??
+              prev.printedDiscountAmount,
+            printedTaxAmount:
+              parsed.printedInvoiceSummary.printedTaxAmount ??
+              prev.printedTaxAmount,
+            printedTaxRatePercent:
+              parsed.printedInvoiceSummary.printedTaxRatePercent ??
+              prev.printedTaxRatePercent,
+            printedCgstAmount:
+              parsed.printedInvoiceSummary.printedCgstAmount ??
+              prev.printedCgstAmount,
+            printedSgstAmount:
+              parsed.printedInvoiceSummary.printedSgstAmount ??
+              prev.printedSgstAmount,
+            printedIgstAmount:
+              parsed.printedInvoiceSummary.printedIgstAmount ??
+              prev.printedIgstAmount,
+            printedOtherCharges:
+              parsed.printedInvoiceSummary.printedOtherCharges ??
+              prev.printedOtherCharges,
+            printedGrandTotal:
+              parsed.printedInvoiceSummary.printedGrandTotal ??
+              prev.printedGrandTotal,
+          }
+        })
+      }
+
+      const nextUncertain =
         Array.isArray(parsed.uncertainLineItems) &&
         parsed.uncertainLineItems.length > 0
-      ) {
-        setUncertainLineItems(
-          parsed.uncertainLineItems.map((uRow) => ({
-            ...uRow,
-            uncertainKey: nextUncertainKey(),
-          })),
-        )
-      } else {
-        setUncertainLineItems([])
-      }
+          ? parsed.uncertainLineItems.map((uRow) => ({
+              ...uRow,
+              uncertainKey: nextUncertainKey(),
+            }))
+          : []
+      setUncertainLineItems(nextUncertain)
+
+      const initialBulk = buildBulkMissingMaterialAnalysis({
+        lineItems: linesMerged.lineItems,
+        uncertainLineItems: nextUncertain,
+        existingMaterials: allCatalogMaterialsRef.current,
+        stagedNewMaterials: stagedNewMaterialsRef.current,
+        draftEditsByRowKey: {},
+      })
+      setSelectedBulkRowKeys(
+        initialBulk.proposedItems
+          .filter((p) => p.canStage)
+          .map((p) => p.rowKey),
+      )
+      setBulkRowErrors({})
+      setBulkFeedbackError('')
 
       const preservedCount = headerMerged.preservedFields.length
       const hasRowConflicts = linesMerged.lineItems.some(
@@ -679,6 +849,13 @@ export function PurchaseVoucherFormPage({
           rawText: parsed.normalizedText,
           warnings: parsed.warnings,
           detectedSubtotal: parsed.detectedSubtotal,
+          printedDiscountAmount: parsed.printedDiscountAmount ?? null,
+          printedTaxAmount: parsed.printedTaxAmount ?? null,
+          extractedTaxRatePercent: parsed.extractedTaxRatePercent ?? null,
+          cgstAmount: parsed.cgstAmount ?? null,
+          sgstAmount: parsed.sgstAmount ?? null,
+          igstAmount: parsed.igstAmount ?? null,
+          printedOtherCharges: parsed.printedOtherCharges ?? null,
           detectedGrandTotal: parsed.detectedGrandTotal,
           averageConfidence: extraction.averageConfidence,
         })
@@ -815,18 +992,52 @@ export function PurchaseVoucherFormPage({
     })
   }
 
-  const updateLineItem = (rowKey, field, value) => {
-    setLineItems((prev) =>
-      prev.map((row) =>
-        row.rowKey === rowKey ? applyManualLineItemEdit(row, field, value) : row,
-      ),
-    )
+  const clearLineRowErrors = useCallback((rowIndex) => {
     setFieldErrors((prev) => {
-      if (!Object.keys(prev).length) return prev
       const next = { ...prev }
       delete next.lineItems
+      if (rowIndex >= 0) {
+        Object.keys(next).forEach((errKey) => {
+          if (errKey.startsWith(`lineItems[${rowIndex}]`)) {
+            delete next[errKey]
+          }
+        })
+      }
       return next
     })
+  }, [])
+
+  const updateLineItem = (rowKey, field, value) => {
+    let targetIdx = -1
+    setLineItems((prev) =>
+      prev.map((row, idx) => {
+        if (row.rowKey !== rowKey) return row
+        targetIdx = idx
+        if (field === 'expensePricingMode') {
+          return {
+            ...row,
+            expensePricingMode: value,
+          }
+        }
+        return applyManualLineItemEdit(row, field, value)
+      }),
+    )
+    clearLineRowErrors(targetIdx)
+  }
+
+  const handleSwitchLineItemType = (rowKey, targetType) => {
+    let targetIdx = -1
+    setLineItems((prev) =>
+      prev.map((row, idx) => {
+        if (row.rowKey !== rowKey) return row
+        targetIdx = idx
+        return switchLineItemType(row, targetType)
+      }),
+    )
+    if (targetType === 'expense') {
+      setSelectedBulkRowKeys((prev) => prev.filter((k) => k !== rowKey))
+    }
+    clearLineRowErrors(targetIdx)
   }
 
   const handleAcceptRowSuggestion = (rowKey, fieldKey) => {
@@ -845,23 +1056,108 @@ export function PurchaseVoucherFormPage({
     )
   }
 
-  const handleAddLineRow = () => {
-    setLineItems((prev) => [...prev, createEmptyLineItem()])
+  const handleAddLineRow = (itemType = 'material') => {
+    setLineItems((prev) => [...prev, createEmptyLineItem(itemType)])
   }
 
-  const clearLineRowErrors = (rowIndex) => {
+  const handleToggleSelectBulkRow = (rowKey) => {
+    setSelectedBulkRowKeys((prev) =>
+      prev.includes(rowKey)
+        ? prev.filter((k) => k !== rowKey)
+        : [...prev, rowKey],
+    )
+    setBulkFeedbackError('')
+  }
+
+  const handleSelectAllBulkProposed = () => {
+    if (!bulkAnalysis) return
+    setSelectedBulkRowKeys(bulkAnalysis.proposedItems.map((p) => p.rowKey))
+    setBulkFeedbackError('')
+  }
+
+  const handleClearSelectedBulkProposed = () => {
+    setSelectedBulkRowKeys([])
+    setBulkFeedbackError('')
+  }
+
+  const handleChangeBulkDraftField = (rowKey, field, value) => {
+    setBulkDraftEdits((prev) => ({
+      ...prev,
+      [rowKey]: {
+        ...(prev[rowKey] || {}),
+        [field]: value,
+      },
+    }))
+    setSelectedBulkRowKeys((prev) =>
+      prev.includes(rowKey) ? prev : [...prev, rowKey],
+    )
+    setBulkRowErrors((prev) => {
+      if (!prev[rowKey]) return prev
+      const next = { ...prev }
+      delete next[rowKey]
+      return next
+    })
+    setBulkFeedbackError('')
+  }
+
+  const handleLinkBulkExistingMaterial = (rowKey, materialId) => {
+    let matchedIdx = -1
+    setLineItems((prev) =>
+      prev.map((row, idx) => {
+        if (row.rowKey !== rowKey) return row
+        matchedIdx = idx
+        const edited = applyManualLineItemEdit(row, 'materialId', materialId)
+        return {
+          ...edited,
+          fieldMeta: {
+            ...(edited.fieldMeta || {}),
+            materialId: createFieldProvenance('manual', {
+              touched: true,
+              confirmed: true,
+            }),
+          },
+        }
+      }),
+    )
+    setSelectedBulkRowKeys((prev) => prev.filter((k) => k !== rowKey))
+    clearLineRowErrors(matchedIdx)
+  }
+
+  const executeBulkStaging = () => {
+    const result = applyBulkMaterialSelection({
+      lineItems,
+      selectedRowKeys: selectedBulkRowKeys,
+      analysis: bulkAnalysis,
+      existingMaterials: allCatalogMaterials,
+      stagedNewMaterials,
+      draftEditsByRowKey: bulkDraftEdits,
+    })
+
+    if (!result.ok) {
+      setBulkRowErrors(result.rowErrors || {})
+      setBulkFeedbackError(result.message || 'Check proposed material details.')
+      return null
+    }
+
+    setStagedNewMaterials(result.nextStagedNewMaterials)
+    setLineItems(result.nextLineItems)
+    setSelectedBulkRowKeys([])
+    setBulkRowErrors({})
+    setBulkFeedbackError('')
     setFieldErrors((prev) => {
       const next = { ...prev }
       delete next.lineItems
-      if (rowIndex >= 0) {
-        Object.keys(next).forEach((errKey) => {
-          if (errKey.startsWith(`lineItems[${rowIndex}]`)) {
-            delete next[errKey]
-          }
-        })
-      }
+      Object.keys(next).forEach((k) => {
+        if (k.startsWith('lineItems[')) delete next[k]
+      })
       return next
     })
+
+    return result
+  }
+
+  const handleConfirmSelectedBulkMaterials = () => {
+    executeBulkStaging()
   }
 
   const handleOpenCreateMaterialModal = (rowKey, initialSearchName = '') => {
@@ -869,7 +1165,7 @@ export function PurchaseVoucherFormPage({
     let targetRow
 
     if (!resolvedRowKey) {
-      const freshRow = createEmptyLineItem()
+      const freshRow = createEmptyLineItem('material')
       resolvedRowKey = freshRow.rowKey
       targetRow = freshRow
       setLineItems((prev) => [...prev, freshRow])
@@ -967,6 +1263,9 @@ export function PurchaseVoucherFormPage({
       }),
     )
 
+    setSelectedBulkRowKeys((prev) =>
+      prev.filter((k) => k !== modalSnapshot.targetRowKey),
+    )
     clearLineRowErrors(matchedRowIdx)
     setMaterialModalState(null)
   }
@@ -1005,11 +1304,15 @@ export function PurchaseVoucherFormPage({
       }),
     )
 
+    setSelectedBulkRowKeys((prev) =>
+      prev.filter((k) => k !== modalSnapshot.targetRowKey),
+    )
     clearLineRowErrors(matchedRowIdx)
     setMaterialModalState(null)
   }
 
   const handleRemoveLineRow = (rowKey) => {
+    setSelectedBulkRowKeys((prev) => prev.filter((k) => k !== rowKey))
     setLineItems((prev) => {
       const target = prev.find((r) => r.rowKey === rowKey)
       if (target?.ocrFingerprint) {
@@ -1020,13 +1323,13 @@ export function PurchaseVoucherFormPage({
         )
       }
       if (prev.length <= 1) {
-        return [createEmptyLineItem()]
+        return [createEmptyLineItem('material')]
       }
       return prev.filter((row) => row.rowKey !== rowKey)
     })
   }
 
-  const handleAddSuggestedLineItem = (suggestionKey) => {
+  const handleAddSuggestedLineItem = (suggestionKey, preferredType = '') => {
     const target = suggestedLineItems.find(
       (item) => item.suggestionKey === suggestionKey,
     )
@@ -1039,7 +1342,9 @@ export function PurchaseVoucherFormPage({
         prev.filter((fp) => fp !== target.ocrFingerprint),
       )
     }
-    setLineItems((prev) => promoteSuggestedLineItemToRows(prev, target))
+    setLineItems((prev) =>
+      promoteSuggestedLineItemToRows(prev, target, preferredType),
+    )
   }
 
   const handleAddAllSuggestedLineItems = () => {
@@ -1081,7 +1386,7 @@ export function PurchaseVoucherFormPage({
     setSuggestedLineItems([])
   }
 
-  const handlePromoteUncertainRow = (uncertainKey) => {
+  const handlePromoteUncertainRow = (uncertainKey, preferredType = '') => {
     const target = uncertainLineItems.find(
       (item) => item.uncertainKey === uncertainKey,
     )
@@ -1108,20 +1413,51 @@ export function PurchaseVoucherFormPage({
       amtNum > 0 &&
       Math.abs(qtyNum * priceNum - amtNum) <= Math.max(2, amtNum * 0.02)
 
+    const chosenType =
+      preferredType === 'expense'
+        ? 'expense'
+        : preferredType === 'material'
+          ? 'material'
+          : ''
+
+    const descText = target.extractedDescription || target.rawRowText || ''
+    const consistentAmt = isMathConsistent
+      ? String(Math.round((qtyNum * priceNum + Number.EPSILON) * 100) / 100)
+      : Number.isFinite(amtNum) && amtNum > 0
+        ? String(amtNum)
+        : ''
+
     const promotedRow = {
-      ...createEmptyLineItem(),
+      ...createEmptyLineItem(chosenType || 'material'),
       rowKey: nextVoucherLineKey(),
+      itemType: chosenType,
       materialId: '',
+      expenseHeadId: '',
+      description: descText,
+      amount: consistentAmt,
+      unit: target.detectedUnit || '',
       quantity: isMathConsistent ? String(target.quantity) : '',
       unitPrice: isMathConsistent ? String(target.unitPrice) : '',
       remarks: '',
-      extractedDescription:
-        target.extractedDescription || target.rawRowText || '',
+      extractedDescription: descText,
       detectedUnit: target.detectedUnit || '',
       suggestions: target.suggestions || [],
       needsReview: true,
       fieldMeta: {
+        itemType: chosenType
+          ? createFieldProvenance('manual', { touched: true, confirmed: true })
+          : createFieldProvenance('initial'),
         materialId: createFieldProvenance('initial'),
+        expenseHeadId: createFieldProvenance('initial'),
+        description: descText
+          ? createFieldProvenance('ocr')
+          : createFieldProvenance('initial'),
+        amount: consistentAmt
+          ? createFieldProvenance('ocr')
+          : createFieldProvenance('initial'),
+        unit: target.detectedUnit
+          ? createFieldProvenance('ocr')
+          : createFieldProvenance('initial'),
         quantity: isMathConsistent
           ? createFieldProvenance('ocr')
           : createFieldProvenance('initial'),
@@ -1182,7 +1518,7 @@ export function PurchaseVoucherFormPage({
     onNavigate?.(destinationPath)
   }
 
-  const validateClientForm = () => {
+  const validateClientForm = (rowsToValidate, totalsToValidate) => {
     const errors = {}
 
     if (
@@ -1198,24 +1534,62 @@ export function PurchaseVoucherFormPage({
       errors.supplierName = 'Supplier name cannot exceed 200 characters.'
     }
 
-    if (!Array.isArray(lineItems) || lineItems.length === 0) {
-      errors.lineItems = 'Add at least one material.'
+    if (!Array.isArray(rowsToValidate) || rowsToValidate.length === 0) {
+      errors.lineItems = 'Add at least one purchase item.'
     } else {
-      lineItems.forEach((row, idx) => {
+      rowsToValidate.forEach((row, idx) => {
         const prefix = `lineItems[${idx}]`
+
+        if (row.itemType !== 'material' && row.itemType !== 'expense') {
+          errors[`${prefix}.itemType`] =
+            'Select Raw Material or Other Expense for this item.'
+          return
+        }
+
+        if (row.itemType === 'expense') {
+          if (!row.expenseHeadId) {
+            errors[`${prefix}.expenseHeadId`] = 'Select an expense head.'
+          }
+
+          const head = expenseHeadById.get(row.expenseHeadId)
+          const effectiveDesc = String(
+            row.description || row.extractedDescription || head?.name || '',
+          ).trim()
+          if (!effectiveDesc) {
+            errors[`${prefix}.description`] = 'Enter an expense description.'
+          }
+
+          if (row.expensePricingMode === 'qty_rate') {
+            const qty = Number(row.quantity)
+            if (String(row.quantity ?? '').trim() === '' || !Number.isFinite(qty) || qty <= 0) {
+              errors[`${prefix}.quantity`] = 'Must be > 0.'
+            }
+            const price = Number(row.unitPrice)
+            if (String(row.unitPrice ?? '').trim() === '' || !Number.isFinite(price) || price <= 0) {
+              errors[`${prefix}.unitPrice`] = 'Must be > 0.'
+            }
+          } else {
+            const amt = Number(row.amount)
+            if (String(row.amount ?? '').trim() === '' || !Number.isFinite(amt) || amt <= 0) {
+              errors[`${prefix}.amount`] = 'Enter an amount > 0.'
+            }
+          }
+          return
+        }
+
         if (!row.materialId) {
-          errors[`${prefix}.materialId`] = 'Select a material.'
+          errors[`${prefix}.materialId`] = 'Select or create a material.'
         }
 
         const qty = Number(row.quantity)
-        if (String(row.quantity).trim() === '' || !Number.isFinite(qty)) {
+        if (String(row.quantity ?? '').trim() === '' || !Number.isFinite(qty)) {
           errors[`${prefix}.quantity`] = 'Enter quantity.'
         } else if (qty <= 0) {
           errors[`${prefix}.quantity`] = 'Must be > 0.'
         }
 
         const price = Number(row.unitPrice)
-        if (String(row.unitPrice).trim() === '' || !Number.isFinite(price)) {
+        if (String(row.unitPrice ?? '').trim() === '' || !Number.isFinite(price)) {
           errors[`${prefix}.unitPrice`] = 'Enter unit price.'
         } else if (price <= 0) {
           errors[`${prefix}.unitPrice`] = 'Must be > 0.'
@@ -1224,31 +1598,57 @@ export function PurchaseVoucherFormPage({
     }
 
     const checkCharge = (val, key, label) => {
-      if (String(val).trim() === '') return
+      if (String(val ?? '').trim() === '') return
       const num = Number(val)
       if (!Number.isFinite(num) || num < 0) {
         errors[key] = `${label} must be 0 or greater.`
       }
     }
     checkCharge(headerValues.discountAmount, 'discountAmount', 'Discount')
-    checkCharge(headerValues.taxAmount, 'taxAmount', 'Tax')
     checkCharge(headerValues.otherCharges, 'otherCharges', 'Other charges')
 
-    if (previewTotals.discountExceedsSubtotal) {
+    if (headerValues.taxMode === 'percentage') {
+      const rawPct = String(headerValues.taxRatePercent ?? '').trim()
+      const pctNum = Number(rawPct)
+      if (rawPct === '' || !Number.isFinite(pctNum) || pctNum < 0 || pctNum > 100) {
+        errors.taxRatePercent = 'Enter a GST rate between 0% and 100%.'
+      }
+    } else {
+      checkCharge(headerValues.taxAmount, 'taxAmount', 'Tax')
+    }
+
+    if (totalsToValidate.discountExceedsSubtotal) {
       errors.discountAmount = 'Discount cannot exceed subtotal.'
     }
 
     return errors
   }
 
-  const handleSubmit = async (event) => {
-    event.preventDefault()
+  const submitVoucherInternal = async ({
+    overrideLineItems = null,
+    overrideStagedMaterials = null,
+  } = {}) => {
     if (isSaving || ocrState.isRunning) {
       return
     }
 
+    const activeRows = overrideLineItems || lineItems
+    const activeStaged = overrideStagedMaterials || stagedNewMaterials
+    const activeMatMap = overrideStagedMaterials
+      ? buildMaterialMapWithStaged(activeStaged)
+      : materialById
+    const activeTotals = overrideLineItems
+      ? calculateVoucherPreviewTotals(activeRows, {
+          discountAmount: headerValues.discountAmount,
+          taxMode: headerValues.taxMode,
+          taxRatePercent: headerValues.taxRatePercent,
+          taxAmount: headerValues.taxAmount,
+          otherCharges: headerValues.otherCharges,
+        })
+      : previewTotals
+
     setSubmitError('')
-    const validationErrors = validateClientForm()
+    const validationErrors = validateClientForm(activeRows, activeTotals)
     setFieldErrors(validationErrors)
 
     if (Object.keys(validationErrors).length > 0) {
@@ -1267,25 +1667,35 @@ export function PurchaseVoucherFormPage({
         ? 'upload_bill'
         : existingVoucher?.entryMethod || 'manual'
 
+    const isPctMode = headerValues.taxMode === 'percentage'
+    const resolvedBillTax =
+      headerValues.taxAmount === '' ? 0 : Number(headerValues.taxAmount)
+
     const payload = {
       purchaseDate: headerValues.purchaseDate,
       supplierName: headerValues.supplierName.trim(),
       supplierInvoiceNumber: headerValues.supplierInvoiceNumber.trim(),
       projectId: headerValues.projectId || null,
       entryMethod: resolvedEntryMethod,
-      lineItems: lineItems.map((row) =>
-        buildVoucherLineItemPayload(row, materialById),
+      lineItems: activeRows.map((row) =>
+        buildVoucherLineItemPayload(row, activeMatMap, expenseHeadById),
       ),
       discountAmount:
         headerValues.discountAmount === ''
           ? 0
           : Number(headerValues.discountAmount),
-      taxAmount:
-        headerValues.taxAmount === '' ? 0 : Number(headerValues.taxAmount),
+      taxMode: isPctMode ? 'percentage' : 'bill_amount',
+      taxRatePercent: isPctMode
+        ? Number(headerValues.taxRatePercent)
+        : printedInvoiceSummary?.printedTaxRatePercent ?? null,
+      taxAmount: isPctMode ? activeTotals.percentageTax : resolvedBillTax,
       otherCharges:
         headerValues.otherCharges === ''
           ? 0
           : Number(headerValues.otherCharges),
+      ...(printedInvoiceSummary
+        ? { printedInvoiceSummary }
+        : {}),
       notes: headerValues.notes.trim(),
     }
 
@@ -1341,6 +1751,40 @@ export function PurchaseVoucherFormPage({
       setUploadProgress(0)
     }
   }
+
+  const handleConfirmSelectedBulkAndSaveVoucher = async () => {
+    const stagedResult = executeBulkStaging()
+    if (!stagedResult) {
+      return
+    }
+    await submitVoucherInternal({
+      overrideLineItems: stagedResult.nextLineItems,
+      overrideStagedMaterials: stagedResult.nextStagedNewMaterials,
+    })
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    await submitVoucherInternal()
+  }
+
+  const itemCountSummaryLabel = useMemo(() => {
+    const matCount = lineItems.filter((r) => r.itemType === 'material').length
+    const expCount = lineItems.filter((r) => r.itemType === 'expense').length
+    const unclassCount = lineItems.length - matCount - expCount
+
+    const parts = []
+    if (matCount > 0) {
+      parts.push(`${matCount} ${matCount === 1 ? 'material' : 'materials'}`)
+    }
+    if (expCount > 0) {
+      parts.push(`${expCount} ${expCount === 1 ? 'expense' : 'expenses'}`)
+    }
+    if (unclassCount > 0) {
+      parts.push(`${unclassCount} unclassified`)
+    }
+    return parts.join(' · ') || '0 items'
+  }, [lineItems])
 
   if (authRequired) {
     return (
@@ -1666,10 +2110,28 @@ export function PurchaseVoucherFormPage({
                 stagedNewMaterials={stagedNewMaterials}
                 materialById={materialById}
                 materialOptions={materialOptions}
+                expenseHeadById={expenseHeadById}
+                expenseHeadOptions={expenseHeadOptions}
+                bulkAnalysis={bulkAnalysis}
+                selectedBulkRowKeys={selectedBulkRowKeys}
+                bulkRowErrors={bulkRowErrors}
+                bulkFeedbackError={bulkFeedbackError}
+                onToggleSelectBulkRow={handleToggleSelectBulkRow}
+                onSelectAllBulkProposed={handleSelectAllBulkProposed}
+                onClearSelectedBulkProposed={handleClearSelectedBulkProposed}
+                onChangeBulkDraftField={handleChangeBulkDraftField}
+                onLinkBulkExistingMaterial={handleLinkBulkExistingMaterial}
+                onConfirmSelectedBulkMaterials={
+                  handleConfirmSelectedBulkMaterials
+                }
+                onConfirmSelectedBulkAndSaveVoucher={
+                  handleConfirmSelectedBulkAndSaveVoucher
+                }
                 fieldErrors={fieldErrors}
                 isSaving={isSaving}
                 onAddLineRow={handleAddLineRow}
                 onUpdateLineItem={updateLineItem}
+                onSwitchLineItemType={handleSwitchLineItemType}
                 onAcceptRowSuggestion={handleAcceptRowSuggestion}
                 onDismissRowSuggestion={handleDismissRowSuggestion}
                 onRemoveLineRow={handleRemoveLineRow}
@@ -1696,12 +2158,22 @@ export function PurchaseVoucherFormPage({
                 onDiscountChange={(val) =>
                   handleHeaderFieldChange('discountAmount', val)
                 }
+                taxMode={headerValues.taxMode}
+                onTaxModeChange={(val) =>
+                  handleHeaderFieldChange('taxMode', val)
+                }
+                taxRatePercent={headerValues.taxRatePercent}
+                onTaxRatePercentChange={(val) =>
+                  handleHeaderFieldChange('taxRatePercent', val)
+                }
                 taxAmount={headerValues.taxAmount}
                 onTaxChange={(val) => handleHeaderFieldChange('taxAmount', val)}
                 otherCharges={headerValues.otherCharges}
                 onOtherChargesChange={(val) =>
                   handleHeaderFieldChange('otherCharges', val)
                 }
+                printedInvoiceSummary={printedInvoiceSummary}
+                hasSelectedProject={Boolean(headerValues.projectId)}
                 fieldMeta={fieldMeta}
                 fieldSuggestions={fieldSuggestions}
                 onAcceptFieldSuggestion={handleAcceptHeaderSuggestion}
@@ -1743,10 +2215,7 @@ export function PurchaseVoucherFormPage({
 
           <footer className="pv-sticky-bar">
             <div className="pv-sticky-bar__summary">
-              <span>
-                {lineItems.length}{' '}
-                {lineItems.length === 1 ? 'material' : 'materials'}
-              </span>
+              <span>{itemCountSummaryLabel}</span>
               <strong>{formatInrCurrency(previewTotals.finalTotal)}</strong>
             </div>
 
@@ -1771,9 +2240,7 @@ export function PurchaseVoucherFormPage({
                 disabled={isSaving || ocrState.isRunning}
               >
                 {isSaving
-                  ? isEditMode
-                    ? 'Saving...'
-                    : 'Saving...'
+                  ? 'Saving...'
                   : isEditMode
                     ? 'Save Changes'
                     : 'Save Purchase Voucher'}

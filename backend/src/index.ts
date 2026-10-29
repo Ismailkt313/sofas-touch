@@ -8,6 +8,7 @@ import userRouter from './modules/users';
 import adminRoutes from './routes/adminRoutes';
 import projectRoutes from './routes/projectRoutes';
 import rawMaterialRoutes from './routes/rawMaterialRoutes';
+import expenseHeadRoutes from './routes/expenseHeadRoutes';
 import purchaseRoutes from './routes/purchaseRoutes';
 
 const app = express();
@@ -67,6 +68,7 @@ app.use('/api/users', userRouter);
 app.use('/api/admin', adminRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/raw-materials', rawMaterialRoutes);
+app.use('/api/expense-heads', expenseHeadRoutes);
 app.use('/api/purchases', purchaseRoutes);
 
 app.use((_req: Request, res: Response) => {

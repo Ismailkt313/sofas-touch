@@ -1254,11 +1254,37 @@ function extractLastMonetaryAmountOnRow(rowText, { allowUnformattedSixDigit = fa
   return null
 }
 
+function extractExplicitTaxRateFromSegment(segment) {
+  const clean = String(segment || '').trim()
+  if (!clean) {
+    return null
+  }
+  const match = /(?:@|\(|\s)(\d{1,2}(?:\.\d{1,2})?)\s*%/.exec(clean)
+  if (!match) {
+    return null
+  }
+  const pct = Number(match[1])
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+    return null
+  }
+  return Math.round((pct + Number.EPSILON) * 100) / 100
+}
+
 function extractSummaryAmountsFromRows(rows, startIdx = 0) {
   let discountAmount = 0
+  let hasPrintedDiscount = false
   let componentTaxSum = 0
+  let cgstAmount = null
+  let sgstAmount = null
+  let igstAmount = null
   let explicitTotalTax = null
+  let explicitTotalTaxRate = null
+  let cgstRate = null
+  let sgstRate = null
+  let igstRate = null
+  let hasPrintedTax = false
   let otherCharges = 0
+  let hasPrintedOtherCharges = false
   let detectedSubtotal = null
   let detectedGrandTotal = null
   let passedGrandTotal = false
@@ -1311,23 +1337,44 @@ function extractSummaryAmountsFromRows(rows, startIdx = 0) {
       continue
     }
 
-    if (kind === 'discount' && amt > 0) {
-      discountAmount = roundMoney(discountAmount + amt)
+    if (kind === 'discount' && amt >= 0) {
+      if (amt > 0) {
+        discountAmount = roundMoney(discountAmount + amt)
+        hasPrintedDiscount = true
+      }
       continue
     }
 
     if (kind === 'tax_component' && amt > 0) {
       componentTaxSum = roundMoney(componentTaxSum + amt)
+      hasPrintedTax = true
+      const compRate = extractExplicitTaxRateFromSegment(segment)
+      if (/\b(?:cgst|central\s*tax)\b/i.test(segment)) {
+        cgstAmount = roundMoney((cgstAmount || 0) + amt)
+        if (compRate !== null) cgstRate = compRate
+      } else if (/\b(?:sgst|utgst|state\s*tax)\b/i.test(segment)) {
+        sgstAmount = roundMoney((sgstAmount || 0) + amt)
+        if (compRate !== null) sgstRate = compRate
+      } else if (/\b(?:igst|integrated\s*tax)\b/i.test(segment)) {
+        igstAmount = roundMoney((igstAmount || 0) + amt)
+        if (compRate !== null) igstRate = compRate
+      }
       continue
     }
 
     if (kind === 'tax_total' && amt > 0) {
       explicitTotalTax = amt
+      hasPrintedTax = true
+      const totRate = extractExplicitTaxRateFromSegment(segment)
+      if (totRate !== null) {
+        explicitTotalTaxRate = totRate
+      }
       continue
     }
 
     if (kind === 'charges' && amt > 0) {
       otherCharges = roundMoney(otherCharges + amt)
+      hasPrintedOtherCharges = true
       continue
     }
 
@@ -1356,10 +1403,27 @@ function extractSummaryAmountsFromRows(rows, startIdx = 0) {
     taxAmount = componentTaxSum
   }
 
+  let extractedTaxRatePercent = null
+  if (explicitTotalTaxRate !== null) {
+    extractedTaxRatePercent = explicitTotalTaxRate
+  } else if (igstRate !== null) {
+    extractedTaxRatePercent = igstRate
+  } else if (cgstRate !== null && sgstRate !== null) {
+    extractedTaxRatePercent =
+      Math.round((cgstRate + sgstRate + Number.EPSILON) * 100) / 100
+  }
+
   return {
     discountAmount,
+    hasPrintedDiscount,
     taxAmount,
+    hasPrintedTax,
+    cgstAmount,
+    sgstAmount,
+    igstAmount,
+    extractedTaxRatePercent,
     otherCharges,
+    hasPrintedOtherCharges,
     detectedSubtotal,
     detectedGrandTotal,
   }
@@ -2226,9 +2290,13 @@ export function reconcileInvoiceTotals(params = {}) {
     calculatedSubtotal: directCalculatedSubtotal,
     printedSubtotal: directPrintedSubtotal,
     discountAmount: directDiscount,
+    printedDiscountAmount: directPrintedDiscount,
     taxAmount: directTax,
+    printedTaxAmount: directPrintedTax,
     otherCharges: directOtherCharges,
+    printedOtherCharges: directPrintedOtherCharges,
     printedFinalTotal: directPrintedFinalTotal,
+    hasConfirmedItems: directHasConfirmedItems,
     limits = DEFAULT_OCR_VALIDATION_LIMITS,
   } = params
 
@@ -2248,9 +2316,12 @@ export function reconcileInvoiceTotals(params = {}) {
       )
     : roundMoney(Number(directCalculatedSubtotal || 0))
 
-  const hasValidatedItems = usingLineItems
-    ? validatedLineItems.length > 0
-    : calculatedSubtotal > 0
+  const hasValidatedItems =
+    typeof directHasConfirmedItems === 'boolean'
+      ? directHasConfirmedItems
+      : usingLineItems
+        ? validatedLineItems.length > 0
+        : calculatedSubtotal > 0
 
   const rawPrintedSub =
     directPrintedSubtotal !== undefined
@@ -2259,6 +2330,39 @@ export function reconcileInvoiceTotals(params = {}) {
   const printedSubtotal =
     typeof rawPrintedSub === 'number' && rawPrintedSub > 0
       ? roundMoney(rawPrintedSub)
+      : null
+
+  const rawPrintedDiscount =
+    directPrintedDiscount !== undefined
+      ? directPrintedDiscount
+      : summary.hasPrintedDiscount
+        ? summary.discountAmount
+        : null
+  const printedDiscountAmount =
+    typeof rawPrintedDiscount === 'number' && rawPrintedDiscount >= 0
+      ? roundMoney(rawPrintedDiscount)
+      : null
+
+  const rawPrintedTax =
+    directPrintedTax !== undefined
+      ? directPrintedTax
+      : summary.hasPrintedTax
+        ? summary.taxAmount
+        : null
+  const printedTaxAmount =
+    typeof rawPrintedTax === 'number' && rawPrintedTax >= 0
+      ? roundMoney(rawPrintedTax)
+      : null
+
+  const rawPrintedCharges =
+    directPrintedOtherCharges !== undefined
+      ? directPrintedOtherCharges
+      : summary.hasPrintedOtherCharges
+        ? summary.otherCharges
+        : null
+  const printedOtherCharges =
+    typeof rawPrintedCharges === 'number' && rawPrintedCharges >= 0
+      ? roundMoney(rawPrintedCharges)
       : null
 
   const discount = roundMoney(
@@ -2292,13 +2396,16 @@ export function reconcileInvoiceTotals(params = {}) {
 
   const mismatchMessages = []
   let subtotalMatches = true
+  let discountMatches = true
+  let taxMatches = true
+  let otherChargesMatches = true
   let finalTotalMatches = true
 
   if (printedSubtotal !== null) {
     if (!hasValidatedItems) {
       subtotalMatches = false
       mismatchMessages.push(
-        `Printed bill subtotal is ₹${printedSubtotal.toFixed(2)}, but no validated material rows could be confirmed.`,
+        `Printed bill subtotal is ₹${printedSubtotal.toFixed(2)}, but no validated item rows are confirmed yet.`,
       )
     } else if (Math.abs(calculatedSubtotal - printedSubtotal) > tolerance) {
       subtotalMatches = false
@@ -2308,11 +2415,38 @@ export function reconcileInvoiceTotals(params = {}) {
     }
   }
 
+  if (
+    printedDiscountAmount !== null &&
+    Math.abs(discount - printedDiscountAmount) > tolerance
+  ) {
+    discountMatches = false
+    mismatchMessages.push(
+      `Voucher discount (₹${discount.toFixed(2)}) differs from printed bill discount (₹${printedDiscountAmount.toFixed(2)}).`,
+    )
+  }
+
+  if (printedTaxAmount !== null && Math.abs(tax - printedTaxAmount) > tolerance) {
+    taxMatches = false
+    mismatchMessages.push(
+      `Voucher GST/tax (₹${tax.toFixed(2)}) differs from printed bill tax (₹${printedTaxAmount.toFixed(2)}).`,
+    )
+  }
+
+  if (
+    printedOtherCharges !== null &&
+    Math.abs(otherCharges - printedOtherCharges) > tolerance
+  ) {
+    otherChargesMatches = false
+    mismatchMessages.push(
+      `Voucher other charges (₹${otherCharges.toFixed(2)}) differs from printed bill charges (₹${printedOtherCharges.toFixed(2)}).`,
+    )
+  }
+
   if (printedFinalTotal !== null) {
     if (!hasValidatedItems) {
       finalTotalMatches = false
       mismatchMessages.push(
-        `Printed bill total is ₹${printedFinalTotal.toFixed(2)}, but no validated material rows could be confirmed to reconcile it.`,
+        `Printed bill total is ₹${printedFinalTotal.toFixed(2)}, but no validated item rows are confirmed to reconcile it.`,
       )
     } else if (Math.abs(calculatedFinalTotal - printedFinalTotal) > tolerance) {
       finalTotalMatches = false
@@ -2325,14 +2459,25 @@ export function reconcileInvoiceTotals(params = {}) {
   return {
     calculatedSubtotal,
     printedSubtotal,
+    printedDiscountAmount,
+    printedTaxAmount,
+    printedOtherCharges,
     extractedDiscount: discount,
     extractedTax: tax,
     extractedOtherCharges: otherCharges,
     calculatedFinalTotal,
     printedFinalTotal,
     subtotalMatches,
+    discountMatches,
+    taxMatches,
+    otherChargesMatches,
     finalTotalMatches,
-    hasMismatch: !subtotalMatches || !finalTotalMatches,
+    hasMismatch:
+      !subtotalMatches ||
+      !discountMatches ||
+      !taxMatches ||
+      !otherChargesMatches ||
+      !finalTotalMatches,
     mismatchMessages,
   }
 }
@@ -2364,9 +2509,14 @@ export function parseBillOcrText(ocrInput, rawMaterials = [], options = {}) {
       purchaseDateConfidence: 'none',
       discountAmount: '',
       taxAmount: '',
+      extractedTaxRatePercent: null,
+      cgstAmount: null,
+      sgstAmount: null,
+      igstAmount: null,
       otherCharges: '',
       detectedSubtotal: null,
       detectedGrandTotal: null,
+      printedInvoiceSummary: null,
       calculatedSubtotal: 0,
       calculatedFinalTotal: 0,
       lineItems: [],
@@ -2508,7 +2658,7 @@ export function parseBillOcrText(ocrInput, rawMaterials = [], options = {}) {
     )
   } else if (validatedLineItems.some((item) => !item.materialId)) {
     warnings.push(
-      'One or more validated bill items need to be matched to an existing Raw Material before saving.',
+      'One or more extracted bill items need to be classified as a Raw Material or Other Expense before saving.',
     )
   }
   if (uncertainLineItems.length > 0) {
@@ -2536,13 +2686,36 @@ export function parseBillOcrText(ocrInput, rawMaterials = [], options = {}) {
     discountAmount:
       summary.discountAmount > 0 ? String(summary.discountAmount) : '',
     taxAmount: summary.taxAmount > 0 ? String(summary.taxAmount) : '',
+    extractedTaxRatePercent: summary.extractedTaxRatePercent ?? null,
+    cgstAmount: summary.cgstAmount ?? null,
+    sgstAmount: summary.sgstAmount ?? null,
+    igstAmount: summary.igstAmount ?? null,
     otherCharges:
       summary.otherCharges > 0 ? String(summary.otherCharges) : '',
     detectedSubtotal: totalsValidation.printedSubtotal,
     detectedGrandTotal: totalsValidation.printedFinalTotal,
-    printedDiscountAmount: summary.discountAmount,
-    printedTaxAmount: summary.taxAmount,
-    printedOtherCharges: summary.otherCharges,
+    printedDiscountAmount: summary.hasPrintedDiscount
+      ? summary.discountAmount
+      : null,
+    printedTaxAmount: summary.hasPrintedTax ? summary.taxAmount : null,
+    printedOtherCharges: summary.hasPrintedOtherCharges
+      ? summary.otherCharges
+      : null,
+    printedInvoiceSummary: {
+      printedSubtotal: totalsValidation.printedSubtotal,
+      printedDiscountAmount: summary.hasPrintedDiscount
+        ? summary.discountAmount
+        : null,
+      printedTaxAmount: summary.hasPrintedTax ? summary.taxAmount : null,
+      printedTaxRatePercent: summary.extractedTaxRatePercent ?? null,
+      printedCgstAmount: summary.cgstAmount ?? null,
+      printedSgstAmount: summary.sgstAmount ?? null,
+      printedIgstAmount: summary.igstAmount ?? null,
+      printedOtherCharges: summary.hasPrintedOtherCharges
+        ? summary.otherCharges
+        : null,
+      printedGrandTotal: totalsValidation.printedFinalTotal,
+    },
     calculatedSubtotal: totalsValidation.calculatedSubtotal,
     calculatedFinalTotal: totalsValidation.calculatedFinalTotal,
     totalsValidation,

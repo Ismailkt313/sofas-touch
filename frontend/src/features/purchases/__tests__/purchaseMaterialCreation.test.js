@@ -229,6 +229,7 @@ test('Confirmed staged new material builds inline newMaterial payload and stays 
   })
 
   assert.deepEqual(payloadLines[1], {
+    itemType: 'material',
     newMaterial: {
       name: 'Curtain',
       unit: 'Meter',
@@ -236,6 +237,7 @@ test('Confirmed staged new material builds inline newMaterial payload and stays 
       description: 'Blackout weave',
     },
     unit: 'Meter',
+    description: 'Curtain',
     quantity: 15,
     unitPrice: 320,
     remarks: '',

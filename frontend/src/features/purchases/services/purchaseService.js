@@ -158,23 +158,95 @@ export function normalizePurchaseAttachment(raw = {}) {
   }
 }
 
+export function normalizeExpenseHead(raw = {}) {
+  return {
+    id: String(raw.id || raw._id || ''),
+    name: String(raw.name || ''),
+    category: raw.category ? String(raw.category) : 'General',
+    description: String(raw.description || ''),
+    isActive: raw.isActive !== false,
+  }
+}
+
 export function normalizePurchaseVoucher(raw = {}) {
   const attachments = Array.isArray(raw.attachments)
     ? raw.attachments.map(normalizePurchaseAttachment)
     : []
 
   const lineItems = Array.isArray(raw.lineItems)
-    ? raw.lineItems.map((item) => ({
-        materialId: String(item.materialId || ''),
-        materialName: String(item.materialName || 'Unknown Material'),
-        materialCategory: item.materialCategory || null,
-        unit: String(item.unit || ''),
-        quantity: roundQuantity(item.quantity),
-        unitPrice: roundMoney(item.unitPrice),
-        lineTotal: roundMoney(item.lineTotal),
-        remarks: String(item.remarks || ''),
-      }))
+    ? raw.lineItems.map((item) => {
+        const itemType = item.itemType === 'expense' ? 'expense' : 'material'
+        return {
+          itemType,
+          materialId: String(item.materialId || ''),
+          materialName:
+            itemType === 'expense'
+              ? ''
+              : String(
+                  item.materialName || item.description || 'Unknown Material',
+                ),
+          materialCategory: item.materialCategory || null,
+          expenseHeadId: String(item.expenseHeadId || ''),
+          expenseHeadName: String(item.expenseHeadName || ''),
+          expenseHeadCategory: item.expenseHeadCategory || null,
+          description: String(
+            item.description ||
+              (itemType === 'expense'
+                ? item.expenseHeadName
+                : item.materialName) ||
+              '',
+          ),
+          unit: item.unit ? String(item.unit) : '',
+          quantity:
+            item.quantity !== null && item.quantity !== undefined
+              ? roundQuantity(item.quantity)
+              : null,
+          unitPrice:
+            item.unitPrice !== null && item.unitPrice !== undefined
+              ? roundMoney(item.unitPrice)
+              : null,
+          lineTotal: roundMoney(item.lineTotal),
+          taxRate:
+            item.taxRate !== null && item.taxRate !== undefined
+              ? Number(item.taxRate)
+              : null,
+          remarks: String(item.remarks || ''),
+        }
+      })
     : []
+
+  const computedMatSubtotal = roundMoney(
+    lineItems
+      .filter((li) => li.itemType !== 'expense')
+      .reduce((acc, li) => acc + li.lineTotal, 0),
+  )
+  const computedExpSubtotal = roundMoney(
+    lineItems
+      .filter((li) => li.itemType === 'expense')
+      .reduce((acc, li) => acc + li.lineTotal, 0),
+  )
+
+  const subtotal = roundMoney(raw.subtotal)
+  const discountAmount = roundMoney(raw.discountAmount)
+  const finalTotal = roundMoney(raw.finalTotal)
+  const materialSubtotal =
+    typeof raw.materialSubtotal === 'number'
+      ? roundMoney(raw.materialSubtotal)
+      : computedMatSubtotal
+  const expenseSubtotal =
+    typeof raw.expenseSubtotal === 'number'
+      ? roundMoney(raw.expenseSubtotal)
+      : computedExpSubtotal
+  const materialAllocatedTotal =
+    typeof raw.materialAllocatedTotal === 'number'
+      ? roundMoney(raw.materialAllocatedTotal)
+      : expenseSubtotal <= 0
+        ? finalTotal
+        : 0
+  const expenseAllocatedTotal =
+    typeof raw.expenseAllocatedTotal === 'number'
+      ? roundMoney(raw.expenseAllocatedTotal)
+      : roundMoney(finalTotal - materialAllocatedTotal)
 
   return {
     id: String(raw.id || raw._id || ''),
@@ -187,11 +259,40 @@ export function normalizePurchaseVoucher(raw = {}) {
     projectName: raw.projectName ? String(raw.projectName) : null,
     entryMethod: raw.entryMethod === 'upload_bill' ? 'upload_bill' : 'manual',
     lineItems,
-    subtotal: roundMoney(raw.subtotal),
-    discountAmount: roundMoney(raw.discountAmount),
+    materialSubtotal,
+    expenseSubtotal,
+    subtotal,
+    discountAmount,
+    taxableSubtotal:
+      typeof raw.taxableSubtotal === 'number'
+        ? roundMoney(raw.taxableSubtotal)
+        : roundMoney(Math.max(0, subtotal - discountAmount)),
+    taxMode: raw.taxMode === 'percentage' ? 'percentage' : 'bill_amount',
+    taxRatePercent:
+      raw.taxRatePercent !== null && raw.taxRatePercent !== undefined
+        ? Number(raw.taxRatePercent)
+        : null,
+    cgstAmount:
+      raw.cgstAmount !== null && raw.cgstAmount !== undefined
+        ? roundMoney(raw.cgstAmount)
+        : null,
+    sgstAmount:
+      raw.sgstAmount !== null && raw.sgstAmount !== undefined
+        ? roundMoney(raw.sgstAmount)
+        : null,
+    igstAmount:
+      raw.igstAmount !== null && raw.igstAmount !== undefined
+        ? roundMoney(raw.igstAmount)
+        : null,
     taxAmount: roundMoney(raw.taxAmount),
     otherCharges: roundMoney(raw.otherCharges),
-    finalTotal: roundMoney(raw.finalTotal),
+    finalTotal,
+    materialAllocatedTotal,
+    expenseAllocatedTotal,
+    printedInvoiceSummary: raw.printedInvoiceSummary || null,
+    reconciliationWarnings: Array.isArray(raw.reconciliationWarnings)
+      ? raw.reconciliationWarnings
+      : [],
     notes: String(raw.notes || ''),
     attachments,
     hasAttachments: attachments.length > 0 || Boolean(raw.hasAttachments),
@@ -264,6 +365,40 @@ export function extractPurchaseApiError(
   normalized.status = status
   normalized.fieldErrors = fieldErrors
   return normalized
+}
+
+export async function fetchExpenseHeads({
+  search = '',
+  includeInactive = false,
+  limit = 100,
+} = {}) {
+  try {
+    const params = { limit }
+    if (search && search.trim()) {
+      params.search = search.trim()
+    }
+    if (includeInactive) {
+      params.includeInactive = 'true'
+    }
+
+    const response = await api.get('/api/expense-heads', { params })
+    const data = response.data || {}
+    const rawHeads = Array.isArray(data.expenseHeads)
+      ? data.expenseHeads
+      : Array.isArray(data.items)
+        ? data.items
+        : []
+
+    return {
+      expenseHeads: rawHeads.map(normalizeExpenseHead),
+      total: Number(data.total ?? rawHeads.length) || 0,
+    }
+  } catch (error) {
+    throw extractPurchaseApiError(
+      error,
+      'Unable to load expense heads from the server.',
+    )
+  }
 }
 
 export async function fetchPurchaseVouchers({
@@ -361,7 +496,11 @@ function buildMultipartFormData(payload, files = []) {
     if (value === undefined) {
       return
     }
-    if (key === 'lineItems' || key === 'removeAttachmentIds') {
+    if (
+      key === 'lineItems' ||
+      key === 'removeAttachmentIds' ||
+      key === 'printedInvoiceSummary'
+    ) {
       formData.append(key, JSON.stringify(value))
       return
     }
