@@ -1,12 +1,14 @@
 import { normalizePurchaseText } from '../models/purchase-voucher.model';
+import { UpdatePurchaseVoucherDto, ValidationResult } from '../types';
 import {
-  UpdatePurchaseVoucherDto,
-  ValidationResult,
-} from '../types';
-import {
+  IGNORED_CALCULATED_VOUCHER_FIELDS,
   parseLineItemsInput,
   parseNonNegativeCharge,
+  parseOptionalNonNegativeMoney,
+  parseOptionalTaxPercentage,
+  parsePrintedInvoiceSummaryInput,
   parsePurchaseDateInput,
+  parseTaxModeInput,
 } from './create-purchase-voucher.dto';
 
 const SYSTEM_MANAGED_FIELDS = new Set([
@@ -35,12 +37,6 @@ const SYSTEM_MANAGED_FIELDS = new Set([
   '__v',
 ]);
 
-const IGNORED_CALCULATED_FIELDS = new Set([
-  'subtotal',
-  'finalTotal',
-  'totalAmount',
-]);
-
 const ALLOWED_UPDATE_FIELDS = new Set([
   'purchaseDate',
   'supplierName',
@@ -49,8 +45,14 @@ const ALLOWED_UPDATE_FIELDS = new Set([
   'entryMethod',
   'lineItems',
   'discountAmount',
+  'taxMode',
+  'taxRatePercent',
+  'cgstAmount',
+  'sgstAmount',
+  'igstAmount',
   'taxAmount',
   'otherCharges',
+  'printedInvoiceSummary',
   'notes',
   'removeAttachmentIds',
 ]);
@@ -75,7 +77,7 @@ export function validateUpdatePurchaseVoucherDto(
       errors[key] = `'${key}' is system-managed and cannot be modified.`;
     } else if (
       !ALLOWED_UPDATE_FIELDS.has(key) &&
-      !IGNORED_CALCULATED_FIELDS.has(key)
+      !IGNORED_CALCULATED_VOUCHER_FIELDS.has(key)
     ) {
       errors[key] = `'${key}' is not a valid purchase voucher update field.`;
     }
@@ -161,6 +163,63 @@ export function validateUpdatePurchaseVoucherDto(
     }
   }
 
+  if (raw.taxMode !== undefined) {
+    const parsedMode = parseTaxModeInput(raw.taxMode);
+    if (parsedMode.error) {
+      errors.taxMode = parsedMode.error;
+    } else {
+      dto.taxMode = parsedMode.value;
+    }
+  }
+
+  if (raw.taxRatePercent !== undefined) {
+    const parsedRate = parseOptionalTaxPercentage(
+      raw.taxRatePercent,
+      'Tax rate percentage',
+    );
+    if (parsedRate.error) {
+      errors.taxRatePercent = parsedRate.error;
+    } else {
+      dto.taxRatePercent = parsedRate.value;
+    }
+  }
+
+  if (raw.cgstAmount !== undefined) {
+    const parsed = parseOptionalNonNegativeMoney(
+      raw.cgstAmount,
+      'CGST amount',
+    );
+    if (parsed.error) {
+      errors.cgstAmount = parsed.error;
+    } else {
+      dto.cgstAmount = parsed.value;
+    }
+  }
+
+  if (raw.sgstAmount !== undefined) {
+    const parsed = parseOptionalNonNegativeMoney(
+      raw.sgstAmount,
+      'SGST amount',
+    );
+    if (parsed.error) {
+      errors.sgstAmount = parsed.error;
+    } else {
+      dto.sgstAmount = parsed.value;
+    }
+  }
+
+  if (raw.igstAmount !== undefined) {
+    const parsed = parseOptionalNonNegativeMoney(
+      raw.igstAmount,
+      'IGST amount',
+    );
+    if (parsed.error) {
+      errors.igstAmount = parsed.error;
+    } else {
+      dto.igstAmount = parsed.value;
+    }
+  }
+
   if (raw.taxAmount !== undefined) {
     const parsed = parseNonNegativeCharge(raw.taxAmount, 'Tax amount');
     if (parsed.error) {
@@ -176,6 +235,17 @@ export function validateUpdatePurchaseVoucherDto(
       errors.otherCharges = parsed.error;
     } else {
       dto.otherCharges = parsed.value;
+    }
+  }
+
+  if (raw.printedInvoiceSummary !== undefined) {
+    const parsedSummary = parsePrintedInvoiceSummaryInput(
+      raw.printedInvoiceSummary,
+    );
+    if (parsedSummary.error) {
+      errors.printedInvoiceSummary = parsedSummary.error;
+    } else {
+      dto.printedInvoiceSummary = parsedSummary.value;
     }
   }
 
@@ -207,7 +277,8 @@ export function validateUpdatePurchaseVoucherDto(
     }
 
     if (!Array.isArray(listCandidate)) {
-      errors.removeAttachmentIds = 'removeAttachmentIds must be an array of IDs.';
+      errors.removeAttachmentIds =
+        'removeAttachmentIds must be an array of IDs.';
     } else {
       dto.removeAttachmentIds = listCandidate
         .map((id) => (typeof id === 'string' ? id.trim() : ''))

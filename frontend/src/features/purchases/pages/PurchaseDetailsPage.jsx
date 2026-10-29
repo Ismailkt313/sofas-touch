@@ -303,7 +303,7 @@ export function PurchaseDetailsPage({
 
           <section className="pv-surface pv-section-card">
             <h2 className="pv-section-card__title">
-              Material Line Items ({voucher.lineItems.length})
+              Purchase Items ({voucher.lineItems.length})
             </h2>
 
             <div className="pv-table-wrap">
@@ -311,7 +311,8 @@ export function PurchaseDetailsPage({
                 <thead>
                   <tr>
                     <th scope="col">#</th>
-                    <th scope="col">Raw Material</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Material / Expense Head</th>
                     <th scope="col" className="pv-table__num-col">
                       Quantity
                     </th>
@@ -325,71 +326,158 @@ export function PurchaseDetailsPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {voucher.lineItems.map((item, index) => (
-                    <tr key={`${item.materialId}-${index}`}>
-                      <td>{index + 1}</td>
-                      <td>
-                        <div className="pv-supplier-cell">
-                          <span className="pv-supplier-cell__name">
-                            {item.materialName}
+                  {voucher.lineItems.map((item, index) => {
+                    const isExpense = item.itemType === 'expense'
+                    const primaryTitle = isExpense
+                      ? item.expenseHeadName || item.description || 'Expense'
+                      : item.materialName
+                    const secondaryDesc =
+                      isExpense &&
+                      item.description &&
+                      item.description !== primaryTitle
+                        ? item.description
+                        : !isExpense &&
+                            item.description &&
+                            item.description !== item.materialName
+                          ? item.description
+                          : ''
+
+                    return (
+                      <tr
+                        key={`${item.materialId || item.expenseHeadId || 'line'}-${index}`}
+                      >
+                        <td>{index + 1}</td>
+                        <td>
+                          <span
+                            className={`pv-type-badge ${
+                              isExpense
+                                ? 'pv-type-badge--expense'
+                                : 'pv-type-badge--material'
+                            }`}
+                          >
+                            {isExpense ? 'Expense' : 'Material'}
                           </span>
-                          {item.remarks ? (
-                            <span className="pv-supplier-cell__inv">
-                              {item.remarks}
+                        </td>
+                        <td>
+                          <div className="pv-supplier-cell">
+                            <span className="pv-supplier-cell__name">
+                              {primaryTitle}
                             </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="pv-table__num-col">
-                        {formatPurchaseQuantity(item.quantity, '')}
-                      </td>
-                      <td>
-                        <span className="rm-unit-pill" title={item.unit}>
-                          {formatMaterialUnit(item.unit) || item.unit}
-                        </span>
-                      </td>
-                      <td className="pv-table__num-col">
-                        {formatInrCurrency(item.unitPrice)}
-                      </td>
-                      <td className="pv-table__num-col pv-table__total-cell">
-                        {formatInrCurrency(item.lineTotal)}
-                      </td>
-                    </tr>
-                  ))}
+                            {secondaryDesc ? (
+                              <span className="pv-supplier-cell__inv">
+                                {secondaryDesc}
+                              </span>
+                            ) : null}
+                            {item.remarks ? (
+                              <span className="pv-supplier-cell__inv">
+                                Note: {item.remarks}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="pv-table__num-col">
+                          {item.quantity !== null && item.quantity !== undefined
+                            ? formatPurchaseQuantity(item.quantity, '')
+                            : '—'}
+                        </td>
+                        <td>
+                          {item.unit ? (
+                            <span className="rm-unit-pill" title={item.unit}>
+                              {formatMaterialUnit(item.unit) || item.unit}
+                            </span>
+                          ) : (
+                            <span className="pv-muted-dash">—</span>
+                          )}
+                        </td>
+                        <td className="pv-table__num-col">
+                          {item.unitPrice !== null &&
+                          item.unitPrice !== undefined
+                            ? formatInrCurrency(item.unitPrice)
+                            : '—'}
+                        </td>
+                        <td className="pv-table__num-col pv-table__total-cell">
+                          {formatInrCurrency(item.lineTotal)}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
 
             <div className="pv-details-mobile-lines">
-              {voucher.lineItems.map((item, index) => (
-                <div
-                  key={`${item.materialId}-${index}`}
-                  className="pv-details-mobile-line"
-                >
-                  <div className="pv-details-mobile-line__top">
-                    <strong>
-                      {index + 1}. {item.materialName}
-                    </strong>
-                    <span>{formatInrCurrency(item.lineTotal)}</span>
+              {voucher.lineItems.map((item, index) => {
+                const isExpense = item.itemType === 'expense'
+                const primaryTitle = isExpense
+                  ? item.expenseHeadName || item.description || 'Expense'
+                  : item.materialName
+
+                return (
+                  <div
+                    key={`${item.materialId || item.expenseHeadId || 'line'}-${index}`}
+                    className="pv-details-mobile-line"
+                  >
+                    <div className="pv-details-mobile-line__top">
+                      <strong>
+                        {index + 1}. {primaryTitle}
+                      </strong>
+                      <span>{formatInrCurrency(item.lineTotal)}</span>
+                    </div>
+                    <div className="pv-details-mobile-line__sub">
+                      <span>
+                        {isExpense ? 'Other Expense · Non-stock' : 'Raw Material'}
+                        {item.quantity !== null &&
+                        item.quantity !== undefined &&
+                        item.unitPrice !== null &&
+                        item.unitPrice !== undefined
+                          ? ` · ${formatPurchaseQuantity(item.quantity, item.unit)} × ${formatInrCurrency(item.unitPrice)}`
+                          : ''}
+                      </span>
+                      {isExpense &&
+                      item.description &&
+                      item.description !== primaryTitle ? (
+                        <span>{item.description}</span>
+                      ) : null}
+                      {item.remarks ? <span>Note: {item.remarks}</span> : null}
+                    </div>
                   </div>
-                  <div className="pv-details-mobile-line__sub">
-                    <span>
-                      {formatPurchaseQuantity(item.quantity, item.unit)} ×{' '}
-                      {formatInrCurrency(item.unitPrice)}
-                    </span>
-                    {item.remarks ? <span>Note: {item.remarks}</span> : null}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className="pv-details-summary-wrap">
               <div className="pv-notes-display">
                 <span className="pv-meta-card__label">Notes</span>
                 <p>{voucher.notes || 'No voucher notes recorded.'}</p>
+
+                {Array.isArray(voucher.reconciliationWarnings) &&
+                voucher.reconciliationWarnings.length > 0 ? (
+                  <div
+                    className="pv-reconcile-inline pv-reconcile-inline--warn pv-details-reconcile-warn"
+                    role="status"
+                  >
+                    <ul className="pv-reconcile-inline__list">
+                      {voucher.reconciliationWarnings.map((warn) => (
+                        <li key={warn}>{warn}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
 
               <div className="pv-financial-box">
+                {voucher.expenseSubtotal > 0 ? (
+                  <>
+                    <div className="pv-financial-row">
+                      <span>Raw Materials Subtotal</span>
+                      <span>{formatInrCurrency(voucher.materialSubtotal)}</span>
+                    </div>
+                    <div className="pv-financial-row">
+                      <span>Other Expenses Subtotal</span>
+                      <span>{formatInrCurrency(voucher.expenseSubtotal)}</span>
+                    </div>
+                  </>
+                ) : null}
                 <div className="pv-financial-row">
                   <span>Subtotal</span>
                   <strong>{formatInrCurrency(voucher.subtotal)}</strong>
@@ -399,7 +487,15 @@ export function PurchaseDetailsPage({
                   <span>− {formatInrCurrency(voucher.discountAmount)}</span>
                 </div>
                 <div className="pv-financial-row">
-                  <span>GST / Tax</span>
+                  <span>
+                    GST / Tax{' '}
+                    {voucher.taxMode === 'percentage' &&
+                    voucher.taxRatePercent !== null
+                      ? `(${voucher.taxRatePercent}%)`
+                      : voucher.taxRatePercent !== null
+                        ? `(Bill · ${voucher.taxRatePercent}%)`
+                        : '(Bill)'}
+                  </span>
                   <span>+ {formatInrCurrency(voucher.taxAmount)}</span>
                 </div>
                 <div className="pv-financial-row">
@@ -410,6 +506,26 @@ export function PurchaseDetailsPage({
                   <span>Final Total</span>
                   <strong>{formatInrCurrency(voucher.finalTotal)}</strong>
                 </div>
+
+                {voucher.projectRecordId && voucher.expenseSubtotal > 0 ? (
+                  <div className="pv-allocation-box">
+                    <span className="pv-allocation-box__title">
+                      Project Financial Allocation
+                    </span>
+                    <div className="pv-allocation-box__row">
+                      <span>Project Purchases</span>
+                      <strong>
+                        {formatInrCurrency(voucher.materialAllocatedTotal)}
+                      </strong>
+                    </div>
+                    <div className="pv-allocation-box__row">
+                      <span>Project Other Expenses</span>
+                      <strong>
+                        {formatInrCurrency(voucher.expenseAllocatedTotal)}
+                      </strong>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </section>

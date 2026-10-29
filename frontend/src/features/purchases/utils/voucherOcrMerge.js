@@ -17,13 +17,20 @@ export const HEADER_TRACKED_FIELDS = Object.freeze([
   'supplierInvoiceNumber',
   'projectId',
   'discountAmount',
+  'taxMode',
+  'taxRatePercent',
   'taxAmount',
   'otherCharges',
   'notes',
 ])
 
 export const LINE_TRACKED_FIELDS = Object.freeze([
+  'itemType',
   'materialId',
+  'expenseHeadId',
+  'description',
+  'amount',
+  'unit',
   'quantity',
   'unitPrice',
   'remarks',
@@ -33,8 +40,10 @@ export const LINE_TRACKED_FIELDS = Object.freeze([
 
 const NUMERIC_COMPARE_FIELDS = new Set([
   'discountAmount',
+  'taxRatePercent',
   'taxAmount',
   'otherCharges',
+  'amount',
   'quantity',
   'unitPrice',
 ])
@@ -67,7 +76,7 @@ const UNIT_CANONICAL_LOOKUP = {
   ltr: 'litre',
   litre: 'litre',
   litres: 'litre',
-  liter: 'litre',
+  liter: 'liter',
   liters: 'litre',
   sqft: 'square feet',
   sft: 'square feet',
@@ -87,6 +96,10 @@ const UNIT_CANONICAL_LOOKUP = {
   boxes: 'box',
   pair: 'pair',
   pairs: 'pair',
+}
+
+function roundTwoDecimals(num) {
+  return Math.round((Number(num) + Number.EPSILON) * 100) / 100
 }
 
 function normalizeUnitComparable(unitValue) {
@@ -142,6 +155,11 @@ export function createSavedHeaderFieldMeta(voucher = {}) {
     discountAmount: hasPosNum(voucher.discountAmount)
       ? createFieldProvenance('saved')
       : createFieldProvenance('initial'),
+    taxMode: createFieldProvenance('saved'),
+    taxRatePercent:
+      voucher.taxRatePercent !== null && voucher.taxRatePercent !== undefined
+        ? createFieldProvenance('saved')
+        : createFieldProvenance('initial'),
     taxAmount: hasPosNum(voucher.taxAmount)
       ? createFieldProvenance('saved')
       : createFieldProvenance('initial'),
@@ -181,11 +199,15 @@ export function areFieldValuesEquivalent(fieldKey, leftVal, rightVal) {
     return leftStr === rightStr
   }
 
-  if (fieldKey === 'detectedUnit') {
+  if (fieldKey === 'detectedUnit' || fieldKey === 'unit') {
     return normalizeUnitComparable(leftStr) === normalizeUnitComparable(rightStr)
   }
 
-  if (fieldKey === 'supplierName' || fieldKey === 'extractedDescription') {
+  if (
+    fieldKey === 'supplierName' ||
+    fieldKey === 'extractedDescription' ||
+    fieldKey === 'description'
+  ) {
     return (
       leftStr.replace(/\s+/g, ' ').toLowerCase() ===
       rightStr.replace(/\s+/g, ' ').toLowerCase()
@@ -197,14 +219,17 @@ export function areFieldValuesEquivalent(fieldKey, leftVal, rightVal) {
 
 export function buildOcrRowFingerprint(ocrRow, occurrenceIndex = 0) {
   const descKey = normalizeDescriptionComparable(
-    ocrRow?.extractedDescription || ocrRow?.rawRowText || '',
+    ocrRow?.extractedDescription || ocrRow?.description || ocrRow?.rawRowText || '',
   )
-  const unitKey = normalizeUnitComparable(ocrRow?.detectedUnit || '')
+  const unitKey = normalizeUnitComparable(
+    ocrRow?.detectedUnit || ocrRow?.unit || '',
+  )
   const base = `${descKey}|${unitKey}`
   return occurrenceIndex > 0 ? `${base}#${occurrenceIndex}` : base
 }
 
-export function createEmptyLineItem() {
+export function createEmptyLineItem(itemType = 'material') {
+  const resolvedType = itemType === 'expense' ? 'expense' : 'material'
   const fieldMeta = {}
   for (const key of LINE_TRACKED_FIELDS) {
     fieldMeta[key] = createFieldProvenance('initial')
@@ -212,9 +237,16 @@ export function createEmptyLineItem() {
   return {
     rowKey: nextVoucherLineKey(),
     ocrFingerprint: '',
+    itemType: resolvedType,
     materialId: '',
+    expenseHeadId: '',
+    description: '',
+    amount: '',
+    unit: '',
+    expensePricingMode: 'amount',
     quantity: '',
     unitPrice: '',
+    taxRate: '',
     remarks: '',
     extractedDescription: '',
     detectedUnit: '',
@@ -226,11 +258,28 @@ export function createEmptyLineItem() {
 }
 
 export function createSavedLineItem(savedLine = {}) {
-  const hasStr = (v) => Boolean(String(v || '').trim())
+  const hasStr = (v) => Boolean(String(v ?? '').trim())
+  const itemType = savedLine.itemType === 'expense' ? 'expense' : 'material'
+  const hasQtyAndPrice =
+    savedLine.quantity !== undefined &&
+    savedLine.quantity !== null &&
+    savedLine.unitPrice !== undefined &&
+    savedLine.unitPrice !== null
+
   return {
     rowKey: nextVoucherLineKey(),
     ocrFingerprint: '',
+    itemType,
     materialId: savedLine.materialId || '',
+    expenseHeadId: savedLine.expenseHeadId || '',
+    description: savedLine.description || '',
+    amount:
+      savedLine.lineTotal !== undefined && savedLine.lineTotal !== null
+        ? String(savedLine.lineTotal)
+        : '',
+    unit: savedLine.unit || '',
+    expensePricingMode:
+      itemType === 'expense' && hasQtyAndPrice ? 'qty_rate' : 'amount',
     quantity:
       savedLine.quantity !== undefined && savedLine.quantity !== null
         ? String(savedLine.quantity)
@@ -239,13 +288,30 @@ export function createSavedLineItem(savedLine = {}) {
       savedLine.unitPrice !== undefined && savedLine.unitPrice !== null
         ? String(savedLine.unitPrice)
         : '',
+    taxRate:
+      savedLine.taxRate !== undefined && savedLine.taxRate !== null
+        ? String(savedLine.taxRate)
+        : '',
     remarks: savedLine.remarks || '',
     extractedDescription: '',
-    detectedUnit: '',
+    detectedUnit: savedLine.unit || '',
     suggestions: [],
     needsReview: false,
     fieldMeta: {
+      itemType: createFieldProvenance('saved'),
       materialId: hasStr(savedLine.materialId)
+        ? createFieldProvenance('saved')
+        : createFieldProvenance('initial'),
+      expenseHeadId: hasStr(savedLine.expenseHeadId)
+        ? createFieldProvenance('saved')
+        : createFieldProvenance('initial'),
+      description: hasStr(savedLine.description)
+        ? createFieldProvenance('saved')
+        : createFieldProvenance('initial'),
+      amount: hasStr(savedLine.lineTotal)
+        ? createFieldProvenance('saved')
+        : createFieldProvenance('initial'),
+      unit: hasStr(savedLine.unit)
         ? createFieldProvenance('saved')
         : createFieldProvenance('initial'),
       quantity: hasStr(savedLine.quantity)
@@ -271,19 +337,48 @@ export function createOcrLineItem(ocrRow, fingerprint = '') {
   const hasDesc = Boolean(String(ocrRow?.extractedDescription ?? '').trim())
   const hasUnit = Boolean(String(ocrRow?.detectedUnit ?? '').trim())
 
+  const computedAmount =
+    hasQty && hasPrice
+      ? String(roundTwoDecimals(Number(ocrRow.quantity) * Number(ocrRow.unitPrice)))
+      : ocrRow?.validatedLineTotal
+        ? String(ocrRow.validatedLineTotal)
+        : ocrRow?.lineAmount
+          ? String(ocrRow.lineAmount)
+          : ''
+
   return {
     rowKey: nextVoucherLineKey(),
     ocrFingerprint: fingerprint || buildOcrRowFingerprint(ocrRow, 0),
+    itemType: hasMat ? 'material' : '',
     materialId: ocrRow?.materialId || '',
+    expenseHeadId: '',
+    description: hasDesc ? String(ocrRow.extractedDescription) : '',
+    amount: computedAmount,
+    unit: hasUnit ? String(ocrRow.detectedUnit) : '',
+    expensePricingMode: 'amount',
     quantity: hasQty ? String(ocrRow.quantity) : '',
     unitPrice: hasPrice ? String(ocrRow.unitPrice) : '',
+    taxRate: '',
     remarks: '',
     extractedDescription: hasDesc ? String(ocrRow.extractedDescription) : '',
     detectedUnit: hasUnit ? String(ocrRow.detectedUnit) : '',
     suggestions: Array.isArray(ocrRow?.suggestions) ? ocrRow.suggestions : [],
     needsReview: true,
     fieldMeta: {
+      itemType: hasMat
+        ? createFieldProvenance('ocr')
+        : createFieldProvenance('initial'),
       materialId: hasMat
+        ? createFieldProvenance('ocr')
+        : createFieldProvenance('initial'),
+      expenseHeadId: createFieldProvenance('initial'),
+      description: hasDesc
+        ? createFieldProvenance('ocr')
+        : createFieldProvenance('initial'),
+      amount: computedAmount
+        ? createFieldProvenance('ocr')
+        : createFieldProvenance('initial'),
+      unit: hasUnit
         ? createFieldProvenance('ocr')
         : createFieldProvenance('initial'),
       quantity: hasQty
@@ -310,6 +405,9 @@ export function isUntouchedBlankLineItem(row) {
   }
   const hasAnyValue = Boolean(
     String(row.materialId || '').trim() ||
+      String(row.expenseHeadId || '').trim() ||
+      String(row.description || '').trim() ||
+      String(row.amount || '').trim() ||
       String(row.quantity || '').trim() ||
       String(row.unitPrice || '').trim() ||
       String(row.remarks || '').trim() ||
@@ -335,7 +433,69 @@ export function isLineItemListEffectivelyEmpty(rows) {
   return rows.length === 1 && isUntouchedBlankLineItem(rows[0])
 }
 
+export function switchLineItemType(row, targetType) {
+  const cleanTarget = targetType === 'expense' ? 'expense' : 'material'
+  const nextFieldMeta = {
+    ...(row.fieldMeta || {}),
+    itemType: createFieldProvenance('manual', {
+      touched: true,
+      confirmed: true,
+    }),
+  }
+
+  let nextDescription = String(row.description || '').trim()
+  if (!nextDescription && String(row.extractedDescription || '').trim()) {
+    nextDescription = String(row.extractedDescription).trim()
+  }
+
+  let nextAmount = String(row.amount ?? '').trim()
+  let nextQuantity = String(row.quantity ?? '').trim()
+  let nextUnitPrice = String(row.unitPrice ?? '').trim()
+
+  if (cleanTarget === 'expense') {
+    const qtyNum = Number(nextQuantity)
+    const priceNum = Number(nextUnitPrice)
+    const amountMeta = nextFieldMeta.amount || createFieldProvenance('initial')
+    if (
+      (!nextAmount || !amountMeta.touched) &&
+      Number.isFinite(qtyNum) &&
+      qtyNum > 0 &&
+      Number.isFinite(priceNum) &&
+      priceNum > 0
+    ) {
+      nextAmount = String(roundTwoDecimals(qtyNum * priceNum))
+    }
+  } else {
+    const amtNum = Number(nextAmount)
+    if (
+      !nextQuantity &&
+      !nextUnitPrice &&
+      Number.isFinite(amtNum) &&
+      amtNum > 0
+    ) {
+      nextQuantity = '1'
+      nextUnitPrice = String(roundTwoDecimals(amtNum))
+    }
+  }
+
+  return {
+    ...row,
+    itemType: cleanTarget,
+    description: nextDescription || row.description || '',
+    amount: nextAmount,
+    quantity: nextQuantity,
+    unitPrice: nextUnitPrice,
+    needsReview:
+      cleanTarget === 'material' ? !row.materialId : !row.expenseHeadId,
+    fieldMeta: nextFieldMeta,
+  }
+}
+
 export function applyManualLineItemEdit(row, fieldKey, nextValue) {
+  if (fieldKey === 'itemType') {
+    return switchLineItemType(row, nextValue)
+  }
+
   const nextFieldMeta = {
     ...(row.fieldMeta || {}),
     [fieldKey]: createFieldProvenance('manual', {
@@ -363,8 +523,22 @@ export function applyManualLineItemEdit(row, fieldKey, nextValue) {
     rowSuggestions: nextRowSuggestions,
   }
 
-  if (fieldKey === 'materialId') {
+  if (fieldKey === 'materialId' && String(nextValue || '').trim()) {
+    updated.itemType = 'material'
     updated.needsReview = false
+    updated.fieldMeta.itemType = createFieldProvenance('manual', {
+      touched: true,
+      confirmed: true,
+    })
+  }
+
+  if (fieldKey === 'expenseHeadId' && String(nextValue || '').trim()) {
+    updated.itemType = 'expense'
+    updated.needsReview = false
+    updated.fieldMeta.itemType = createFieldProvenance('manual', {
+      touched: true,
+      confirmed: true,
+    })
   }
 
   return updated
@@ -384,7 +558,12 @@ export function confirmLineItemOcrValues(row) {
   }
   return {
     ...row,
-    needsReview: Boolean(row.extractedDescription) && !row.materialId,
+    needsReview:
+      row.itemType === 'expense'
+        ? !row.expenseHeadId
+        : row.itemType === 'material'
+          ? Boolean(row.extractedDescription) && !row.materialId
+          : true,
     fieldMeta: nextFieldMeta,
   }
 }
@@ -401,6 +580,8 @@ export function acceptLineItemSuggestion(row, fieldKey) {
   return {
     ...row,
     [fieldKey]: suggestion.value,
+    itemType:
+      fieldKey === 'materialId' && suggestion.value ? 'material' : row.itemType,
     needsReview: fieldKey === 'materialId' ? false : row.needsReview,
     fieldMeta: {
       ...(row.fieldMeta || {}),
@@ -523,6 +704,15 @@ export function mergeHeaderFieldsWithOcr({
     autofilledFields.push(fieldKey)
   }
 
+  if (candidates.taxAmount) {
+    const taxModeMeta =
+      nextFieldMeta.taxMode || createFieldProvenance('initial')
+    if (!isFieldProtected(taxModeMeta)) {
+      nextValues.taxMode = 'bill_amount'
+      nextFieldMeta.taxMode = createFieldProvenance('ocr')
+    }
+  }
+
   return {
     values: nextValues,
     fieldMeta: nextFieldMeta,
@@ -542,6 +732,7 @@ function mergePairedLineItem(existingRow, ocrRow, fingerprint, isAdditionalBill)
 
   if (
     !nextRow.materialId &&
+    !nextRow.expenseHeadId &&
     Array.isArray(ocrRow.suggestions) &&
     ocrRow.suggestions.length > 0
   ) {
@@ -559,7 +750,13 @@ function mergePairedLineItem(existingRow, ocrRow, fingerprint, isAdditionalBill)
   let anyAutofilled = false
   let anyConflict = false
 
+  const rowClassifiedAsExpense = nextRow.itemType === 'expense'
+
   for (const cellKey of mergeableCells) {
+    if (cellKey === 'materialId' && rowClassifiedAsExpense) {
+      continue
+    }
+
     const ocrVal = String(ocrRow?.[cellKey] ?? '').trim()
     if (!ocrVal) {
       continue
@@ -593,6 +790,14 @@ function mergePairedLineItem(existingRow, ocrRow, fingerprint, isAdditionalBill)
       nextRow[cellKey] = ocrVal
       nextRow.fieldMeta[cellKey] = createFieldProvenance('ocr')
       delete nextRow.rowSuggestions[cellKey]
+      if (
+        cellKey === 'materialId' &&
+        ocrVal &&
+        !isFieldProtected(nextRow.fieldMeta.itemType)
+      ) {
+        nextRow.itemType = 'material'
+        nextRow.fieldMeta.itemType = createFieldProvenance('ocr')
+      }
       anyAutofilled = true
     } else {
       nextRow.rowSuggestions[cellKey] = {
@@ -686,13 +891,17 @@ export function mergeLineItemsWithOcr({
 
   existingRows.forEach((row, eIdx) => {
     if (pairedExistingToIncoming.has(eIdx)) return
-    const rowDescKey = normalizeDescriptionComparable(row.extractedDescription)
+    const rowDescKey = normalizeDescriptionComparable(
+      row.extractedDescription || row.description,
+    )
     if (!rowDescKey) return
 
     const matchingExistingCount = existingRows.filter(
       (r, idx) =>
         !pairedExistingToIncoming.has(idx) &&
-        normalizeDescriptionComparable(r.extractedDescription) === rowDescKey,
+        normalizeDescriptionComparable(
+          r.extractedDescription || r.description,
+        ) === rowDescKey,
     ).length
     if (matchingExistingCount !== 1) return
 
@@ -810,7 +1019,11 @@ function buildDeduplicatedSuggestions(
   return Array.from(byFingerprint.values())
 }
 
-export function promoteSuggestedLineItemToRows(existingRows = [], suggestedItem) {
+export function promoteSuggestedLineItemToRows(
+  existingRows = [],
+  suggestedItem,
+  preferredItemType = '',
+) {
   if (!suggestedItem) {
     return existingRows
   }
@@ -819,6 +1032,13 @@ export function promoteSuggestedLineItemToRows(existingRows = [], suggestedItem)
     suggestedItem,
     suggestedItem.ocrFingerprint || '',
   )
+  if (preferredItemType === 'material' || preferredItemType === 'expense') {
+    created.itemType = preferredItemType
+    created.fieldMeta.itemType = createFieldProvenance('manual', {
+      touched: true,
+      confirmed: true,
+    })
+  }
   created.fieldMeta = {
     ...created.fieldMeta,
     ...(created.materialId
@@ -858,4 +1078,3 @@ export function promoteSuggestedLineItemToRows(existingRows = [], suggestedItem)
 
   return [...existingRows, created]
 }
-
