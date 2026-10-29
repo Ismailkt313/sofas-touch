@@ -115,6 +115,7 @@ export interface IRawMaterial {
   category?: RawMaterialCategory | null;
   unit: RawMaterialUnit;
   quantityOnHand?: number;
+  minStockLevel?: number | null;
   description?: string;
   isActive: boolean;
   createdBy?: string;
@@ -154,6 +155,11 @@ const RawMaterialSchema = new Schema<IRawMaterial>(
       required: true,
       default: 0,
       min: [0, 'Quantity on hand cannot be negative.'],
+    },
+    minStockLevel: {
+      type: Number,
+      default: null,
+      min: [0, 'Minimum stock level cannot be negative.'],
     },
     description: {
       type: String,

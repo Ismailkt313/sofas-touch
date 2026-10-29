@@ -1,5 +1,6 @@
 import { NextFunction, Response } from 'express';
 import { AuthenticatedRequest } from '../../../types/auth';
+import { activityService } from '../../activity';
 import { validateCreateRawMaterialDto } from '../dto/create-raw-material.dto';
 import { validateGetRawMaterialsDto } from '../dto/get-raw-materials.dto';
 import {
@@ -180,6 +181,18 @@ export class RawMaterialsController implements IRawMaterialsController {
         createdBy,
       );
 
+      await activityService.recordSafe({
+        actionType: 'material.created',
+        entityType: 'material',
+        entityId: rawMaterial.id,
+        entityLabel: rawMaterial.name,
+        description: `Added raw material ${rawMaterial.name} (${rawMaterial.unit}).`,
+        actorId: createdBy,
+        actorName: req.user?.name || req.user?.email || 'Administrator',
+        actorRole: resolveCallerRole(req),
+        targetPath: `/raw-materials?material=${encodeURIComponent(rawMaterial.id)}`,
+      });
+
       res.status(201).json({
         message: 'Raw material created successfully.',
         rawMaterial,
@@ -220,6 +233,18 @@ export class RawMaterialsController implements IRawMaterialsController {
         id,
         validation.value,
       );
+
+      await activityService.recordSafe({
+        actionType: 'material.updated',
+        entityType: 'material',
+        entityId: rawMaterial.id,
+        entityLabel: rawMaterial.name,
+        description: `Updated raw material specifications for ${rawMaterial.name}.`,
+        actorId: req.user?.id || req.user?.email || 'admin',
+        actorName: req.user?.name || req.user?.email || 'Administrator',
+        actorRole: resolveCallerRole(req),
+        targetPath: `/raw-materials?material=${encodeURIComponent(rawMaterial.id)}`,
+      });
 
       res.status(200).json({
         message: 'Raw material updated successfully.',
@@ -263,6 +288,18 @@ export class RawMaterialsController implements IRawMaterialsController {
           validation.value,
         );
 
+      await activityService.recordSafe({
+        actionType: 'material.status_changed',
+        entityType: 'material',
+        entityId: rawMaterial.id,
+        entityLabel: rawMaterial.name,
+        description: `${rawMaterial.isActive ? 'Activated' : 'Deactivated'} raw material ${rawMaterial.name}.`,
+        actorId: req.user?.id || req.user?.email || 'admin',
+        actorName: req.user?.name || req.user?.email || 'Administrator',
+        actorRole: resolveCallerRole(req),
+        targetPath: `/raw-materials?material=${encodeURIComponent(rawMaterial.id)}`,
+      });
+
       res.status(200).json({
         message: rawMaterial.isActive
           ? 'Raw material activated successfully.'
@@ -305,6 +342,18 @@ export class RawMaterialsController implements IRawMaterialsController {
         id,
         validation.value,
       );
+
+      await activityService.recordSafe({
+        actionType: 'material.stock_adjusted',
+        entityType: 'material',
+        entityId: rawMaterial.id,
+        entityLabel: rawMaterial.name,
+        description: `Adjusted stock quantity of ${rawMaterial.name} to ${rawMaterial.quantityOnHand} ${rawMaterial.unit}.`,
+        actorId: req.user?.id || req.user?.email || 'admin',
+        actorName: req.user?.name || req.user?.email || 'Administrator',
+        actorRole: resolveCallerRole(req),
+        targetPath: `/raw-materials?material=${encodeURIComponent(rawMaterial.id)}`,
+      });
 
       res.status(200).json({
         message: 'Stock quantity adjusted successfully.',

@@ -13,6 +13,7 @@ export interface UpdateRawMaterialDto {
   name?: string;
   category?: RawMaterialCategory | null;
   unit?: RawMaterialUnit;
+  minStockLevel?: number | null;
   description?: string;
 }
 
@@ -42,6 +43,7 @@ const ALLOWED_UPDATE_FIELDS = new Set([
   'name',
   'category',
   'unit',
+  'minStockLevel',
   'description',
 ]);
 
@@ -112,6 +114,30 @@ export function validateUpdateRawMaterialDto(
         errors.category = `Category must be one of: ${RAW_MATERIAL_CATEGORIES.join(', ')}.`;
       } else {
         updateValue.category = normalizedCategory;
+      }
+    }
+  }
+
+  if (raw.minStockLevel !== undefined) {
+    if (raw.minStockLevel === null || raw.minStockLevel === '') {
+      updateValue.minStockLevel = null;
+    } else if (
+      typeof raw.minStockLevel !== 'number' &&
+      typeof raw.minStockLevel !== 'string'
+    ) {
+      errors.minStockLevel =
+        'Minimum stock level must be a non-negative number or null.';
+    } else {
+      const parsedMin =
+        typeof raw.minStockLevel === 'number'
+          ? raw.minStockLevel
+          : Number(String(raw.minStockLevel).trim());
+      if (!Number.isFinite(parsedMin) || parsedMin < 0) {
+        errors.minStockLevel =
+          'Minimum stock level must be a non-negative number or null.';
+      } else {
+        updateValue.minStockLevel =
+          Math.round((parsedMin + Number.EPSILON) * 1000) / 1000;
       }
     }
   }

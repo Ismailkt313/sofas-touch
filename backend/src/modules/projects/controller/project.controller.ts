@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../../../types/auth';
+import { activityService } from '../../activity';
 import { validateCreateProjectDto } from '../dto/create-project.dto';
 import {
   validateEvaluateActivityWarningsDto,
@@ -109,10 +110,28 @@ export class ProjectController implements IProjectController {
       }
 
       const createdBy = req.user?.email || req.user?.id || 'unknown';
+      const actorId = req.user?.id || createdBy;
+      const actorName = req.user?.name || req.user?.email || 'Workspace User';
+      const actorRole = req.user?.role === 'admin' ? 'admin' : 'data_entry';
       const project = await this.projectService.createProject(
         validation.value,
         createdBy,
       );
+
+      await activityService.recordSafe({
+        actionType: 'project.created',
+        entityType: 'project',
+        entityId: project.projectId,
+        entityLabel: `${project.projectId} — ${project.name}`,
+        description: `Created project ${project.projectId} (${project.name}) for ${project.clientName}.`,
+        actorId,
+        actorName,
+        actorRole,
+        projectRecordId: project.id,
+        projectCode: project.projectId,
+        projectName: project.name,
+        targetPath: `/projects/${encodeURIComponent(project.projectId)}`,
+      });
 
       res.status(201).json({
         message: 'Project created successfully.',
@@ -162,6 +181,21 @@ export class ProjectController implements IProjectController {
         id,
         validation.value,
       );
+
+      await activityService.recordSafe({
+        actionType: 'project.updated',
+        entityType: 'project',
+        entityId: project.projectId,
+        entityLabel: `${project.projectId} — ${project.name}`,
+        description: `Updated project ${project.projectId} (${project.name}).`,
+        actorId: req.user?.id || req.user?.email || 'unknown',
+        actorName: req.user?.name || req.user?.email || 'Workspace User',
+        actorRole: req.user?.role === 'admin' ? 'admin' : 'data_entry',
+        projectRecordId: project.id,
+        projectCode: project.projectId,
+        projectName: project.name,
+        targetPath: `/projects/${encodeURIComponent(project.projectId)}`,
+      });
 
       res.status(200).json({
         message: 'Project updated successfully.',
@@ -219,6 +253,21 @@ export class ProjectController implements IProjectController {
         validation.value.status,
       );
 
+      await activityService.recordSafe({
+        actionType: 'project.status_changed',
+        entityType: 'project',
+        entityId: project.projectId,
+        entityLabel: `${project.projectId} — ${project.name}`,
+        description: `Changed status of ${project.projectId} (${project.name}) to ${project.status}.`,
+        actorId: req.user?.id || req.user?.email || 'unknown',
+        actorName: req.user?.name || req.user?.email || 'Workspace User',
+        actorRole: req.user?.role === 'admin' ? 'admin' : 'data_entry',
+        projectRecordId: project.id,
+        projectCode: project.projectId,
+        projectName: project.name,
+        targetPath: `/projects/${encodeURIComponent(project.projectId)}`,
+      });
+
       res.status(200).json({
         message: `Project status updated to '${validation.value.status}' successfully.`,
         project,
@@ -258,6 +307,22 @@ export class ProjectController implements IProjectController {
       }
 
       const deleted = await this.projectService.deleteProject(id);
+
+      await activityService.recordSafe({
+        actionType: 'project.deleted',
+        entityType: 'project',
+        entityId: deleted.projectId,
+        entityLabel: `${deleted.projectId} — ${deleted.name}`,
+        description: `Removed project ${deleted.projectId} (${deleted.name}).`,
+        actorId: req.user?.id || req.user?.email || 'unknown',
+        actorName: req.user?.name || req.user?.email || 'Administrator',
+        actorRole: 'admin',
+        projectRecordId: deleted.id,
+        projectCode: deleted.projectId,
+        projectName: deleted.name,
+        targetPath: null,
+      });
+
       res.status(200).json({
         message: 'Project deleted successfully.',
         project: deleted,

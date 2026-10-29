@@ -127,6 +127,13 @@ export function SidebarNavIcon({ id, className = '' }) {
           <rect x="12.75" y="3.75" width="2.5" height="10.75" rx="0.75" stroke="currentColor" strokeWidth="1.5" />
         </svg>
       )
+    case 'activity':
+      return (
+        <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <circle cx="10" cy="10" r="6.75" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M10 6.25V10.15L12.65 11.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
     default:
       return null
   }

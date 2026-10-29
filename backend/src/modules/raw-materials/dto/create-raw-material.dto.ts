@@ -14,6 +14,7 @@ export interface CreateRawMaterialDto {
   category: RawMaterialCategory | null;
   unit: RawMaterialUnit;
   quantityOnHand?: number;
+  minStockLevel?: number | null;
   description: string;
 }
 
@@ -35,6 +36,7 @@ const ALLOWED_CREATE_FIELDS = new Set([
   'unit',
   'quantityOnHand',
   'initialQuantity',
+  'minStockLevel',
   'description',
 ]);
 
@@ -120,6 +122,23 @@ export function validateCreateRawMaterialDto(
     }
   }
 
+  let minStockLevel: number | null = null;
+  if (raw.minStockLevel !== undefined && raw.minStockLevel !== null && raw.minStockLevel !== '') {
+    if (typeof raw.minStockLevel !== 'number' && typeof raw.minStockLevel !== 'string') {
+      errors.minStockLevel = 'Minimum stock level must be a non-negative number.';
+    } else {
+      const parsedMin =
+        typeof raw.minStockLevel === 'number'
+          ? raw.minStockLevel
+          : Number(String(raw.minStockLevel).trim());
+      if (!Number.isFinite(parsedMin) || parsedMin < 0) {
+        errors.minStockLevel = 'Minimum stock level must be a non-negative number.';
+      } else {
+        minStockLevel = Math.round((parsedMin + Number.EPSILON) * 1000) / 1000;
+      }
+    }
+  }
+
   let description = '';
   if (raw.description !== undefined && raw.description !== null) {
     if (typeof raw.description !== 'string') {
@@ -142,6 +161,7 @@ export function validateCreateRawMaterialDto(
       category,
       unit,
       quantityOnHand,
+      minStockLevel,
       description,
     },
   };

@@ -230,6 +230,12 @@ export function normalizeRawMaterial(raw = {}) {
         : Number.isFinite(Number(raw.quantityOnHand))
           ? Math.max(0, Number(raw.quantityOnHand))
           : 0,
+    minStockLevel:
+      typeof raw.minStockLevel === 'number' &&
+      Number.isFinite(raw.minStockLevel) &&
+      raw.minStockLevel >= 0
+        ? raw.minStockLevel
+        : null,
     description:
       typeof raw.description === 'string' ? raw.description.trim() : '',
     isActive: raw.isActive !== undefined ? Boolean(raw.isActive) : true,
@@ -328,6 +334,18 @@ export function buildCreateMaterialPayload(formValues) {
     payload.category = cleanCategory
   }
 
+  const rawMinStock = formValues.minStockLevel
+  if (
+    rawMinStock !== undefined &&
+    rawMinStock !== null &&
+    String(rawMinStock).trim() !== ''
+  ) {
+    const parsedMin = Number(String(rawMinStock).trim())
+    if (Number.isFinite(parsedMin) && parsedMin >= 0) {
+      payload.minStockLevel = parsedMin
+    }
+  }
+
   const cleanDescription =
     typeof formValues.description === 'string'
       ? formValues.description.trim()
@@ -372,6 +390,20 @@ export function buildChangedMaterialPayload(originalMaterial, formValues) {
       : ''
   if (nextDescription !== prevDescription) {
     updates.description = nextDescription
+  }
+
+  const rawMin = formValues.minStockLevel
+  const nextMin =
+    rawMin !== undefined && rawMin !== null && String(rawMin).trim() !== ''
+      ? Number(String(rawMin).trim())
+      : null
+  const prevMin =
+    typeof originalMaterial?.minStockLevel === 'number' &&
+    Number.isFinite(originalMaterial.minStockLevel)
+      ? originalMaterial.minStockLevel
+      : null
+  if (nextMin !== prevMin) {
+    updates.minStockLevel = nextMin
   }
 
   return updates

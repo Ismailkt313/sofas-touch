@@ -14,6 +14,7 @@ const FIELD_DOM_IDS = {
   name: 'rm-form-name',
   unit: 'rm-form-unit',
   initialQuantity: 'rm-form-quantity',
+  minStockLevel: 'rm-form-min-stock',
   category: 'rm-form-category',
   description: 'rm-form-description',
 }
@@ -51,6 +52,7 @@ function buildInitialValues(material, isEditMode) {
       name: '',
       unit: '',
       initialQuantity: '',
+      minStockLevel: '',
       category: '',
       description: '',
     }
@@ -60,6 +62,11 @@ function buildInitialValues(material, isEditMode) {
     name: material.name || '',
     unit: material.unit || '',
     initialQuantity: '',
+    minStockLevel:
+      typeof material.minStockLevel === 'number' &&
+      Number.isFinite(material.minStockLevel)
+        ? String(material.minStockLevel)
+        : '',
     category: material.category || '',
     description: material.description || '',
     quantityOnHand:
@@ -92,6 +99,15 @@ function validateFormValues(values, isEditMode) {
     }
   }
 
+  const rawMin = values.minStockLevel
+  if (rawMin !== undefined && rawMin !== null && String(rawMin).trim() !== '') {
+    const parsedMin = Number(String(rawMin).trim())
+    if (!Number.isFinite(parsedMin) || parsedMin < 0) {
+      errors.minStockLevel =
+        'Minimum stock level must be a non-negative number.'
+    }
+  }
+
   const cleanDescription = String(values.description || '').trim()
   if (cleanDescription.length > MAX_MATERIAL_DESCRIPTION_LENGTH) {
     errors.description = `Description cannot exceed ${MAX_MATERIAL_DESCRIPTION_LENGTH} characters.`
@@ -101,7 +117,14 @@ function validateFormValues(values, isEditMode) {
 }
 
 function focusFirstInvalidField(validationErrors) {
-  const orderedKeys = ['name', 'unit', 'initialQuantity', 'category', 'description']
+  const orderedKeys = [
+    'name',
+    'unit',
+    'initialQuantity',
+    'minStockLevel',
+    'category',
+    'description',
+  ]
   const firstKey = orderedKeys.find((key) => Boolean(validationErrors[key]))
   if (!firstKey || typeof document === 'undefined') {
     return
@@ -462,6 +485,39 @@ export function RawMaterialFormModal({
                   ) : null}
                 </div>
               ) : null}
+
+              <div className="rm-form__field">
+                <label
+                  htmlFor={FIELD_DOM_IDS.minStockLevel}
+                  className="rm-form__label"
+                >
+                  Minimum Stock Level{' '}
+                  <span className="rm-form__opt">(Optional alert threshold)</span>
+                </label>
+                <input
+                  id={FIELD_DOM_IDS.minStockLevel}
+                  name="minStockLevel"
+                  type="number"
+                  min="0"
+                  step="any"
+                  className={`rm-form__input${
+                    errors.minStockLevel ? ' rm-form__input--error' : ''
+                  }`}
+                  placeholder="Leave blank if not configured"
+                  value={values.minStockLevel ?? ''}
+                  onChange={(event) =>
+                    updateField('minStockLevel', event.target.value)
+                  }
+                  onBlur={handleInputBlur}
+                  disabled={isFormDisabled}
+                  aria-invalid={Boolean(errors.minStockLevel)}
+                />
+                {errors.minStockLevel ? (
+                  <p className="rm-form__error" role="alert">
+                    {errors.minStockLevel}
+                  </p>
+                ) : null}
+              </div>
 
               <div className="rm-form__field">
                 <label

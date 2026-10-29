@@ -76,6 +76,67 @@ export function useRawMaterialsManagement({ currentUser }) {
   }, [searchInput])
 
   useEffect(() => {
+    if (!hasActiveAuthToken() || typeof window === 'undefined') {
+      return undefined
+    }
+    const params = new URLSearchParams(window.location.search)
+    const targetMaterialId = (params.get('material') || '').trim()
+    if (!targetMaterialId) {
+      return undefined
+    }
+
+    let cancelled = false
+    const seq = detailSeqRef.current + 1
+    detailSeqRef.current = seq
+
+    Promise.resolve()
+      .then(async () => {
+        if (cancelled) return
+        setDetailsModalState({
+          isOpen: true,
+          materialId: targetMaterialId,
+          material: null,
+          isLoading: true,
+          error: '',
+        })
+        const nextParams = new URLSearchParams(window.location.search)
+        nextParams.delete('material')
+        const nextQuery = nextParams.toString()
+        const cleanUrl = nextQuery
+          ? `${window.location.pathname}?${nextQuery}`
+          : window.location.pathname
+        window.history.replaceState({}, '', cleanUrl)
+
+        const freshMaterial = await fetchRawMaterialById(targetMaterialId)
+        if (cancelled || detailSeqRef.current !== seq) return
+        setDetailsModalState({
+          isOpen: true,
+          materialId: targetMaterialId,
+          material: freshMaterial,
+          isLoading: false,
+          error: '',
+        })
+      })
+      .catch((err) => {
+        if (cancelled || detailSeqRef.current !== seq) return
+        setDetailsModalState({
+          isOpen: true,
+          materialId: targetMaterialId,
+          material: null,
+          isLoading: false,
+          error:
+            err instanceof Error
+              ? err.message
+              : 'Unable to load raw material details.',
+        })
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     const hasToken = hasActiveAuthToken()
     if (!hasToken) {
       const resetTimer = window.setTimeout(() => {

@@ -1,4 +1,4 @@
-import { ADMIN_NAV_ITEMS, isNavItemActive } from './navigationConfig'
+import { getVisibleNavItems, isNavItemActive } from './navigationConfig'
 import { BrandEmblemIcon, SidebarNavIcon } from './SidebarIcons'
 import { SidebarProfile } from './SidebarProfile'
 
@@ -12,6 +12,8 @@ export function AdminSidebar({
   onCloseDrawer,
   closeButtonRef,
 }) {
+  const visibleItems = getVisibleNavItems(currentUser?.role)
+
   const handleNavClick = (event, targetPath) => {
     if (
       event.button === 0 &&
@@ -30,9 +32,9 @@ export function AdminSidebar({
     <div className="admin-sidebar__inner">
       <div className="admin-sidebar__brand-row">
         <a
-          href="/users"
+          href="/dashboard"
           className="admin-sidebar__brand"
-          onClick={(event) => handleNavClick(event, '/users')}
+          onClick={(event) => handleNavClick(event, '/dashboard')}
         >
           <span className="admin-sidebar__logo" aria-hidden="true">
             <BrandEmblemIcon className="admin-sidebar__logo-svg" />
@@ -65,7 +67,7 @@ export function AdminSidebar({
       <nav className="admin-sidebar__nav" aria-label="Admin primary navigation">
         <span className="admin-sidebar__section-label">Management</span>
         <ul className="admin-sidebar__list">
-          {ADMIN_NAV_ITEMS.map((item) => {
+          {visibleItems.map((item) => {
             const active = isNavItemActive(pathname, item.path)
             const showApprovalsBadge =
               item.id === 'user-approvals' && pendingApprovalsCount > 0

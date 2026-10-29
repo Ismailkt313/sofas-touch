@@ -2,6 +2,7 @@ import { NextFunction, RequestHandler, Response } from 'express';
 import multer from 'multer';
 import { env } from '../../../config/env';
 import { AuthenticatedRequest } from '../../../types/auth';
+import { activityService } from '../../activity';
 import {
   DuplicateSupplierInvoiceError,
   PurchaseConflictError,
@@ -221,6 +222,25 @@ export class PurchaseVoucherController {
         idempotencyHeader,
       );
 
+      if (result.created) {
+        const v = result.voucher;
+        const projText = v.projectCode ? ` for ${v.projectCode}` : '';
+        await activityService.recordSafe({
+          actionType: 'purchase.created',
+          entityType: 'purchase',
+          entityId: v.voucherNumber,
+          entityLabel: `${v.voucherNumber} (${v.supplierName})`,
+          description: `Recorded purchase voucher ${v.voucherNumber} from ${v.supplierName}${projText}.`,
+          actorId: caller.id || caller.email || 'user',
+          actorName: caller.name || caller.email || 'Workspace User',
+          actorRole: caller.role,
+          projectRecordId: v.projectRecordId || null,
+          projectCode: v.projectCode || null,
+          projectName: v.projectName || null,
+          targetPath: `/purchases/${encodeURIComponent(v.voucherNumber)}`,
+        });
+      }
+
       res.status(result.created ? 201 : 200).json({
         message: result.created
           ? 'Purchase voucher recorded successfully.'
@@ -248,6 +268,21 @@ export class PurchaseVoucherController {
         files,
         caller,
       );
+
+      await activityService.recordSafe({
+        actionType: 'purchase.updated',
+        entityType: 'purchase',
+        entityId: voucher.voucherNumber,
+        entityLabel: `${voucher.voucherNumber} (${voucher.supplierName})`,
+        description: `Updated purchase voucher ${voucher.voucherNumber} (${voucher.supplierName}).`,
+        actorId: caller.id || caller.email || 'user',
+        actorName: caller.name || caller.email || 'Workspace User',
+        actorRole: caller.role,
+        projectRecordId: voucher.projectRecordId || null,
+        projectCode: voucher.projectCode || null,
+        projectName: voucher.projectName || null,
+        targetPath: `/purchases/${encodeURIComponent(voucher.voucherNumber)}`,
+      });
 
       res.status(200).json({
         message: 'Purchase voucher updated successfully.',
@@ -285,6 +320,21 @@ export class PurchaseVoucherController {
         caller,
       );
 
+      await activityService.recordSafe({
+        actionType: 'purchase.attachment_added',
+        entityType: 'purchase',
+        entityId: voucher.voucherNumber,
+        entityLabel: `${voucher.voucherNumber} (${voucher.supplierName})`,
+        description: `Attached supplier bill to purchase voucher ${voucher.voucherNumber}.`,
+        actorId: caller.id || caller.email || 'user',
+        actorName: caller.name || caller.email || 'Workspace User',
+        actorRole: caller.role,
+        projectRecordId: voucher.projectRecordId || null,
+        projectCode: voucher.projectCode || null,
+        projectName: voucher.projectName || null,
+        targetPath: `/purchases/${encodeURIComponent(voucher.voucherNumber)}`,
+      });
+
       res.status(200).json({
         message: 'Bill attachment added to purchase voucher successfully.',
         voucher,
@@ -311,6 +361,21 @@ export class PurchaseVoucherController {
         reason,
         caller,
       );
+
+      await activityService.recordSafe({
+        actionType: 'purchase.cancelled',
+        entityType: 'purchase',
+        entityId: voucher.voucherNumber,
+        entityLabel: `${voucher.voucherNumber} (${voucher.supplierName})`,
+        description: `Cancelled purchase voucher ${voucher.voucherNumber} and reversed stock impact.`,
+        actorId: caller.id || caller.email || 'admin',
+        actorName: caller.name || caller.email || 'Administrator',
+        actorRole: caller.role,
+        projectRecordId: voucher.projectRecordId || null,
+        projectCode: voucher.projectCode || null,
+        projectName: voucher.projectName || null,
+        targetPath: `/purchases/${encodeURIComponent(voucher.voucherNumber)}`,
+      });
 
       res.status(200).json({
         message: 'Purchase voucher cancelled and stock impact reversed.',
