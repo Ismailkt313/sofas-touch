@@ -3,7 +3,15 @@ import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { env } from '../config/env';
 import { AuthenticatedRequest, AuthTokenPayload } from '../types/auth';
-import { IUser, UserModel, sharedUserMemoryStore } from '../modules/auth/models/user.model';
+import {
+  IUser,
+  UserModel,
+  sharedUserMemoryStore,
+} from '../modules/auth/models/user.model';
+import {
+  PermissionKey,
+  permissionService,
+} from '../modules/permissions/service/permission.service-bridge';
 
 export function generateToken(
   payload: AuthTokenPayload,
@@ -12,7 +20,14 @@ export function generateToken(
   const options: jwt.SignOptions = {
     expiresIn: expiresIn as jwt.SignOptions['expiresIn'],
   };
-  return jwt.sign(payload, env.JWT_SECRET, options);
+  const slimPayload: AuthTokenPayload = {
+    id: payload.id,
+    email: payload.email,
+    role: payload.role,
+    name: payload.name,
+    approvalStatus: payload.approvalStatus,
+  };
+  return jwt.sign(slimPayload, env.JWT_SECRET, options);
 }
 
 export async function findLiveUserById(id: string): Promise<IUser | null> {
@@ -45,7 +60,8 @@ export async function verifyToken(
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     res.status(401).json({
       error: 'Unauthorized',
-      message: 'Access denied. A valid Bearer authentication token is required.',
+      message:
+        'Access denied. A valid Bearer authentication token is required.',
     });
     return;
   }
@@ -81,12 +97,13 @@ export async function verifyToken(
       return;
     }
 
-    const canonicalRole = (
-      liveUser.role.toLowerCase().replace(/\s+/g, '_') as 'admin' | 'data_entry'
-    );
+    const canonicalRole = liveUser.role
+      .toLowerCase()
+      .replace(/\s+/g, '_') as 'admin' | 'data_entry';
 
     const approvalStatus =
-      liveUser.approvalStatus || (canonicalRole === 'admin' ? 'approved' : 'pending');
+      liveUser.approvalStatus ||
+      (canonicalRole === 'admin' ? 'approved' : 'pending');
 
     if (canonicalRole !== 'admin' && approvalStatus !== 'approved') {
       if (approvalStatus === 'rejected') {
@@ -108,13 +125,22 @@ export async function verifyToken(
       return;
     }
 
+    const effectivePermissions =
+      await permissionService.resolveEffectivePermissionsForUser(liveUser);
+
     req.user = {
-      ...decoded,
       id: String(liveUser._id),
       email: liveUser.email,
       name: liveUser.name,
       role: canonicalRole,
       approvalStatus,
+      permissions: effectivePermissions,
+      assignedProjectIds:
+        canonicalRole === 'admin'
+          ? null
+          : Array.isArray(liveUser.assignedProjectIds)
+            ? liveUser.assignedProjectIds
+            : null,
     };
 
     next();
@@ -135,8 +161,23 @@ export async function verifyToken(
   }
 }
 
-export function requireRole(allowedRoles: string[]) {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+export function hasCallerPermission(
+  req: AuthenticatedRequest,
+  permission: PermissionKey,
+): boolean {
+  if (!req.user) return false;
+  if (req.user.role === 'admin') return true;
+  return Array.isArray(req.user.permissions)
+    ? req.user.permissions.includes(permission)
+    : false;
+}
+
+export function requirePermission(requiredPermission: PermissionKey) {
+  return (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): void => {
     if (!req.user) {
       res.status(401).json({
         error: 'Unauthorized',
@@ -145,7 +186,100 @@ export function requireRole(allowedRoles: string[]) {
       return;
     }
 
-    const normalizedUserRole = req.user.role.toLowerCase().replace(/\s+/g, '_');
+    if (!hasCallerPermission(req, requiredPermission)) {
+      res.status(403).json({
+        error: 'Forbidden',
+        code: 'PERMISSION_DENIED',
+        requiredPermission,
+        message: `Access denied. You do not have the '${requiredPermission}' permission required for this operation.`,
+      });
+      return;
+    }
+
+    next();
+  };
+}
+
+export function requireAnyPermission(allowedPermissions: PermissionKey[]) {
+  return (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): void => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication is required before checking permissions.',
+      });
+      return;
+    }
+
+    const permitted = allowedPermissions.some((perm) =>
+      hasCallerPermission(req, perm),
+    );
+    if (!permitted) {
+      res.status(403).json({
+        error: 'Forbidden',
+        code: 'PERMISSION_DENIED',
+        requiredPermissions: allowedPermissions,
+        message:
+          'Access denied. Your account does not have permission to perform this operation.',
+      });
+      return;
+    }
+
+    next();
+  };
+}
+
+export function requireAllPermissions(requiredPermissions: PermissionKey[]) {
+  return (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): void => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication is required before checking permissions.',
+      });
+      return;
+    }
+
+    const missing = requiredPermissions.find(
+      (perm) => !hasCallerPermission(req, perm),
+    );
+    if (missing) {
+      res.status(403).json({
+        error: 'Forbidden',
+        code: 'PERMISSION_DENIED',
+        requiredPermission: missing,
+        message: `Access denied. You do not have the '${missing}' permission required for this operation.`,
+      });
+      return;
+    }
+
+    next();
+  };
+}
+
+export function requireRole(allowedRoles: string[]) {
+  return (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): void => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication is required before checking permissions.',
+      });
+      return;
+    }
+
+    const normalizedUserRole = req.user.role
+      .toLowerCase()
+      .replace(/\s+/g, '_');
     const normalizedAllowed = allowedRoles.map((r) =>
       r.toLowerCase().replace(/\s+/g, '_'),
     );
@@ -153,6 +287,7 @@ export function requireRole(allowedRoles: string[]) {
     if (!normalizedAllowed.includes(normalizedUserRole)) {
       res.status(403).json({
         error: 'Forbidden',
+        code: 'PERMISSION_DENIED',
         message: `Access denied. This resource requires ${allowedRoles.join(
           ' or ',
         )} privileges. Your current role is '${req.user.role}'.`,
@@ -201,7 +336,8 @@ export function requireApprovedDataEntry(
 
     res.status(403).json({
       error: 'Forbidden',
-      message: 'Your account is pending administrator approval before onboarding can be accessed.',
+      message:
+        'Your account is awaiting Administrator approval before access is granted.',
       code: 'PENDING_APPROVAL',
     });
     return;
@@ -209,29 +345,3 @@ export function requireApprovedDataEntry(
 
   next();
 }
-
-export const requireOnboardingAccess = requireApprovedDataEntry;
-export const requireApprovedUser = (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction,
-): void => {
-  if (!req.user) {
-    res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Authentication is required.',
-    });
-    return;
-  }
-
-  if (req.user.role !== 'admin' && req.user.approvalStatus !== 'approved') {
-    res.status(403).json({
-      error: 'Forbidden',
-      message: 'Access denied. Account is not approved.',
-      code: req.user.approvalStatus === 'rejected' ? 'ACCOUNT_REJECTED' : 'PENDING_APPROVAL',
-    });
-    return;
-  }
-
-  next();
-};

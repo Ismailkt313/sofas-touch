@@ -1,6 +1,8 @@
 import { Response, NextFunction } from 'express';
+import { hasCallerPermission } from '../../../middleware/auth';
 import { AuthenticatedRequest } from '../../../types/auth';
 import { activityService } from '../../activity';
+import { isProjectAccessibleToCaller } from '../../permissions/constants/permissions.constants';
 import { validateCreateProjectDto } from '../dto/create-project.dto';
 import {
   validateEvaluateActivityWarningsDto,
@@ -10,7 +12,11 @@ import {
 } from '../dto/list-projects.dto';
 import { validateUpdateProjectDto } from '../dto/update-project.dto';
 import { validateUpdateProjectStatusDto } from '../dto/update-status.dto';
-import { IProjectController, IProjectService } from '../types';
+import {
+  IProjectController,
+  IProjectService,
+  ProjectResponseDto,
+} from '../types';
 import {
   InvalidProjectOperationError,
   ProjectNotFoundError,
@@ -23,6 +29,49 @@ function extractParam(raw: string | string[] | undefined): string {
     return (raw[0] || '').trim();
   }
   return typeof raw === 'string' ? raw.trim() : '';
+}
+
+function redactProjectForCaller(
+  project: ProjectResponseDto,
+  canViewProfitability: boolean,
+): Record<string, unknown> {
+  if (canViewProfitability) {
+    return { ...project, financialsRedacted: false };
+  }
+
+  return {
+    id: project.id,
+    projectId: project.projectId,
+    name: project.name,
+    clientName: project.clientName,
+    category: project.category,
+    status: project.status,
+    description: project.description,
+    contractValue: null,
+    totalPurchases: null,
+    totalOtherExpenses: null,
+    totalCost: null,
+    estimatedProfit: null,
+    costPercentage: null,
+    estimatedProfitMargin: null,
+    costAlertThresholdPercent: null,
+    costThresholdState: null,
+    financialsRedacted: true,
+    lastActivityAt: project.lastActivityAt,
+    lastActivityType: project.lastActivityType,
+    createdBy: project.createdBy,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  };
+}
+
+function respondProjectAccessDenied(res: Response): void {
+  res.status(403).json({
+    error: 'Forbidden',
+    code: 'PROJECT_ACCESS_DENIED',
+    message:
+      'Access denied. Your account is not assigned to access this project record.',
+  });
 }
 
 export class ProjectController implements IProjectController {
@@ -47,10 +96,48 @@ export class ProjectController implements IProjectController {
         return;
       }
 
+      const canViewProfitability = hasCallerPermission(
+        req,
+        'reports.viewProfitability',
+      );
+      const assignedIds = req.user?.assignedProjectIds ?? null;
+
+      if (Array.isArray(assignedIds)) {
+        const fullResult = await this.projectService.listProjects({
+          ...validation.value,
+          page: 1,
+          limit: 500,
+        });
+        const allowed = fullResult.items.filter((p) =>
+          isProjectAccessibleToCaller(assignedIds, p.id, p.projectId),
+        );
+        const total = allowed.length;
+        const page = validation.value.page;
+        const limit = validation.value.limit;
+        const start = (page - 1) * limit;
+        const paged = allowed
+          .slice(start, start + limit)
+          .map((p) => redactProjectForCaller(p, canViewProfitability));
+        const totalPages = Math.max(1, Math.ceil(total / limit));
+
+        res.status(200).json({
+          projects: paged,
+          items: paged,
+          total,
+          page,
+          limit,
+          totalPages,
+        });
+        return;
+      }
+
       const result = await this.projectService.listProjects(validation.value);
+      const sanitizedItems = result.items.map((p) =>
+        redactProjectForCaller(p, canViewProfitability),
+      );
       res.status(200).json({
-        projects: result.items,
-        items: result.items,
+        projects: sanitizedItems,
+        items: sanitizedItems,
         total: result.total,
         page: result.page,
         limit: result.limit,
@@ -77,7 +164,24 @@ export class ProjectController implements IProjectController {
       }
 
       const project = await this.projectService.getProjectByIdOrCode(id);
-      res.status(200).json({ project });
+      if (
+        !isProjectAccessibleToCaller(
+          req.user?.assignedProjectIds,
+          project.id,
+          project.projectId,
+        )
+      ) {
+        respondProjectAccessDenied(res);
+        return;
+      }
+
+      const canViewProfitability = hasCallerPermission(
+        req,
+        'reports.viewProfitability',
+      );
+      res.status(200).json({
+        project: redactProjectForCaller(project, canViewProfitability),
+      });
     } catch (error: unknown) {
       if (error instanceof ProjectNotFoundError) {
         res.status(404).json({
@@ -96,7 +200,25 @@ export class ProjectController implements IProjectController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const validation = validateCreateProjectDto(req.body);
+      const canViewProfitability = hasCallerPermission(
+        req,
+        'reports.viewProfitability',
+      );
+      const rawBody =
+        req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+          ? { ...(req.body as Record<string, unknown>) }
+          : req.body;
+
+      if (
+        !canViewProfitability &&
+        rawBody &&
+        typeof rawBody === 'object' &&
+        rawBody.contractValue === undefined
+      ) {
+        rawBody.contractValue = 0;
+      }
+
+      const validation = validateCreateProjectDto(rawBody);
       if (!validation.isValid || !validation.value) {
         const firstError = validation.errors
           ? Object.values(validation.errors)[0]
@@ -105,6 +227,17 @@ export class ProjectController implements IProjectController {
           error: 'Bad Request',
           message: firstError,
           errors: validation.errors,
+        });
+        return;
+      }
+
+      if (!canViewProfitability && validation.value.contractValue > 0) {
+        res.status(403).json({
+          error: 'Forbidden',
+          code: 'PERMISSION_DENIED',
+          requiredPermission: 'reports.viewProfitability',
+          message:
+            'Setting confidential contract values requires financial profitability access.',
         });
         return;
       }
@@ -135,7 +268,7 @@ export class ProjectController implements IProjectController {
 
       res.status(201).json({
         message: 'Project created successfully.',
-        project,
+        project: redactProjectForCaller(project, canViewProfitability),
       });
     } catch (error: unknown) {
       if (error instanceof InvalidProjectOperationError) {
@@ -160,6 +293,40 @@ export class ProjectController implements IProjectController {
         res.status(400).json({
           error: 'Bad Request',
           message: 'A valid project ID or code is required.',
+        });
+        return;
+      }
+
+      const existing = await this.projectService.getProjectByIdOrCode(id);
+      if (
+        !isProjectAccessibleToCaller(
+          req.user?.assignedProjectIds,
+          existing.id,
+          existing.projectId,
+        )
+      ) {
+        respondProjectAccessDenied(res);
+        return;
+      }
+
+      const canViewProfitability = hasCallerPermission(
+        req,
+        'reports.viewProfitability',
+      );
+      if (
+        !canViewProfitability &&
+        req.body &&
+        typeof req.body === 'object' &&
+        ((req.body as Record<string, unknown>).contractValue !== undefined ||
+          (req.body as Record<string, unknown>).costAlertThresholdPercent !==
+            undefined)
+      ) {
+        res.status(403).json({
+          error: 'Forbidden',
+          code: 'PERMISSION_DENIED',
+          requiredPermission: 'reports.viewProfitability',
+          message:
+            'Modifying confidential contract values or cost thresholds requires financial profitability access.',
         });
         return;
       }
@@ -199,7 +366,7 @@ export class ProjectController implements IProjectController {
 
       res.status(200).json({
         message: 'Project updated successfully.',
-        project,
+        project: redactProjectForCaller(project, canViewProfitability),
       });
     } catch (error: unknown) {
       if (error instanceof ProjectNotFoundError) {
@@ -232,6 +399,18 @@ export class ProjectController implements IProjectController {
           error: 'Bad Request',
           message: 'A valid project ID or code is required.',
         });
+        return;
+      }
+
+      const existing = await this.projectService.getProjectByIdOrCode(id);
+      if (
+        !isProjectAccessibleToCaller(
+          req.user?.assignedProjectIds,
+          existing.id,
+          existing.projectId,
+        )
+      ) {
+        respondProjectAccessDenied(res);
         return;
       }
 
@@ -268,9 +447,13 @@ export class ProjectController implements IProjectController {
         targetPath: `/projects/${encodeURIComponent(project.projectId)}`,
       });
 
+      const canViewProfitability = hasCallerPermission(
+        req,
+        'reports.viewProfitability',
+      );
       res.status(200).json({
         message: `Project status updated to '${validation.value.status}' successfully.`,
-        project,
+        project: redactProjectForCaller(project, canViewProfitability),
       });
     } catch (error: unknown) {
       if (error instanceof ProjectNotFoundError) {
@@ -306,7 +489,23 @@ export class ProjectController implements IProjectController {
         return;
       }
 
+      const existing = await this.projectService.getProjectByIdOrCode(id);
+      if (
+        !isProjectAccessibleToCaller(
+          req.user?.assignedProjectIds,
+          existing.id,
+          existing.projectId,
+        )
+      ) {
+        respondProjectAccessDenied(res);
+        return;
+      }
+
       const deleted = await this.projectService.deleteProject(id);
+      const canViewProfitability = hasCallerPermission(
+        req,
+        'reports.viewProfitability',
+      );
 
       await activityService.recordSafe({
         actionType: 'project.deleted',
@@ -316,7 +515,7 @@ export class ProjectController implements IProjectController {
         description: `Removed project ${deleted.projectId} (${deleted.name}).`,
         actorId: req.user?.id || req.user?.email || 'unknown',
         actorName: req.user?.name || req.user?.email || 'Administrator',
-        actorRole: 'admin',
+        actorRole: req.user?.role === 'admin' ? 'admin' : 'data_entry',
         projectRecordId: deleted.id,
         projectCode: deleted.projectId,
         projectName: deleted.name,
@@ -325,7 +524,7 @@ export class ProjectController implements IProjectController {
 
       res.status(200).json({
         message: 'Project deleted successfully.',
-        project: deleted,
+        project: redactProjectForCaller(deleted, canViewProfitability),
       });
     } catch (error: unknown) {
       if (error instanceof ProjectNotFoundError) {
@@ -355,6 +554,17 @@ export class ProjectController implements IProjectController {
       }
 
       const summary = await this.projectService.getProjectFinancialSummary(id);
+      if (
+        !isProjectAccessibleToCaller(
+          req.user?.assignedProjectIds,
+          summary.id,
+          summary.projectId,
+        )
+      ) {
+        respondProjectAccessDenied(res);
+        return;
+      }
+
       res.status(200).json({
         summary,
         integrations: this.projectService.getVoucherIntegrationStatus(),
@@ -393,11 +603,17 @@ export class ProjectController implements IProjectController {
       const result = await this.projectService.listProjectFinancialSummaries(
         validation.value,
       );
+      const assignedIds = req.user?.assignedProjectIds ?? null;
+      const items = Array.isArray(assignedIds)
+        ? result.items.filter((s) =>
+            isProjectAccessibleToCaller(assignedIds, s.id, s.projectId),
+          )
+        : result.items;
 
       res.status(200).json({
-        summaries: result.items,
-        items: result.items,
-        total: result.total,
+        summaries: items,
+        items,
+        total: Array.isArray(assignedIds) ? items.length : result.total,
         page: result.page,
         limit: result.limit,
         totalPages: result.totalPages,
@@ -420,6 +636,18 @@ export class ProjectController implements IProjectController {
           error: 'Bad Request',
           message: 'A valid project ID or code is required.',
         });
+        return;
+      }
+
+      const existing = await this.projectService.getProjectByIdOrCode(id);
+      if (
+        !isProjectAccessibleToCaller(
+          req.user?.assignedProjectIds,
+          existing.id,
+          existing.projectId,
+        )
+      ) {
+        respondProjectAccessDenied(res);
         return;
       }
 
@@ -488,6 +716,18 @@ export class ProjectController implements IProjectController {
           error: 'Bad Request',
           message: 'A valid project ID or code is required.',
         });
+        return;
+      }
+
+      const existing = await this.projectService.getProjectByIdOrCode(id);
+      if (
+        !isProjectAccessibleToCaller(
+          req.user?.assignedProjectIds,
+          existing.id,
+          existing.projectId,
+        )
+      ) {
+        respondProjectAccessDenied(res);
         return;
       }
 

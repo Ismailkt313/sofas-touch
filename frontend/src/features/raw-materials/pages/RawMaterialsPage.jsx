@@ -12,6 +12,7 @@ import '../styles/raw-materials.css'
 export function RawMaterialsPage({ currentUser, onNavigate }) {
   const {
     adminAccess,
+    canCreateMaterial,
     materials,
     totalMaterials,
     totalPages,
@@ -70,7 +71,7 @@ export function RawMaterialsPage({ currentUser, onNavigate }) {
           </p>
         </div>
 
-        {!authRequired && adminAccess ? (
+        {!authRequired && canCreateMaterial ? (
           <div className="rm-header__actions">
             <button
               type="button"
@@ -277,7 +278,7 @@ export function RawMaterialsPage({ currentUser, onNavigate }) {
                     >
                       Reset Filters
                     </button>
-                  ) : adminAccess ? (
+                  ) : canCreateMaterial ? (
                     <button
                       type="button"
                       className="admin-btn admin-btn--primary"

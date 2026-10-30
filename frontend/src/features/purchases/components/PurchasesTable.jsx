@@ -9,6 +9,7 @@ import {
 
 export function PurchasesTable({
   vouchers,
+  canEditVoucher = true,
   onViewVoucher,
   onEditVoucher,
   onViewProject,
@@ -120,7 +121,7 @@ export function PurchasesTable({
                     >
                       View
                     </button>
-                    {!isCancelled ? (
+                    {!isCancelled && canEditVoucher ? (
                       <button
                         type="button"
                         className="pv-action-btn pv-action-btn--edit"

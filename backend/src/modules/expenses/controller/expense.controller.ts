@@ -3,6 +3,7 @@ import multer from 'multer';
 import { env } from '../../../config/env';
 import { AuthenticatedRequest } from '../../../types/auth';
 import { activityService } from '../../activity';
+import { isProjectAccessibleToCaller } from '../../permissions/constants/permissions.constants';
 import {
   BillAttachmentNotFoundError,
   InvalidBillAttachmentError,
@@ -119,6 +120,10 @@ function extractCaller(req: AuthenticatedRequest): ExpenseCallerIdentity {
     email: String(req.user?.email || ''),
     name: String(req.user?.name || req.user?.email || ''),
     role: req.user?.role === 'admin' ? 'admin' : 'data_entry',
+    permissions: Array.isArray(req.user?.permissions)
+      ? req.user!.permissions!
+      : [],
+    assignedProjectIds: req.user?.assignedProjectIds ?? null,
   };
 }
 
@@ -283,9 +288,47 @@ export class ExpenseController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const result = await this.service.listExpenseVouchers(
-        req.query as Record<string, unknown>,
-      );
+      const assignedIds = req.user?.assignedProjectIds ?? null;
+      const queryObj = (req.query || {}) as Record<string, unknown>;
+      if (
+        Array.isArray(assignedIds) &&
+        typeof queryObj.projectId === 'string' &&
+        queryObj.projectId.trim() &&
+        !isProjectAccessibleToCaller(
+          assignedIds,
+          queryObj.projectId,
+          queryObj.projectId,
+        )
+      ) {
+        res.status(403).json({
+          error: 'Forbidden',
+          code: 'PROJECT_ACCESS_DENIED',
+          message:
+            'Access denied. Your account is not assigned to view expenses for this project.',
+        });
+        return;
+      }
+
+      const result = await this.service.listExpenseVouchers(queryObj);
+      if (Array.isArray(assignedIds)) {
+        const filtered = result.items.filter(
+          (v) =>
+            !v.projectRecordId ||
+            isProjectAccessibleToCaller(
+              assignedIds,
+              v.projectRecordId,
+              v.projectCode || null,
+            ),
+        );
+        res.status(200).json({
+          ...result,
+          vouchers: filtered,
+          items: filtered,
+          total: filtered.length,
+          totalPages: Math.max(1, Math.ceil(filtered.length / result.limit)),
+        });
+        return;
+      }
       res.status(200).json(result);
     } catch (err) {
       this.handleError(err, res, next);
@@ -300,6 +343,22 @@ export class ExpenseController {
     try {
       const id = extractParam(req.params.id);
       const voucher = await this.service.getExpenseVoucherById(id);
+      if (
+        voucher.projectRecordId &&
+        !isProjectAccessibleToCaller(
+          req.user?.assignedProjectIds,
+          voucher.projectRecordId,
+          voucher.projectCode || null,
+        )
+      ) {
+        res.status(403).json({
+          error: 'Forbidden',
+          code: 'PROJECT_ACCESS_DENIED',
+          message:
+            'Access denied. Your account is not assigned to access this expense voucher.',
+        });
+        return;
+      }
       res.status(200).json({ voucher });
     } catch (err) {
       this.handleError(err, res, next);
@@ -312,6 +371,27 @@ export class ExpenseController {
     next: NextFunction,
   ): Promise<void> => {
     try {
+      const assignedIds = req.user?.assignedProjectIds ?? null;
+      const bodyObj = (req.body || {}) as Record<string, unknown>;
+      if (
+        Array.isArray(assignedIds) &&
+        typeof bodyObj.projectId === 'string' &&
+        bodyObj.projectId.trim() &&
+        !isProjectAccessibleToCaller(
+          assignedIds,
+          bodyObj.projectId,
+          bodyObj.projectId,
+        )
+      ) {
+        res.status(403).json({
+          error: 'Forbidden',
+          code: 'PROJECT_ACCESS_DENIED',
+          message:
+            'Access denied. You cannot record an expense voucher against an unassigned project.',
+        });
+        return;
+      }
+
       const caller = extractCaller(req);
       const uploadedFiles = extractUploadedFiles(req);
       const headerIdempKey =
@@ -365,6 +445,25 @@ export class ExpenseController {
     try {
       const caller = extractCaller(req);
       const id = extractParam(req.params.id);
+      if (Array.isArray(req.user?.assignedProjectIds)) {
+        const existing = await this.service.getExpenseVoucherById(id);
+        if (
+          existing.projectRecordId &&
+          !isProjectAccessibleToCaller(
+            req.user?.assignedProjectIds,
+            existing.projectRecordId,
+            existing.projectCode || null,
+          )
+        ) {
+          res.status(403).json({
+            error: 'Forbidden',
+            code: 'PROJECT_ACCESS_DENIED',
+            message:
+              'Access denied. Your account is not assigned to modify this expense voucher.',
+          });
+          return;
+        }
+      }
       const uploadedFiles = extractUploadedFiles(req);
       const voucher = await this.service.updateExpenseVoucher(
         id,
@@ -446,6 +545,25 @@ export class ExpenseController {
   ): Promise<void> => {
     try {
       const id = extractParam(req.params.id);
+      if (Array.isArray(req.user?.assignedProjectIds)) {
+        const existing = await this.service.getExpenseVoucherById(id);
+        if (
+          existing.projectRecordId &&
+          !isProjectAccessibleToCaller(
+            req.user?.assignedProjectIds,
+            existing.projectRecordId,
+            existing.projectCode || null,
+          )
+        ) {
+          res.status(403).json({
+            error: 'Forbidden',
+            code: 'PROJECT_ACCESS_DENIED',
+            message:
+              'Access denied. Your account is not assigned to view attachments for this expense voucher.',
+          });
+          return;
+        }
+      }
       const attachmentId = extractParam(req.params.attachmentId);
       const { attachment, buffer } = await this.service.openExpenseAttachment(
         id,

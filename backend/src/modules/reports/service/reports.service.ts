@@ -1,5 +1,6 @@
 import { env } from '../../../config/env';
 import { IExpenseVoucher } from '../../expenses';
+import { isProjectAccessibleToCaller } from '../../permissions/constants/permissions.constants';
 import {
   calculateProjectFinancialMetrics,
   IProject,
@@ -142,10 +143,29 @@ export class ReportsService {
     private readonly repository: ReportsRepository = new ReportsRepository(),
   ) {}
 
-  private assertAdmin(caller: ReportCallerIdentity): void {
-    if (caller.role !== 'admin') {
+  private assertCanViewReports(caller: ReportCallerIdentity): void {
+    const allowed =
+      caller.role === 'admin' ||
+      (Array.isArray(caller.permissions) &&
+        caller.permissions.includes('reports.view'));
+    if (!allowed) {
       throw new ReportForbiddenError();
     }
+  }
+
+  private canViewProfitability(caller: ReportCallerIdentity): boolean {
+    return (
+      caller.role === 'admin' ||
+      (Array.isArray(caller.permissions) &&
+        caller.permissions.includes('reports.viewProfitability'))
+    );
+  }
+
+  private assertAdmin(caller: ReportCallerIdentity): void {
+    if (!this.canViewProfitability(caller)) {
+      throw new ReportForbiddenError();
+    }
+    this.assertCanViewReports(caller);
   }
 
   private buildPeriodMeta(
@@ -418,21 +438,77 @@ export class ReportsService {
     rawQuery: Record<string, unknown>,
     caller: ReportCallerIdentity,
   ): Promise<ProjectReportListResponseDto> {
-    this.assertAdmin(caller);
+    this.assertCanViewReports(caller);
+    const includeProfitability = this.canViewProfitability(caller);
 
-    const { query, period, sortedRows, summary } =
+    const { query, period, sortedRows } =
       await this.buildFilteredRowsAndSummary(rawQuery);
 
-    const total = sortedRows.length;
+    const scopedRows = Array.isArray(caller.assignedProjectIds)
+      ? sortedRows.filter((row) =>
+          isProjectAccessibleToCaller(
+            caller.assignedProjectIds,
+            row.id,
+            row.projectId,
+          ),
+        )
+      : sortedRows;
+
+    const computedSummary = this.computeSummaryFromRows(scopedRows);
+    const total = scopedRows.length;
     const totalPages = Math.max(1, Math.ceil(total / query.limit));
     const safePage = Math.min(query.page, totalPages);
     const startIdx = (safePage - 1) * query.limit;
-    const pagedItems = sortedRows.slice(startIdx, startIdx + query.limit);
+    const rawPagedItems = scopedRows.slice(startIdx, startIdx + query.limit);
+
+    if (!includeProfitability) {
+      const redactedSummary = {
+        ...computedSummary,
+        contractValue: null,
+        estimatedProfit: null,
+        profitMargin: null,
+        marginApplicable: false,
+        costPercentage: null,
+        costPercentageApplicable: false,
+        lifetimeEstimatedProfit: null,
+        profitableProjectCount: 0,
+        nearLimitProjectCount: 0,
+        lossProjectCount: 0,
+        profitabilityRedacted: true,
+      } as unknown as ReportsPortfolioSummaryDto;
+
+      const redactedItems = rawPagedItems.map((row) => ({
+        ...row,
+        contractValue: null,
+        estimatedProfit: null,
+        profitMargin: null,
+        marginApplicable: false,
+        costPercentage: null,
+        costPercentageApplicable: false,
+        lifetimeEstimatedProfit: null,
+        healthStatus: 'neutral',
+        profitabilityRedacted: true,
+      })) as unknown as ProjectProfitabilityRowDto[];
+
+      return {
+        period,
+        summary: redactedSummary,
+        items: redactedItems,
+        total,
+        page: safePage,
+        limit: query.limit,
+        totalPages,
+        schemaNotes: {
+          siteLocationPersisted: false,
+          clientContactPersisted: false,
+        },
+      };
+    }
 
     return {
       period,
-      summary,
-      items: pagedItems,
+      summary: computedSummary,
+      items: rawPagedItems,
       total,
       page: safePage,
       limit: query.limit,
@@ -666,7 +742,8 @@ export class ReportsService {
     rawQuery: Record<string, unknown>,
     caller: ReportCallerIdentity,
   ): Promise<IndividualProjectReportResponseDto> {
-    this.assertAdmin(caller);
+    this.assertCanViewReports(caller);
+    const includeProfitability = this.canViewProfitability(caller);
 
     const validation = validateProjectReportDetailQueryDto(rawQuery);
     if (!validation.isValid || !validation.value) {
@@ -684,6 +761,18 @@ export class ReportsService {
     if (!project || !project._id) {
       throw new ReportNotFoundError(
         `Project '${identifier}' was not found.`,
+      );
+    }
+
+    if (
+      !isProjectAccessibleToCaller(
+        caller.assignedProjectIds,
+        String(project._id),
+        project.projectId,
+      )
+    ) {
+      throw new ReportForbiddenError(
+        'Access denied. You do not have permission to view reports for this project.',
       );
     }
 
@@ -798,7 +887,7 @@ export class ReportsService {
       expenseHistory,
     );
 
-    return {
+    const fullReport: IndividualProjectReportResponseDto = {
       period,
       project: {
         id: projectRecordId,
@@ -875,6 +964,43 @@ export class ReportsService {
         clientContactPersisted: false,
       },
     };
+
+    if (!includeProfitability) {
+      return {
+        ...fullReport,
+        project: {
+          ...fullReport.project,
+          contractValue: null as unknown as number,
+          costAlertThresholdPercent: null as unknown as number,
+        },
+        financialOverview: {
+          lifetime: {
+            ...fullReport.financialOverview.lifetime,
+            contractValue: null as unknown as number,
+            estimatedProfit: null as unknown as number,
+            profitMargin: null,
+            marginApplicable: false,
+            costPercentage: null,
+            costPercentageApplicable: false,
+            healthStatus: 'neutral',
+          },
+          selectedPeriod: {
+            ...fullReport.financialOverview.selectedPeriod,
+            netAgainstContract: null as unknown as number,
+            marginAgainstContract: null,
+            marginApplicable: false,
+            costPercentageOfContract: null,
+          },
+          costBreakdown: {
+            ...fullReport.financialOverview.costBreakdown,
+            materialPercentOfContract: null,
+            expensePercentOfContract: null,
+          },
+        },
+      };
+    }
+
+    return fullReport;
   }
 
   async exportIndividualProjectReportPdf(
@@ -882,6 +1008,7 @@ export class ReportsService {
     rawQuery: Record<string, unknown>,
     caller: ReportCallerIdentity,
   ): Promise<{ buffer: Buffer; fileName: string }> {
+    this.assertAdmin(caller);
     const report = await this.getIndividualProjectReport(
       identifier,
       rawQuery,

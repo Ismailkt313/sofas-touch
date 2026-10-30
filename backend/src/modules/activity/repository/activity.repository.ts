@@ -1,4 +1,5 @@
 import mongoose, { Model } from 'mongoose';
+import { isProjectAccessibleToCaller } from '../../permissions/constants/permissions.constants';
 import {
   ActivityModel,
   IActivity,
@@ -23,6 +24,8 @@ function nextActivityTimestamp(explicit?: Date): Date {
   lastActivityTs = now > lastActivityTs ? now : lastActivityTs + 1;
   return new Date(lastActivityTs);
 }
+
+const ADMIN_ONLY_ENTITIES = new Set(['user', 'permission', 'settings']);
 
 export class ActivityRepository {
   private indexPromise: Promise<void> | null = null;
@@ -78,28 +81,68 @@ export class ActivityRepository {
   async findRecent(params: {
     limit: number;
     includeAdminOnly: boolean;
+    restrictToActorId?: string | null;
+    assignedProjectIds?: string[] | null;
   }): Promise<IActivity[]> {
     const safeLimit = Math.min(50, Math.max(1, params.limit));
 
     if (this.isDbConnected()) {
       const filter: Record<string, unknown> = params.includeAdminOnly
         ? {}
-        : { visibility: 'all', entityType: { $ne: 'user' } };
+        : {
+            visibility: 'all',
+            entityType: { $nin: Array.from(ADMIN_ONLY_ENTITIES) },
+          };
+
+      if (params.restrictToActorId) {
+        filter.actorId = params.restrictToActorId;
+      }
+
+      const fetchCap = Array.isArray(params.assignedProjectIds)
+        ? safeLimit * 3
+        : safeLimit;
 
       const docs = await this.model
         .find(filter)
         .sort({ timestamp: -1, _id: -1 })
-        .limit(safeLimit)
+        .limit(fetchCap)
         .lean()
         .exec();
 
-      return docs as unknown as IActivity[];
+      let mapped = docs as unknown as IActivity[];
+      if (Array.isArray(params.assignedProjectIds)) {
+        mapped = mapped.filter(
+          (item) =>
+            (!item.projectRecordId && !item.projectCode) ||
+            isProjectAccessibleToCaller(
+              params.assignedProjectIds,
+              item.projectRecordId,
+              item.projectCode,
+            ),
+        );
+      }
+      return mapped.slice(0, safeLimit);
     }
 
     let items = Array.from(this.memoryStore.values());
     if (!params.includeAdminOnly) {
       items = items.filter(
-        (item) => item.visibility === 'all' && item.entityType !== 'user',
+        (item) =>
+          item.visibility === 'all' && !ADMIN_ONLY_ENTITIES.has(item.entityType),
+      );
+    }
+    if (params.restrictToActorId) {
+      items = items.filter((item) => item.actorId === params.restrictToActorId);
+    }
+    if (Array.isArray(params.assignedProjectIds)) {
+      items = items.filter(
+        (item) =>
+          (!item.projectRecordId && !item.projectCode) ||
+          isProjectAccessibleToCaller(
+            params.assignedProjectIds,
+            item.projectRecordId,
+            item.projectCode,
+          ),
       );
     }
 
@@ -116,12 +159,15 @@ export class ActivityRepository {
   async findPaginated(params: {
     query: ListActivitiesQueryDto;
     includeAdminOnly: boolean;
+    restrictToActorId?: string | null;
+    assignedProjectIds?: string[] | null;
   }): Promise<{
     items: IActivity[];
     total: number;
     actors: ActivityActorOptionDto[];
   }> {
-    const { query, includeAdminOnly } = params;
+    const { query, includeAdminOnly, restrictToActorId, assignedProjectIds } =
+      params;
     const skip = (query.page - 1) * query.limit;
 
     if (this.isDbConnected()) {
@@ -129,10 +175,10 @@ export class ActivityRepository {
       if (!includeAdminOnly) {
         filter.visibility = 'all';
         filter.entityType = query.entityType
-          ? query.entityType === 'user'
+          ? ADMIN_ONLY_ENTITIES.has(query.entityType)
             ? '__forbidden__'
             : query.entityType
-          : { $ne: 'user' };
+          : { $nin: Array.from(ADMIN_ONLY_ENTITIES) };
       } else if (query.entityType) {
         filter.entityType = query.entityType;
       }
@@ -141,7 +187,9 @@ export class ActivityRepository {
         filter.actionType = query.actionType;
       }
 
-      if (query.actorId) {
+      if (restrictToActorId) {
+        filter.actorId = restrictToActorId;
+      } else if (query.actorId) {
         filter.actorId = query.actorId;
       }
 
@@ -153,6 +201,19 @@ export class ActivityRepository {
       }
 
       const andClauses: Array<Record<string, unknown>> = [];
+
+      if (Array.isArray(assignedProjectIds)) {
+        const upperAllowed = assignedProjectIds.map((v) =>
+          String(v).trim().toUpperCase(),
+        );
+        andClauses.push({
+          $or: [
+            { projectRecordId: null, projectCode: null },
+            { projectRecordId: { $in: assignedProjectIds } },
+            { projectCode: { $in: upperAllowed } },
+          ],
+        });
+      }
 
       if (query.projectId) {
         const upperCode = query.projectId.toUpperCase();
@@ -184,7 +245,13 @@ export class ActivityRepository {
 
       const actorScopeFilter: Record<string, unknown> = includeAdminOnly
         ? {}
-        : { visibility: 'all', entityType: { $ne: 'user' } };
+        : {
+            visibility: 'all',
+            entityType: { $nin: Array.from(ADMIN_ONLY_ENTITIES) },
+          };
+      if (restrictToActorId) {
+        actorScopeFilter.actorId = restrictToActorId;
+      }
 
       const [docs, total, actorAgg] = await Promise.all([
         this.model
@@ -225,7 +292,24 @@ export class ActivityRepository {
     let scopedItems = Array.from(this.memoryStore.values());
     if (!includeAdminOnly) {
       scopedItems = scopedItems.filter(
-        (item) => item.visibility === 'all' && item.entityType !== 'user',
+        (item) =>
+          item.visibility === 'all' && !ADMIN_ONLY_ENTITIES.has(item.entityType),
+      );
+    }
+    if (restrictToActorId) {
+      scopedItems = scopedItems.filter(
+        (item) => item.actorId === restrictToActorId,
+      );
+    }
+    if (Array.isArray(assignedProjectIds)) {
+      scopedItems = scopedItems.filter(
+        (item) =>
+          (!item.projectRecordId && !item.projectCode) ||
+          isProjectAccessibleToCaller(
+            assignedProjectIds,
+            item.projectRecordId,
+            item.projectCode,
+          ),
       );
     }
 
@@ -249,7 +333,7 @@ export class ActivityRepository {
       filtered = filtered.filter((item) => item.actionType === query.actionType);
     }
 
-    if (query.actorId) {
+    if (!restrictToActorId && query.actorId) {
       filtered = filtered.filter((item) => item.actorId === query.actorId);
     }
 

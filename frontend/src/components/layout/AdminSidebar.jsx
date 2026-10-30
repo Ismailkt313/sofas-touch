@@ -1,4 +1,9 @@
-import { getVisibleNavItems, isNavItemActive } from './navigationConfig'
+import {
+  hasPermission,
+  normalizeRoleKey,
+  resolveFirstPermittedPath,
+} from '../../features/permissions/constants/permissionsCatalog'
+import { getGroupedVisibleNavItems, isNavItemActive } from './navigationConfig'
 import { BrandEmblemIcon, SidebarNavIcon } from './SidebarIcons'
 import { SidebarProfile } from './SidebarProfile'
 
@@ -12,7 +17,17 @@ export function AdminSidebar({
   onCloseDrawer,
   closeButtonRef,
 }) {
-  const visibleItems = getVisibleNavItems(currentUser?.role)
+  const roleKey = normalizeRoleKey(currentUser?.role)
+  const isAdmin = roleKey === 'admin'
+  const groupedItems = getGroupedVisibleNavItems(currentUser)
+  const homePath = resolveFirstPermittedPath(currentUser)
+  const canApproveUsers = hasPermission(currentUser, 'users.approve')
+
+  const workspaceSubtitle = !roleKey
+    ? 'Workspace'
+    : isAdmin
+      ? 'Admin Workspace'
+      : 'Data Entry Workspace'
 
   const handleNavClick = (event, targetPath) => {
     if (
@@ -32,16 +47,16 @@ export function AdminSidebar({
     <div className="admin-sidebar__inner">
       <div className="admin-sidebar__brand-row">
         <a
-          href="/dashboard"
+          href={homePath}
           className="admin-sidebar__brand"
-          onClick={(event) => handleNavClick(event, '/dashboard')}
+          onClick={(event) => handleNavClick(event, homePath)}
         >
           <span className="admin-sidebar__logo" aria-hidden="true">
             <BrandEmblemIcon className="admin-sidebar__logo-svg" />
           </span>
           <span className="admin-sidebar__brand-text">
             <span className="admin-sidebar__brand-name">Soft Touch Sofas</span>
-            <span className="admin-sidebar__brand-sub">Admin Workspace</span>
+            <span className="admin-sidebar__brand-sub">{workspaceSubtitle}</span>
           </span>
         </a>
 
@@ -64,45 +79,54 @@ export function AdminSidebar({
         </button>
       </div>
 
-      <nav className="admin-sidebar__nav" aria-label="Admin primary navigation">
-        <span className="admin-sidebar__section-label">Management</span>
-        <ul className="admin-sidebar__list">
-          {visibleItems.map((item) => {
-            const active = isNavItemActive(pathname, item.path)
-            const showApprovalsBadge =
-              item.id === 'user-approvals' && pendingApprovalsCount > 0
-            const badgeText =
-              pendingApprovalsCount > 99
-                ? '99+'
-                : String(pendingApprovalsCount)
+      <nav className="admin-sidebar__nav" aria-label="Workspace primary navigation">
+        {groupedItems.map((group) => (
+          <div key={group.key} className="admin-sidebar__group">
+            <span className="admin-sidebar__section-label">{group.label}</span>
+            <ul className="admin-sidebar__list">
+              {group.items.map((item) => {
+                const active = isNavItemActive(pathname, item.path)
+                const showApprovalsBadge =
+                  canApproveUsers &&
+                  item.id === 'user-approvals' &&
+                  pendingApprovalsCount > 0
+                const badgeText =
+                  pendingApprovalsCount > 99
+                    ? '99+'
+                    : String(pendingApprovalsCount)
 
-            return (
-              <li key={item.id} className="admin-sidebar__item">
-                <a
-                  href={item.path}
-                  className={`admin-sidebar__link${active ? ' admin-sidebar__link--active' : ''
-                    }`}
-                  aria-current={active ? 'page' : undefined}
-                  onClick={(event) => handleNavClick(event, item.path)}
-                >
-                  <SidebarNavIcon
-                    id={item.id}
-                    className="admin-sidebar__link-icon"
-                  />
-                  <span className="admin-sidebar__link-label">{item.label}</span>
-                  {showApprovalsBadge ? (
-                    <span
-                      className="admin-sidebar__badge"
-                      aria-label={`${pendingApprovalsCount} pending signup approval requests`}
+                return (
+                  <li key={item.id} className="admin-sidebar__item">
+                    <a
+                      href={item.path}
+                      className={`admin-sidebar__link${
+                        active ? ' admin-sidebar__link--active' : ''
+                      }`}
+                      aria-current={active ? 'page' : undefined}
+                      onClick={(event) => handleNavClick(event, item.path)}
                     >
-                      {badgeText}
-                    </span>
-                  ) : null}
-                </a>
-              </li>
-            )
-          })}
-        </ul>
+                      <SidebarNavIcon
+                        id={item.id}
+                        className="admin-sidebar__link-icon"
+                      />
+                      <span className="admin-sidebar__link-label">
+                        {item.displayLabel || item.label}
+                      </span>
+                      {showApprovalsBadge ? (
+                        <span
+                          className="admin-sidebar__badge"
+                          aria-label={`${pendingApprovalsCount} pending signup approval requests`}
+                        >
+                          {badgeText}
+                        </span>
+                      ) : null}
+                    </a>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
 
       <div className="admin-sidebar__footer">

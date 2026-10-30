@@ -6,6 +6,7 @@ import {
   MobileFilterSheet,
 } from '../../../components/responsive'
 import api, { ACTIVITY_UPDATED_EVENT } from '../../../services/api'
+import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import { ActivityFeedItem } from '../components/ActivityFeedItem'
 import { fetchActivityHistory } from '../services/activityService'
 import {
@@ -17,8 +18,11 @@ import '../styles/activity-page.css'
 const PAGE_SIZE = 20
 
 export function ActivityHistoryPage({ currentUser, onNavigate }) {
-  const userRole = currentUser?.role === 'admin' ? 'admin' : 'data_entry'
-  const isAdmin = userRole === 'admin'
+  const canViewAll = hasPermission(currentUser, 'activity.viewAll')
+  const canViewProjects = hasPermission(currentUser, 'projects.view')
+  const canViewUsers = hasPermission(currentUser, 'users.view')
+  const userRole = canViewAll ? 'admin' : 'data_entry'
+  const isAdmin = canViewAll
 
   const [searchInput, setSearchInput] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
@@ -63,24 +67,26 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
   useEffect(() => {
     let active = true
 
-    api
-      .get('/api/projects', { params: { page: 1, limit: 100 } })
-      .then((res) => {
-        if (!active) return
-        const rows = Array.isArray(res?.data?.projects)
-          ? res.data.projects
-          : Array.isArray(res?.data?.items)
-            ? res.data.items
-            : []
-        const mapped = rows.map((p) => ({
-          value: String(p.projectId || p.id),
-          label: `${p.projectId} — ${p.name}`,
-        }))
-        setProjectOptions([{ value: 'all', label: 'All Projects' }, ...mapped])
-      })
-      .catch(() => {})
+    if (canViewProjects) {
+      api
+        .get('/api/projects', { params: { page: 1, limit: 100 } })
+        .then((res) => {
+          if (!active) return
+          const rows = Array.isArray(res?.data?.projects)
+            ? res.data.projects
+            : Array.isArray(res?.data?.items)
+              ? res.data.items
+              : []
+          const mapped = rows.map((p) => ({
+            value: String(p.projectId || p.id),
+            label: `${p.projectId} — ${p.name}`,
+          }))
+          setProjectOptions([{ value: 'all', label: 'All Projects' }, ...mapped])
+        })
+        .catch(() => {})
+    }
 
-    if (isAdmin) {
+    if (isAdmin && canViewUsers) {
       api
         .get('/api/users', { params: { page: 1, limit: 100 } })
         .then((res) => {
@@ -98,7 +104,7 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
     return () => {
       active = false
     }
-  }, [isAdmin])
+  }, [isAdmin, canViewProjects, canViewUsers])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -398,13 +404,16 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
     <section className="sts-act-page" aria-labelledby="sts-act-page-heading">
       <header className="sts-act-page__header">
         <div>
-          <span className="sts-act-page__eyebrow">Operational Audit Trail</span>
+          <span className="sts-act-page__eyebrow">
+            {isAdmin ? 'Operational Audit Trail' : 'Personal Entry Log'}
+          </span>
           <h1 id="sts-act-page-heading" className="sts-act-page__title">
-            Activity History
+            {isAdmin ? 'Activity History' : 'My Activity History'}
           </h1>
           <p className="sts-act-page__desc">
-            Chronological log of verified actions across projects, purchases,
-            expenses, raw materials{isAdmin ? ', and user accounts' : ''}.
+            {isAdmin
+              ? 'Chronological log of verified actions across projects, purchases, expenses, raw materials, permissions, and user accounts.'
+              : 'Chronological log of verified vouchers and updates recorded under your operator account.'}
           </p>
         </div>
 
@@ -561,7 +570,7 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
               <ActivityFeedItem
                 key={item.id}
                 item={item}
-                userRole={userRole}
+                userRole={currentUser || userRole}
                 onNavigate={onNavigate}
               />
             ))}

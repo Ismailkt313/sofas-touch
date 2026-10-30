@@ -23,7 +23,11 @@ const BASE_ENTITY_OPTIONS = [
   { value: 'raw_material', label: 'Raw Materials' },
 ]
 
-const ADMIN_USER_ENTITY_OPTION = { value: 'user', label: 'Users & Access' }
+const ADMIN_ENTITY_OPTIONS = [
+  { value: 'user', label: 'Users & Access' },
+  { value: 'permission', label: 'Roles & Permissions' },
+  { value: 'settings', label: 'Settings' },
+]
 
 const BASE_ACTION_OPTIONS = [
   { value: 'all', label: 'All Actions' },
@@ -33,7 +37,7 @@ const BASE_ACTION_OPTIONS = [
   { value: 'project.deleted', label: 'Project Deleted' },
   { value: 'purchase.created', label: 'Purchase Recorded' },
   { value: 'purchase.updated', label: 'Purchase Updated' },
-  { value: 'purchase.attachment_uploaded', label: 'Purchase Bill Attached' },
+  { value: 'purchase.attachment_added', label: 'Purchase Bill Attached' },
   { value: 'purchase.cancelled', label: 'Purchase Cancelled' },
   { value: 'expense.created', label: 'Expense Recorded' },
   { value: 'expense.updated', label: 'Expense Updated' },
@@ -53,11 +57,15 @@ const ADMIN_ACTION_OPTIONS = [
   { value: 'user.status_changed', label: 'User Status Changed' },
   { value: 'user.approved', label: 'Signup Approved' },
   { value: 'user.rejected', label: 'Signup Rejected' },
+  { value: 'permissions.updated', label: 'Role Permissions Updated' },
+  { value: 'permissions.reset', label: 'Role Permissions Reset' },
+  { value: 'permissions.user_overridden', label: 'User Override Updated' },
+  { value: 'settings.updated', label: 'Workspace Settings Updated' },
 ]
 
 export function getActivityEntityOptions(role = 'data_entry') {
   if (role === 'admin') {
-    return [...BASE_ENTITY_OPTIONS, ADMIN_USER_ENTITY_OPTION]
+    return [...BASE_ENTITY_OPTIONS, ...ADMIN_ENTITY_OPTIONS]
   }
   return BASE_ENTITY_OPTIONS
 }
@@ -77,10 +85,15 @@ export function getEntityBadgeLabel(entityType) {
       return 'Purchase'
     case 'expense':
       return 'Expense'
+    case 'material':
     case 'raw_material':
       return 'Material'
     case 'user':
       return 'User'
+    case 'permission':
+      return 'Permissions'
+    case 'settings':
+      return 'Settings'
     default:
       return 'System'
   }

@@ -3,7 +3,14 @@ import { formatJoinedDate } from '../services/userManagementService'
 import { UserAvatar } from './UserAvatar'
 import { RoleBadge, StatusBadge } from './UserBadges'
 
-export function UserDetailsModal({ user, isSelf, onClose, onEdit }) {
+export function UserDetailsModal({
+  user,
+  isSelf,
+  canManagePermissions = true,
+  onNavigate,
+  onClose,
+  onEdit,
+}) {
   const closeBtnRef = useRef(null)
 
   useEffect(() => {
@@ -114,21 +121,64 @@ export function UserDetailsModal({ user, isSelf, onClose, onEdit }) {
               <dt>Account ID</dt>
               <dd className="users-mono-text">{user.id || '—'}</dd>
             </div>
+            {user.roleKey !== 'admin' ? (
+              <>
+                <div className="profile-details__row">
+                  <dt>Permission Scope</dt>
+                  <dd>
+                    {(user.permissionOverrides?.grant?.length || 0) > 0 ||
+                    (user.permissionOverrides?.revoke?.length || 0) > 0
+                      ? `+${user.permissionOverrides.grant.length} granted, -${user.permissionOverrides.revoke.length} restricted`
+                      : 'Inheriting Data Entry Baseline'}
+                  </dd>
+                </div>
+                <div className="profile-details__row">
+                  <dt>Assigned Projects</dt>
+                  <dd>
+                    {Array.isArray(user.assignedProjectIds)
+                      ? user.assignedProjectIds.length > 0
+                        ? user.assignedProjectIds.join(', ')
+                        : 'None assigned'
+                      : 'All Active Studio Projects'}
+                  </dd>
+                </div>
+              </>
+            ) : null}
           </dl>
         </div>
 
         <div className="admin-modal__footer">
-          <button
-            type="button"
-            className="admin-btn admin-btn--secondary"
-            onClick={() => {
-              const target = user
-              onClose()
-              onEdit(target)
-            }}
-          >
-            Edit User
-          </button>
+          {user.roleKey !== 'admin' && canManagePermissions ? (
+            <button
+              type="button"
+              className="admin-btn admin-btn--secondary"
+              onClick={() => {
+                const targetUrl = `/permissions?user=${encodeURIComponent(user.id)}`
+                onClose()
+                if (typeof onNavigate === 'function') {
+                  onNavigate(targetUrl)
+                } else if (typeof window !== 'undefined') {
+                  window.history.pushState({}, '', targetUrl)
+                  window.dispatchEvent(new Event('sts:routechange'))
+                }
+              }}
+            >
+              Manage Permissions
+            </button>
+          ) : null}
+          {typeof onEdit === 'function' ? (
+            <button
+              type="button"
+              className="admin-btn admin-btn--secondary"
+              onClick={() => {
+                const target = user
+                onClose()
+                onEdit(target)
+              }}
+            >
+              Edit User
+            </button>
+          ) : null}
           <button
             type="button"
             className="admin-btn admin-btn--primary"

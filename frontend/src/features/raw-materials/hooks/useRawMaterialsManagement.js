@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import {
   buildChangedMaterialPayload,
   buildCreateMaterialPayload,
@@ -6,7 +7,6 @@ import {
   fetchRawMaterialById,
   fetchRawMaterials,
   hasActiveAuthToken,
-  isAdminUser,
   updateRawMaterial,
   updateRawMaterialStatus,
 } from '../services/rawMaterialService'
@@ -14,7 +14,9 @@ import {
 const DEFAULT_PAGE_SIZE = 10
 
 export function useRawMaterialsManagement({ currentUser }) {
-  const adminAccess = isAdminUser(currentUser)
+  const canCreateMaterial = hasPermission(currentUser, 'materials.create')
+  const canEditMaterial = hasPermission(currentUser, 'materials.edit')
+  const adminAccess = canEditMaterial
   const initialHasToken = hasActiveAuthToken()
 
   const [materials, setMaterials] = useState([])
@@ -616,6 +618,8 @@ export function useRawMaterialsManagement({ currentUser }) {
 
   return {
     adminAccess,
+    canCreateMaterial,
+    canEditMaterial,
     materials,
     totalMaterials,
     totalPages,

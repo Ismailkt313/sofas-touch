@@ -27,6 +27,17 @@ export function normalizeUserRecord(raw = {}) {
     statusKey: isActive ? 'active' : 'inactive',
     statusLabel: isActive ? 'Active' : 'Inactive',
     isActive,
+    permissionOverrides: {
+      grant: Array.isArray(raw.permissionOverrides?.grant)
+        ? raw.permissionOverrides.grant
+        : [],
+      revoke: Array.isArray(raw.permissionOverrides?.revoke)
+        ? raw.permissionOverrides.revoke
+        : [],
+    },
+    assignedProjectIds: Array.isArray(raw.assignedProjectIds)
+      ? raw.assignedProjectIds
+      : null,
     createdAt: raw.createdAt || null,
   }
 }
@@ -58,11 +69,6 @@ export function getUserInitials(name) {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
 }
 
-/**
- * Explicit development-only preview dataset.
- * Never used in production builds (`!import.meta.env.DEV`) and never mixed with
- * or presented as live API records. Always accompanied by an explicit banner in the UI.
- */
 const DEV_ONLY_PREVIEW_USERS = [
   {
     id: 'dev_preview_01',
@@ -204,12 +210,6 @@ export async function fetchManagedUsers({ allowDevFallback = true } = {}) {
   }
 }
 
-/**
- * Calls the existing `POST /api/admin/users` backend endpoint.
- * Supported backend contract (`backend/src/routes/adminRoutes.ts`):
- * `{ name, email, password, role }` where role is `'Admin'` | `'Data Entry'`
- * (or `'admin'` | `'data_entry'`).
- */
 export async function createManagedUser({ name, email, password, role }) {
   const canonicalRole = normalizeRoleKey(role)
   const rolePayload = canonicalRole === 'admin' ? 'Admin' : 'Data Entry'
@@ -266,10 +266,6 @@ export async function createManagedUser({ name, email, password, role }) {
   }
 }
 
-/**
- * Updates a user's active/inactive status via PATCH /api/admin/users/:id/status
- * or PATCH /api/admin/users/:id.
- */
 export async function updateManagedUserStatus(userId, isActive) {
   const cleanId = String(userId || '').trim()
   if (!cleanId) {
@@ -348,9 +344,6 @@ export async function updateManagedUserStatus(userId, isActive) {
   }
 }
 
-/**
- * Updates managed user details (name, email, phone, role) via PATCH /api/admin/users/:id
- */
 export async function updateManagedUser(userId, fields = {}) {
   const cleanId = String(userId || '').trim()
   if (!cleanId) {

@@ -464,11 +464,25 @@ async function runTests(): Promise<void> {
       exp1.id,
     );
 
-    const projAAfterExpense = await jsonReq(
+    const operatorRedactedView = await jsonReq(
       baseUrl,
       'GET',
       `/api/projects/${projectA.id}`,
       { token: operatorToken },
+    );
+    assert.strictEqual(operatorRedactedView.status, 200);
+    const opProject = operatorRedactedView.body.project as Record<
+      string,
+      unknown
+    >;
+    assert.strictEqual(opProject.contractValue, null);
+    assert.strictEqual(opProject.estimatedProfit, null);
+
+    const projAAfterExpense = await jsonReq(
+      baseUrl,
+      'GET',
+      `/api/projects/${projectA.id}`,
+      { token: adminToken },
     );
     assert.strictEqual(projAAfterExpense.status, 200);
     const pA2 = projAAfterExpense.body.project as Record<string, unknown>;

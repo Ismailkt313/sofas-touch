@@ -4,6 +4,7 @@ import {
   IExpenseVoucher,
   sharedExpenseVoucherMemoryStore,
 } from '../../expenses';
+import { isProjectAccessibleToCaller } from '../../permissions/constants/permissions.constants';
 import { roundFinancialAmount } from '../../projects';
 import {
   IPurchaseVoucher,
@@ -198,55 +199,95 @@ export class DashboardRepository {
 
   async findRecentTransactions(
     limit: number,
+    options?: {
+      includePurchases?: boolean;
+      includeExpenses?: boolean;
+      assignedProjectIds?: string[] | null;
+    },
   ): Promise<DashboardRecentTransactionDto[]> {
     const safeLimit = Math.min(20, Math.max(1, limit));
+    const includePurchases = options?.includePurchases ?? true;
+    const includeExpenses = options?.includeExpenses ?? true;
+    const assignedProjectIds = options?.assignedProjectIds ?? null;
+
+    if (!includePurchases && !includeExpenses) {
+      return [];
+    }
 
     let recentPurchases: IPurchaseVoucher[] = [];
     let recentExpenses: IExpenseVoucher[] = [];
+    const fetchCap = Array.isArray(assignedProjectIds)
+      ? safeLimit * 3
+      : safeLimit;
 
     if (this.isDbConnected()) {
       const [pDocs, eDocs] = await Promise.all([
-        this.purchaseModel
-          .find({})
-          .sort({ purchaseDate: -1, createdAt: -1, _id: -1 })
-          .limit(safeLimit)
-          .lean()
-          .exec(),
-        this.expenseModel
-          .find({})
-          .sort({ expenseDate: -1, createdAt: -1, _id: -1 })
-          .limit(safeLimit)
-          .lean()
-          .exec(),
+        includePurchases
+          ? this.purchaseModel
+              .find({})
+              .sort({ purchaseDate: -1, createdAt: -1, _id: -1 })
+              .limit(fetchCap)
+              .lean()
+              .exec()
+          : Promise.resolve([]),
+        includeExpenses
+          ? this.expenseModel
+              .find({})
+              .sort({ expenseDate: -1, createdAt: -1, _id: -1 })
+              .limit(fetchCap)
+              .lean()
+              .exec()
+          : Promise.resolve([]),
       ]);
       recentPurchases = pDocs as unknown as IPurchaseVoucher[];
       recentExpenses = eDocs as unknown as IExpenseVoucher[];
     } else {
-      recentPurchases = Array.from(this.purchaseMemory.values())
-        .sort((a, b) => {
-          const dDiff =
-            new Date(b.purchaseDate).getTime() -
-            new Date(a.purchaseDate).getTime();
-          if (dDiff !== 0) return dDiff;
-          return (
-            new Date(b.createdAt || 0).getTime() -
-            new Date(a.createdAt || 0).getTime()
-          );
-        })
-        .slice(0, safeLimit);
+      if (includePurchases) {
+        recentPurchases = Array.from(this.purchaseMemory.values())
+          .sort((a, b) => {
+            const dDiff =
+              new Date(b.purchaseDate).getTime() -
+              new Date(a.purchaseDate).getTime();
+            if (dDiff !== 0) return dDiff;
+            return (
+              new Date(b.createdAt || 0).getTime() -
+              new Date(a.createdAt || 0).getTime()
+            );
+          })
+          .slice(0, fetchCap);
+      }
 
-      recentExpenses = Array.from(this.expenseMemory.values())
-        .sort((a, b) => {
-          const dDiff =
-            new Date(b.expenseDate).getTime() -
-            new Date(a.expenseDate).getTime();
-          if (dDiff !== 0) return dDiff;
-          return (
-            new Date(b.createdAt || 0).getTime() -
-            new Date(a.createdAt || 0).getTime()
-          );
-        })
-        .slice(0, safeLimit);
+      if (includeExpenses) {
+        recentExpenses = Array.from(this.expenseMemory.values())
+          .sort((a, b) => {
+            const dDiff =
+              new Date(b.expenseDate).getTime() -
+              new Date(a.expenseDate).getTime();
+            if (dDiff !== 0) return dDiff;
+            return (
+              new Date(b.createdAt || 0).getTime() -
+              new Date(a.createdAt || 0).getTime()
+            );
+          })
+          .slice(0, fetchCap);
+      }
+    }
+
+    if (Array.isArray(assignedProjectIds)) {
+      recentPurchases = recentPurchases.filter((p) =>
+        isProjectAccessibleToCaller(
+          assignedProjectIds,
+          p.projectRecordId ? String(p.projectRecordId) : null,
+          p.projectCode || null,
+        ),
+      );
+      recentExpenses = recentExpenses.filter((e) =>
+        isProjectAccessibleToCaller(
+          assignedProjectIds,
+          e.projectRecordId ? String(e.projectRecordId) : null,
+          e.projectCode || null,
+        ),
+      );
     }
 
     const mappedPurchases: DashboardRecentTransactionDto[] =
@@ -261,6 +302,8 @@ export class DashboardRepository {
         transactionDate: new Date(p.purchaseDate),
         createdAt: p.createdAt ? new Date(p.createdAt) : undefined,
         status: p.status === 'cancelled' ? 'cancelled' : 'active',
+        hasAttachment: Array.isArray(p.attachments) && p.attachments.length > 0,
+        createdByUserId: p.createdBy ? String(p.createdBy) : null,
         detailPath: `/purchases/${encodeURIComponent(p.voucherNumber)}`,
       }));
 
@@ -276,6 +319,8 @@ export class DashboardRepository {
         transactionDate: new Date(e.expenseDate),
         createdAt: e.createdAt ? new Date(e.createdAt) : undefined,
         status: e.status === 'cancelled' ? 'cancelled' : 'active',
+        hasAttachment: Array.isArray(e.attachments) && e.attachments.length > 0,
+        createdByUserId: e.createdBy ? String(e.createdBy) : null,
         detailPath: `/expenses?view=${encodeURIComponent(e.voucherNumber)}`,
       }),
     );

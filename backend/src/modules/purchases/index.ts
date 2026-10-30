@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import {
-  requireAdmin,
-  requireDataEntryOrAdmin,
+  requirePermission,
   verifyToken,
 } from '../../middleware/auth';
 import { projectRepository, projectService } from '../projects';
@@ -49,49 +48,53 @@ const purchaseRouter = Router();
 
 purchaseRouter.use(verifyToken);
 
-purchaseRouter.get('/', requireDataEntryOrAdmin, purchaseVoucherController.list);
+purchaseRouter.get(
+  '/',
+  requirePermission('purchases.view'),
+  purchaseVoucherController.list,
+);
 purchaseRouter.post(
   '/',
-  requireDataEntryOrAdmin,
+  requirePermission('purchases.create'),
   parseBillAttachmentsMiddleware,
   purchaseVoucherController.create,
 );
 purchaseRouter.post(
   '/:id/attachments',
-  requireDataEntryOrAdmin,
+  requirePermission('purchases.edit'),
   parseBillAttachmentsMiddleware,
   purchaseVoucherController.uploadAttachments,
 );
 purchaseRouter.get(
   '/:id/attachments/:attachmentId',
-  requireDataEntryOrAdmin,
+  requirePermission('purchases.view'),
   purchaseVoucherController.streamAttachment,
 );
 purchaseRouter.get(
   '/:id',
-  requireDataEntryOrAdmin,
+  requirePermission('purchases.view'),
   purchaseVoucherController.getById,
 );
 purchaseRouter.patch(
   '/:id',
-  requireDataEntryOrAdmin,
+  requirePermission('purchases.edit'),
   parseBillAttachmentsMiddleware,
   purchaseVoucherController.update,
 );
 purchaseRouter.put(
   '/:id',
-  requireDataEntryOrAdmin,
+  requirePermission('purchases.edit'),
   parseBillAttachmentsMiddleware,
   purchaseVoucherController.update,
 );
 purchaseRouter.post(
   '/:id/cancel',
-  requireAdmin,
+  requirePermission('purchases.delete'),
   purchaseVoucherController.cancel,
 );
 purchaseRouter.delete(
   '/:id',
-  requireAdmin,
+  requirePermission('purchases.delete'),
   purchaseVoucherController.cancel,
 );
 

@@ -3,6 +3,11 @@ import { Request } from 'express';
 export type UserRole = 'admin' | 'data_entry' | 'Admin' | 'Data Entry';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
+export interface UserPermissionOverridesShape {
+  grant: string[];
+  revoke: string[];
+}
+
 export interface UserResponse {
   id: string;
   name: string;
@@ -15,6 +20,9 @@ export interface UserResponse {
   approvedBy?: string;
   approvedAt?: string | Date;
   rejectionReason?: string;
+  permissions?: string[];
+  permissionOverrides?: UserPermissionOverridesShape;
+  assignedProjectIds?: string[] | null;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }
@@ -41,6 +49,8 @@ export interface AuthTokenPayload {
   role: 'admin' | 'data_entry';
   name: string;
   approvalStatus?: ApprovalStatus;
+  permissions?: string[];
+  assignedProjectIds?: string[] | null;
   iat?: number;
   exp?: number;
 }

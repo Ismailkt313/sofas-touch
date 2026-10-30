@@ -5,6 +5,11 @@ import { env } from '../../../config/env';
 export type UserRole = 'admin' | 'data_entry';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
+export interface IUserPermissionOverrides {
+  grant: string[];
+  revoke: string[];
+}
+
 export interface IUser {
   _id?: string | mongoose.Types.ObjectId;
   name: string;
@@ -18,6 +23,8 @@ export interface IUser {
   approvedBy?: string | mongoose.Types.ObjectId;
   approvedAt?: Date;
   rejectionReason?: string;
+  permissionOverrides?: IUserPermissionOverrides;
+  assignedProjectIds?: string[] | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -79,6 +86,20 @@ const UserSchema = new Schema<IUser>(
     rejectionReason: {
       type: String,
       trim: true,
+      default: null,
+    },
+    permissionOverrides: {
+      grant: {
+        type: [String],
+        default: () => [],
+      },
+      revoke: {
+        type: [String],
+        default: () => [],
+      },
+    },
+    assignedProjectIds: {
+      type: [String],
       default: null,
     },
   },

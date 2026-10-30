@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import { formatMaterialUnit } from '../../raw-materials'
 import { BillAttachmentCard } from '../components/BillAttachmentCard'
 import { BillAttachmentModal } from '../components/BillAttachmentModal'
@@ -15,7 +16,6 @@ import {
   formatPurchaseDateTime,
   formatPurchaseQuantity,
   hasActiveAuthToken,
-  isAdminUser,
 } from '../services/purchaseService'
 import '../styles/purchases.css'
 
@@ -31,7 +31,8 @@ export function PurchaseDetailsPage({
   currentUser,
   onNavigate,
 }) {
-  const adminAccess = isAdminUser(currentUser)
+  const canEditVoucher = hasPermission(currentUser, 'purchases.edit')
+  const canCancelVoucher = hasPermission(currentUser, 'purchases.delete')
   const [authRequired, setAuthRequired] = useState(() => !hasActiveAuthToken())
   const [voucher, setVoucher] = useState(null)
   const [stockMovements, setStockMovements] = useState([])
@@ -210,9 +211,10 @@ export function PurchaseDetailsPage({
               </p>
             </div>
 
-            {voucher.status === 'active' ? (
+            {voucher.status === 'active' &&
+            (canCancelVoucher || canEditVoucher) ? (
               <div className="pv-header__actions">
-                {adminAccess ? (
+                {canCancelVoucher ? (
                   <button
                     type="button"
                     className="admin-btn admin-btn--secondary pv-cancel-trigger"
@@ -221,17 +223,19 @@ export function PurchaseDetailsPage({
                     Cancel Voucher
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  className="admin-btn admin-btn--primary"
-                  onClick={() =>
-                    onNavigate?.(
-                      `/purchases/${encodeURIComponent(voucher.id)}/edit`,
-                    )
-                  }
-                >
-                  Edit Voucher
-                </button>
+                {canEditVoucher ? (
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn--primary"
+                    onClick={() =>
+                      onNavigate?.(
+                        `/purchases/${encodeURIComponent(voucher.id)}/edit`,
+                      )
+                    }
+                  >
+                    Edit Voucher
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </header>

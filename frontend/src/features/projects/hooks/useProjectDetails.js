@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import {
   fetchProjectActivityWarnings,
   fetchProjectById,
@@ -13,6 +14,11 @@ import {
 
 export function useProjectDetails({ projectIdentifier, currentUser }) {
   const adminAccess = isAdminUser(currentUser)
+  const canEditProject = hasPermission(currentUser, 'projects.edit')
+  const canViewProfitability = hasPermission(
+    currentUser,
+    'reports.viewProfitability',
+  )
   const initialHasToken = hasActiveAuthToken()
 
   const [project, setProject] = useState(null)
@@ -82,7 +88,9 @@ export function useProjectDetails({ projectIdentifier, currentUser }) {
 
         const [projectOutcome, summaryOutcome] = await Promise.allSettled([
           fetchProjectById(projectIdentifier),
-          fetchProjectFinancialSummary(projectIdentifier),
+          canViewProfitability
+            ? fetchProjectFinancialSummary(projectIdentifier)
+            : Promise.resolve(null),
         ])
 
         if (cancelled || reqSeqRef.current !== seq) {
@@ -109,7 +117,10 @@ export function useProjectDetails({ projectIdentifier, currentUser }) {
         loadedIdentifierRef.current = projectIdentifier
         setProject(loadedProject)
 
-        if (summaryOutcome.status === 'fulfilled') {
+        if (!canViewProfitability) {
+          setFinancialSummary(null)
+          setSummaryUnavailableMessage('')
+        } else if (summaryOutcome.status === 'fulfilled') {
           setFinancialSummary(summaryOutcome.value)
           setSummaryUnavailableMessage('')
         } else {
@@ -196,7 +207,7 @@ export function useProjectDetails({ projectIdentifier, currentUser }) {
     return () => {
       cancelled = true
     }
-  }, [projectIdentifier, adminAccess, refreshTick])
+  }, [projectIdentifier, adminAccess, canViewProfitability, refreshTick])
 
   const reloadProjectDetails = useCallback(() => {
     setRefreshTick((prev) => prev + 1)
@@ -301,6 +312,8 @@ export function useProjectDetails({ projectIdentifier, currentUser }) {
     summaryUnavailableMessage,
     automationFeed,
     adminAccess,
+    canEditProject,
+    canViewProfitability,
 
     isLoading,
     isRefreshing,

@@ -3,6 +3,7 @@ import { ProjectRowActionsMenu } from './ProjectRowActionsMenu'
 import {
   ProjectCostThresholdBadge,
   ProjectInactivityBadge,
+  ProjectStatusBadge,
 } from './ProjectStatusBadge'
 import { ProjectStatusDropdown } from './ProjectStatusDropdown'
 
@@ -10,6 +11,8 @@ export function ProjectsMobileList({
   projects,
   activeWarningByProjectCode,
   updatingStatusKey,
+  canEditProject = true,
+  canViewProfitability = true,
   onViewDetails,
   onEdit,
   onStatusChange,
@@ -33,8 +36,12 @@ export function ProjectsMobileList({
             null
           : null
 
-        const isOverrun = Boolean(project.costThresholdState?.exceededCrossed)
-        const isWarning = Boolean(project.costThresholdState?.warningCrossed)
+        const isOverrun =
+          canViewProfitability &&
+          Boolean(project.costThresholdState?.exceededCrossed)
+        const isWarning =
+          canViewProfitability &&
+          Boolean(project.costThresholdState?.warningCrossed)
         const hasLocation = Boolean(
           project.siteLocation && String(project.siteLocation).trim(),
         )
@@ -61,12 +68,16 @@ export function ProjectsMobileList({
                 {project.projectId || '—'}
               </button>
 
-              <ProjectStatusDropdown
-                project={project}
-                compact
-                isUpdating={isUpdatingStatus}
-                onStatusChange={onStatusChange}
-              />
+              {canEditProject && typeof onStatusChange === 'function' ? (
+                <ProjectStatusDropdown
+                  project={project}
+                  compact
+                  isUpdating={isUpdatingStatus}
+                  onStatusChange={onStatusChange}
+                />
+              ) : (
+                <ProjectStatusBadge status={project.status} />
+              )}
             </div>
 
             <div className="project-mobile-card__main">
@@ -101,12 +112,14 @@ export function ProjectsMobileList({
                 <dt>Client</dt>
                 <dd>{project.clientName}</dd>
               </div>
-              <div className="project-mobile-card__meta-item project-mobile-card__meta-item--right">
-                <dt>Contract Value</dt>
-                <dd className="project-mobile-card__contract">
-                  {formatCurrency(project.contractValue)}
-                </dd>
-              </div>
+              {canViewProfitability ? (
+                <div className="project-mobile-card__meta-item project-mobile-card__meta-item--right">
+                  <dt>Contract Value</dt>
+                  <dd className="project-mobile-card__contract">
+                    {formatCurrency(project.contractValue)}
+                  </dd>
+                </div>
+              ) : null}
               {hasLocation ? (
                 <div className="project-mobile-card__meta-item project-mobile-card__meta-item--full">
                   <dt>Site</dt>
@@ -133,13 +146,15 @@ export function ProjectsMobileList({
                 </svg>
               </button>
 
-              <ProjectRowActionsMenu
-                project={project}
-                onViewDetails={onViewDetails}
-                onEdit={onEdit}
-                onStatusChange={onStatusChange}
-                showQuickViewButton={false}
-              />
+              {canEditProject ? (
+                <ProjectRowActionsMenu
+                  project={project}
+                  onViewDetails={onViewDetails}
+                  onEdit={onEdit}
+                  onStatusChange={onStatusChange}
+                  showQuickViewButton={false}
+                />
+              ) : null}
             </div>
           </article>
         )

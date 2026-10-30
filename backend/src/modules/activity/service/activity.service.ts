@@ -12,7 +12,12 @@ import {
   RecordActivityInput,
 } from '../types';
 
-const ADMIN_ONLY_ACTION_PREFIX = 'user.';
+const ADMIN_ONLY_ACTION_PREFIXES = ['user.', 'permissions.', 'settings.'];
+const ADMIN_ONLY_ENTITIES = new Set<ActivityEntityType>([
+  'user',
+  'permission',
+  'settings',
+]);
 
 function sanitizeSafeText(value: string, maxLen: number): string {
   return String(value || '')
@@ -25,7 +30,7 @@ function sanitizeSafeText(value: string, maxLen: number): string {
 
 function resolveAuthorizedTargetPath(
   item: IActivity,
-  callerRole: 'admin' | 'data_entry',
+  caller: ActivityCallerIdentity,
 ): string | null {
   if (!item.targetPath) {
     return null;
@@ -35,25 +40,55 @@ function resolveAuthorizedTargetPath(
     return null;
   }
 
-  if (callerRole !== 'admin') {
-    if (
-      item.targetPath.startsWith('/users') ||
-      item.targetPath.startsWith('/user-approvals') ||
-      item.targetPath.startsWith('/reports')
-    ) {
+  const perms = new Set(caller.permissions || []);
+  const p = item.targetPath;
+
+  if (caller.role === 'admin') {
+    return p;
+  }
+
+  if (p.startsWith('/users')) {
+    return perms.has('users.view') ? p : null;
+  }
+  if (p.startsWith('/user-approvals')) {
+    return perms.has('users.approve') ? p : null;
+  }
+  if (p.startsWith('/permissions')) {
+    return perms.has('permissions.manage') ? p : null;
+  }
+  if (p.startsWith('/settings')) {
+    return perms.has('settings.manage') ? p : null;
+  }
+  if (p.startsWith('/reports') || /^\/projects\/[^/]+\/report$/.test(p)) {
+    return perms.has('reports.view') && perms.has('reports.viewProfitability')
+      ? p
+      : null;
+  }
+  if (p.startsWith('/projects')) {
+    return perms.has('projects.view') ? p : null;
+  }
+  if (p.startsWith('/purchases')) {
+    return perms.has('purchases.view') ? p : null;
+  }
+  if (p.startsWith('/expenses')) {
+    return perms.has('expenses.view') ? p : null;
+  }
+  if (p.startsWith('/raw-materials')) {
+    if (!perms.has('materials.view')) {
       return null;
     }
-
     if (
+      !perms.has('materials.edit') &&
       item.entityType === 'material' &&
       item.actionType === 'material.status_changed' &&
       item.description.toLowerCase().includes('deactivated')
     ) {
       return '/raw-materials';
     }
+    return p;
   }
 
-  return item.targetPath;
+  return p;
 }
 
 export class ActivityService {
@@ -63,7 +98,7 @@ export class ActivityService {
 
   toResponseDto(
     item: IActivity,
-    callerRole: 'admin' | 'data_entry',
+    caller: ActivityCallerIdentity,
   ): ActivityResponseDto {
     return {
       id: String(item._id || ''),
@@ -78,7 +113,7 @@ export class ActivityService {
       projectRecordId: item.projectRecordId || null,
       projectCode: item.projectCode || null,
       projectName: item.projectName || null,
-      targetPath: resolveAuthorizedTargetPath(item, callerRole),
+      targetPath: resolveAuthorizedTargetPath(item, caller),
       timestamp: item.timestamp,
     };
   }
@@ -100,11 +135,13 @@ export class ActivityService {
         return;
       }
 
-      const defaultVisibility =
-        input.entityType === 'user' ||
-        input.actionType.startsWith(ADMIN_ONLY_ACTION_PREFIX)
-          ? 'admin_only'
-          : 'all';
+      const isAdminScoped =
+        ADMIN_ONLY_ENTITIES.has(input.entityType) ||
+        ADMIN_ONLY_ACTION_PREFIXES.some((prefix) =>
+          input.actionType.startsWith(prefix),
+        );
+
+      const defaultVisibility = isAdminScoped ? 'admin_only' : 'all';
 
       await this.repository.create({
         actionType: input.actionType,
@@ -130,16 +167,26 @@ export class ActivityService {
   async listRecent(
     limit: number,
     caller: ActivityCallerIdentity,
-  ): Promise<{ items: ActivityResponseDto[]; limit: number }> {
+  ): Promise<{
+    items: ActivityResponseDto[];
+    limit: number;
+    scope: 'all' | 'own';
+  }> {
     const isAdmin = caller.role === 'admin';
+    const canViewAll =
+      isAdmin || (caller.permissions || []).includes('activity.viewAll');
+
     const records = await this.repository.findRecent({
       limit,
       includeAdminOnly: isAdmin,
+      restrictToActorId: canViewAll ? null : caller.id,
+      assignedProjectIds: isAdmin ? null : caller.assignedProjectIds,
     });
 
     return {
-      items: records.map((r) => this.toResponseDto(r, caller.role)),
+      items: records.map((r) => this.toResponseDto(r, caller)),
       limit,
+      scope: canViewAll ? 'all' : 'own',
     };
   }
 
@@ -148,9 +195,14 @@ export class ActivityService {
     caller: ActivityCallerIdentity,
   ): Promise<PaginatedActivitiesResponseDto> {
     const isAdmin = caller.role === 'admin';
+    const canViewAll =
+      isAdmin || (caller.permissions || []).includes('activity.viewAll');
+
     const result = await this.repository.findPaginated({
       query,
       includeAdminOnly: isAdmin,
+      restrictToActorId: canViewAll ? null : caller.id,
+      assignedProjectIds: isAdmin ? null : caller.assignedProjectIds,
     });
 
     const totalPages = Math.max(1, Math.ceil(result.total / query.limit));
@@ -158,19 +210,21 @@ export class ActivityService {
     const allowedActionTypes: ActivityActionType[] = isAdmin
       ? [...ACTIVITY_ACTION_TYPES]
       : ACTIVITY_ACTION_TYPES.filter(
-          (t) => !t.startsWith(ADMIN_ONLY_ACTION_PREFIX),
+          (t) =>
+            !ADMIN_ONLY_ACTION_PREFIXES.some((prefix) => t.startsWith(prefix)),
         );
 
     const allowedEntityTypes: ActivityEntityType[] = isAdmin
       ? [...ACTIVITY_ENTITY_TYPES]
-      : ACTIVITY_ENTITY_TYPES.filter((t) => t !== 'user');
+      : ACTIVITY_ENTITY_TYPES.filter((t) => !ADMIN_ONLY_ENTITIES.has(t));
 
     return {
-      items: result.items.map((r) => this.toResponseDto(r, caller.role)),
+      items: result.items.map((r) => this.toResponseDto(r, caller)),
       total: result.total,
       page: query.page,
       limit: query.limit,
       totalPages,
+      scope: canViewAll ? 'all' : 'own',
       filterOptions: {
         actors: result.actors,
         actionTypes: allowedActionTypes,

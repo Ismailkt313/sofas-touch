@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import {
-  requireAdmin,
-  requireDataEntryOrAdmin,
+  requirePermission,
   verifyToken,
 } from '../../middleware/auth';
 import {
@@ -99,44 +98,72 @@ const projectRouter = Router();
 
 projectRouter.use(verifyToken);
 
-projectRouter.get('/alerts', requireAdmin, projectController.listCostAlerts);
+projectRouter.get(
+  '/alerts',
+  requirePermission('reports.viewProfitability'),
+  projectController.listCostAlerts,
+);
 projectRouter.get(
   '/activity-warnings',
-  requireAdmin,
+  requirePermission('projects.edit'),
   projectController.listActivityWarnings,
 );
 projectRouter.post(
   '/activity-warnings/evaluate',
-  requireAdmin,
+  requirePermission('projects.edit'),
   projectController.evaluateActivityWarnings,
 );
 projectRouter.get(
   '/financial-summaries',
-  requireAdmin,
+  requirePermission('reports.viewProfitability'),
   projectController.listFinancialSummaries,
 );
 
-projectRouter.get('/', requireDataEntryOrAdmin, projectController.list);
-projectRouter.post('/', requireDataEntryOrAdmin, projectController.create);
+projectRouter.get(
+  '/',
+  requirePermission('projects.view'),
+  projectController.list,
+);
+projectRouter.post(
+  '/',
+  requirePermission('projects.create'),
+  projectController.create,
+);
 projectRouter.get(
   '/:id/financial-summary',
-  requireDataEntryOrAdmin,
+  requirePermission('reports.viewProfitability'),
   projectController.getFinancialSummary,
 );
 projectRouter.post(
   '/:id/recalculate-financials',
-  requireAdmin,
+  requirePermission('reports.viewProfitability'),
   projectController.recalculateFinancials,
 );
 projectRouter.get(
   '/:id/alerts',
-  requireAdmin,
+  requirePermission('reports.viewProfitability'),
   projectController.getProjectCostAlerts,
 );
-projectRouter.get('/:id', requireDataEntryOrAdmin, projectController.getById);
-projectRouter.patch('/:id/status', requireDataEntryOrAdmin, projectController.updateStatus);
-projectRouter.patch('/:id', requireDataEntryOrAdmin, projectController.update);
-projectRouter.delete('/:id', requireAdmin, projectController.remove);
+projectRouter.get(
+  '/:id',
+  requirePermission('projects.view'),
+  projectController.getById,
+);
+projectRouter.patch(
+  '/:id/status',
+  requirePermission('projects.edit'),
+  projectController.updateStatus,
+);
+projectRouter.patch(
+  '/:id',
+  requirePermission('projects.edit'),
+  projectController.update,
+);
+projectRouter.delete(
+  '/:id',
+  requirePermission('projects.delete'),
+  projectController.remove,
+);
 
 export {
   projectRouter,

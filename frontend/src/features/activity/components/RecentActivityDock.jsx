@@ -174,7 +174,7 @@ export function RecentActivityDock({ pathname, currentUser, onNavigate }) {
           <ActivityFeedItem
             key={entry.id}
             item={entry}
-            userRole={userRole}
+            userRole={currentUser || userRole}
             compact
             onNavigate={onNavigate}
             onAfterNavigate={() => setIsExpanded(false)}

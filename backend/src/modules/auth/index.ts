@@ -47,6 +47,10 @@ const signupRateLimiter = rateLimit({
 authRouter.post('/login', loginRateLimiter, authController.login);
 authRouter.post('/signup', signupRateLimiter, authController.signup);
 authRouter.get('/me', verifyToken, authController.me);
+if (authController.updateProfile) {
+  authRouter.patch('/me', verifyToken, authController.updateProfile);
+  authRouter.patch('/profile', verifyToken, authController.updateProfile);
+}
 
 export {
   authRouter,

@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../../../types/auth';
 import { activityService } from '../../activity';
+import { userRepository } from '../../users';
+import { validateUpdateUserDto } from '../../users/dto/update-user.dto';
 import { validateLoginDto } from '../dto/login.dto';
 import { validateSignupDto } from '../dto/signup.dto';
 import { IAuthController, IAuthService } from '../types';
@@ -177,6 +179,76 @@ export class AuthController implements IAuthController {
         return;
       }
 
+      next(error);
+    }
+  };
+
+  updateProfile = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      if (!req.user || !req.user.id) {
+        res.status(401).json({
+          error: 'Unauthorized',
+          message: 'Authentication token required.',
+        });
+        return;
+      }
+
+      const rawBody =
+        req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+          ? (req.body as Record<string, unknown>)
+          : {};
+
+      const forbiddenKeys = [
+        'role',
+        'permissions',
+        'permissionOverrides',
+        'assignedProjectIds',
+        'approvalStatus',
+        'isActive',
+        'approvedBy',
+        'approvedAt',
+      ];
+
+      for (const key of forbiddenKeys) {
+        if (rawBody[key] !== undefined) {
+          res.status(403).json({
+            error: 'Forbidden',
+            code: 'SELF_ELEVATION_FORBIDDEN',
+            message: `Self-modification of '${key}' is forbidden. Role and permission assignments require an authorized Administrator.`,
+          });
+          return;
+        }
+      }
+
+      const safeInput: Record<string, unknown> = {};
+      if (rawBody.name !== undefined) safeInput.name = rawBody.name;
+      if (rawBody.phone !== undefined) safeInput.phone = rawBody.phone;
+      if (rawBody.image !== undefined) safeInput.image = rawBody.image;
+
+      const validation = validateUpdateUserDto(safeInput);
+      if (!validation.isValid || !validation.value) {
+        const firstMsg = validation.errors
+          ? Object.values(validation.errors)[0]
+          : 'Invalid profile update payload.';
+        res.status(400).json({
+          error: 'Bad Request',
+          message: firstMsg,
+          errors: validation.errors,
+        });
+        return;
+      }
+
+      await userRepository.update(req.user.id, validation.value);
+      const user = await this.authService.getCurrentUser(req.user.id);
+      res.status(200).json({
+        message: 'Profile updated successfully.',
+        user,
+      });
+    } catch (error: unknown) {
       next(error);
     }
   };

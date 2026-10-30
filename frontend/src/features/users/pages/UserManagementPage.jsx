@@ -1,3 +1,4 @@
+import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import { AddUserModal } from '../components/AddUserModal'
 import { ConfirmUserStatusModal } from '../components/ConfirmUserStatusModal'
 import { EditUserModal } from '../components/EditUserModal'
@@ -62,6 +63,9 @@ export function UserManagementPage({ currentUser, onNavigate }) {
     closeStatusModal,
   } = useUsersManagement({ currentUser })
 
+  const canManageUsers = hasPermission(currentUser, 'users.manage')
+  const canManagePermissions = hasPermission(currentUser, 'permissions.manage')
+
   return (
     <div className="users-page">
       <header className="users-header">
@@ -72,23 +76,25 @@ export function UserManagementPage({ currentUser, onNavigate }) {
           </p>
         </div>
 
-        <div className="users-header__actions">
-          <button
-            type="button"
-            className="admin-btn admin-btn--primary"
-            onClick={openAddModal}
-          >
-            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path
-                d="M10 4.25V15.75M4.25 10H15.75"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-              />
-            </svg>
-            <span>Add User</span>
-          </button>
-        </div>
+        {canManageUsers ? (
+          <div className="users-header__actions">
+            <button
+              type="button"
+              className="admin-btn admin-btn--primary"
+              onClick={openAddModal}
+            >
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path
+                  d="M10 4.25V15.75M4.25 10H15.75"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span>Add User</span>
+            </button>
+          </div>
+        ) : null}
       </header>
 
       {dataSource === 'dev-fallback' && !error ? (
@@ -323,8 +329,10 @@ export function UserManagementPage({ currentUser, onNavigate }) {
       <UserDetailsModal
         user={viewingUser}
         isSelf={viewingUser ? isSelfUser(viewingUser) : false}
+        canManagePermissions={canManagePermissions}
+        onNavigate={onNavigate}
         onClose={closeViewModal}
-        onEdit={openEditModal}
+        onEdit={canManageUsers ? openEditModal : null}
       />
 
       {editingUser ? (

@@ -34,7 +34,13 @@ function extractParam(raw: string | string[] | undefined): string {
 }
 
 function resolveCallerRole(req: AuthenticatedRequest): RawMaterialCallerRole {
-  return req.user?.role === 'admin' ? 'admin' : 'data_entry';
+  if (req.user?.role === 'admin') {
+    return 'admin';
+  }
+  return Array.isArray(req.user?.permissions) &&
+    req.user!.permissions!.includes('materials.edit')
+    ? 'admin'
+    : 'data_entry';
 }
 
 export class RawMaterialsController implements IRawMaterialsController {

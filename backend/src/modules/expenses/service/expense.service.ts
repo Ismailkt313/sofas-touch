@@ -146,10 +146,18 @@ export class ExpenseService {
     private readonly receiptStorage: IBillAttachmentStorage = new LocalProtectedBillStorageService(),
   ) {}
 
-  private assertAdmin(caller: ExpenseCallerIdentity, actionLabel: string): void {
-    if (caller.role !== 'admin') {
+  private assertPermission(
+    caller: ExpenseCallerIdentity,
+    requiredPermission: 'expenses.edit' | 'expenses.delete',
+    actionLabel: string,
+  ): void {
+    const allowed =
+      caller.role === 'admin' ||
+      (Array.isArray(caller.permissions) &&
+        caller.permissions.includes(requiredPermission));
+    if (!allowed) {
       throw new ExpenseForbiddenError(
-        `Access denied. Only Administrators can ${actionLabel}.`,
+        `Access denied. You do not have permission to ${actionLabel}.`,
       );
     }
   }
@@ -275,7 +283,11 @@ export class ExpenseService {
     allowExistingInactiveCategoryId?: string | null;
   }): Promise<IExpenseCategory> {
     if (params.newCategoryName) {
-      this.assertAdmin(params.caller, 'create expense categories');
+      this.assertPermission(
+        params.caller,
+        'expenses.edit',
+        'create expense categories',
+      );
       return withSerializedExpenseKey(
         `cat:${params.newCategoryName.toLowerCase()}`,
         async () => {
@@ -358,8 +370,12 @@ export class ExpenseService {
     caller: ExpenseCallerIdentity,
     options?: { includeInactive?: boolean },
   ): Promise<ExpenseCategoryResponseDto[]> {
+    const canManageCategories =
+      caller.role === 'admin' ||
+      (Array.isArray(caller.permissions) &&
+        caller.permissions.includes('expenses.edit'));
     const canSeeInactive =
-      caller.role === 'admin' && Boolean(options?.includeInactive);
+      canManageCategories && Boolean(options?.includeInactive);
     const categories = await this.repository.listCategories({
       includeInactive: canSeeInactive,
     });
@@ -370,7 +386,7 @@ export class ExpenseService {
     rawBody: unknown,
     caller: ExpenseCallerIdentity,
   ): Promise<ExpenseCategoryResponseDto> {
-    this.assertAdmin(caller, 'create expense categories');
+    this.assertPermission(caller, 'expenses.edit', 'create expense categories');
 
     const validation = validateCreateExpenseCategoryDto(rawBody);
     if (!validation.isValid || !validation.value) {
@@ -415,7 +431,7 @@ export class ExpenseService {
     rawBody: unknown,
     caller: ExpenseCallerIdentity,
   ): Promise<ExpenseCategoryResponseDto> {
-    this.assertAdmin(caller, 'manage expense categories');
+    this.assertPermission(caller, 'expenses.edit', 'manage expense categories');
 
     const cleanId = String(categoryId || '').trim();
     if (!cleanId) {
@@ -588,7 +604,7 @@ export class ExpenseService {
     uploadedFiles: UploadedReceiptInputFile[],
     caller: ExpenseCallerIdentity,
   ): Promise<ExpenseVoucherResponseDto> {
-    this.assertAdmin(caller, 'edit expense records');
+    this.assertPermission(caller, 'expenses.edit', 'edit expense records');
 
     const validation = validateUpdateExpenseVoucherDto(rawBody);
     if (!validation.isValid || !validation.value) {
@@ -731,7 +747,11 @@ export class ExpenseService {
     rawReason: unknown,
     caller: ExpenseCallerIdentity,
   ): Promise<ExpenseVoucherResponseDto> {
-    this.assertAdmin(caller, 'cancel or delete expense records');
+    this.assertPermission(
+      caller,
+      'expenses.delete',
+      'cancel or delete expense records',
+    );
 
     const cleanReason =
       typeof rawReason === 'string'

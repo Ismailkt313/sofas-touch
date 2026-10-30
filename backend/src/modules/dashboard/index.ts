@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
-  requireDataEntryOrAdmin,
+  requireAllPermissions,
+  requirePermission,
   verifyToken,
 } from '../../middleware/auth';
 import { DashboardController } from './controller/dashboard.controller';
@@ -14,14 +15,15 @@ export const dashboardController = new DashboardController(dashboardService);
 const dashboardRouter = Router();
 
 dashboardRouter.use(verifyToken);
+
 dashboardRouter.get(
   '/overview',
-  requireDataEntryOrAdmin,
+  requirePermission('dashboard.view'),
   dashboardController.getOverview,
 );
 dashboardRouter.get(
   '/monthly-expenses',
-  requireDataEntryOrAdmin,
+  requireAllPermissions(['dashboard.view', 'reports.viewProfitability']),
   dashboardController.getMonthlyExpenses,
 );
 

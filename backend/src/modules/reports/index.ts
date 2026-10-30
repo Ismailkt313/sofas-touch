@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import { requireAdmin, verifyToken } from '../../middleware/auth';
+import {
+  requireAllPermissions,
+  requirePermission,
+  verifyToken,
+} from '../../middleware/auth';
 import { ReportsController } from './controller/reports.controller';
 import { ReportsRepository } from './repository/reports.repository';
 import { ReportsService } from './service/reports.service';
@@ -11,16 +15,25 @@ export const reportsController = new ReportsController(reportsService);
 const reportsRouter = Router();
 
 reportsRouter.use(verifyToken);
-reportsRouter.use(requireAdmin);
 
-reportsRouter.get('/projects', reportsController.listProjectReports);
-reportsRouter.get('/projects/export', reportsController.exportProjectReportsCsv);
+reportsRouter.get(
+  '/projects',
+  requirePermission('reports.view'),
+  reportsController.listProjectReports,
+);
+reportsRouter.get(
+  '/projects/export',
+  requireAllPermissions(['reports.view', 'reports.viewProfitability']),
+  reportsController.exportProjectReportsCsv,
+);
 reportsRouter.get(
   '/projects/:id/pdf',
+  requireAllPermissions(['reports.view', 'reports.viewProfitability']),
   reportsController.exportIndividualProjectReportPdf,
 );
 reportsRouter.get(
   '/projects/:id',
+  requirePermission('reports.view'),
   reportsController.getIndividualProjectReport,
 );
 

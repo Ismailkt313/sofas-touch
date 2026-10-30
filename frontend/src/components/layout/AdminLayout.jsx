@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RecentActivityDock } from '../../features/activity'
 import { useApprovalsContext } from '../../features/approvals/context/ApprovalsContext'
+import {
+  hasAnyPermission,
+  hasPermission,
+  normalizeRoleKey,
+} from '../../features/permissions/constants/permissionsCatalog'
 import { AdminSidebar } from './AdminSidebar'
 import { HeaderNotificationsMenu } from './HeaderNotificationsMenu'
 import { findNavItemByPath } from './navigationConfig'
@@ -19,8 +24,27 @@ export function AdminLayout({
   const closeButtonRef = useRef(null)
   const { pendingCount } = useApprovalsContext()
 
-  const activeNavItem = findNavItemByPath(pathname)
-  const sectionLabel = activeNavItem?.label || 'Admin'
+  const roleKey = normalizeRoleKey(currentUser?.role)
+  const isAdmin = roleKey === 'admin'
+  const canApproveUsers = hasPermission(currentUser, 'users.approve')
+  const canViewActivityDock = hasAnyPermission(currentUser, [
+    'activity.viewAll',
+    'activity.viewOwn',
+  ])
+
+  const activeNavItem = findNavItemByPath(pathname, currentUser)
+  const sectionLabel =
+    activeNavItem?.displayLabel || activeNavItem?.label || 'Workspace'
+  const workspaceRootCrumb = !roleKey
+    ? 'Workspace'
+    : isAdmin
+      ? 'Admin'
+      : 'Operations'
+  const topbarRoleTag = !roleKey
+    ? 'Soft Touch Sofas'
+    : isAdmin
+      ? 'Soft Touch Sofas \u2022 Admin'
+      : 'Soft Touch Sofas \u2022 Data Entry'
 
   const closeDrawer = useCallback((restoreFocus = false) => {
     setIsDrawerOpen(false)
@@ -80,14 +104,15 @@ export function AdminLayout({
 
       <aside
         id="admin-navigation-drawer"
-        className={`admin-sidebar${isDrawerOpen ? ' admin-sidebar--open' : ''
-          }`}
+        className={`admin-sidebar${
+          isDrawerOpen ? ' admin-sidebar--open' : ''
+        }`}
         aria-label="Sidebar"
       >
         <AdminSidebar
           pathname={pathname}
           currentUser={currentUser}
-          pendingApprovalsCount={pendingCount}
+          pendingApprovalsCount={canApproveUsers ? pendingCount : 0}
           onNavigate={onNavigate}
           onLogout={onLogout}
           isDrawerOpen={isDrawerOpen}
@@ -124,7 +149,9 @@ export function AdminLayout({
             </div>
 
             <nav className="admin-topbar__breadcrumb" aria-label="Breadcrumb">
-              <span className="admin-topbar__crumb-root">Admin</span>
+              <span className="admin-topbar__crumb-root">
+                {workspaceRootCrumb}
+              </span>
               <span className="admin-topbar__crumb-sep" aria-hidden="true">
                 /
               </span>
@@ -133,21 +160,21 @@ export function AdminLayout({
           </div>
 
           <div className="admin-topbar__right">
-            <span className="admin-topbar__brand-tag">
-              Soft Touch Sofas &bull; Operations
-            </span>
-            <HeaderNotificationsMenu
-              key={`${pathname}-${isDrawerOpen ? 'drawer' : 'main'}`}
-              pathname={pathname}
-              onNavigate={onNavigate}
-            />
+            <span className="admin-topbar__brand-tag">{topbarRoleTag}</span>
+            {canApproveUsers ? (
+              <HeaderNotificationsMenu
+                key={`${pathname}-${isDrawerOpen ? 'drawer' : 'main'}`}
+                pathname={pathname}
+                onNavigate={onNavigate}
+              />
+            ) : null}
           </div>
         </header>
 
         <main className="admin-main">{children}</main>
       </div>
 
-      {currentUser ? (
+      {currentUser && canViewActivityDock ? (
         <RecentActivityDock
           pathname={pathname}
           currentUser={currentUser}

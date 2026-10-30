@@ -26,6 +26,8 @@ export interface ReportCallerIdentity {
   email: string;
   name: string;
   role: 'admin' | 'data_entry';
+  permissions?: string[];
+  assignedProjectIds?: string[] | null;
 }
 
 export interface ReportValidationResult<T> {

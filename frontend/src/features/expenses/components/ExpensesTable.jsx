@@ -6,12 +6,16 @@ import {
 export function ExpensesTable({
   expenses,
   isAdmin,
+  canEdit,
+  canCancel,
   onViewExpense,
   onEditExpense,
   onCancelExpense,
   onPreviewReceipt,
   onViewProject,
 }) {
+  const allowEdit = canEdit ?? isAdmin
+  const allowCancel = canCancel ?? isAdmin
   return (
     <div className="exp-table-wrap">
       <table className="exp-table">
@@ -147,24 +151,24 @@ export function ExpensesTable({
                     >
                       View
                     </button>
-                    {isAdmin && !isCancelled ? (
-                      <>
-                        <button
-                          type="button"
-                          className="exp-btn exp-btn--secondary exp-btn--sm"
-                          onClick={() => onEditExpense(expense)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="exp-btn exp-btn--ghost exp-btn--sm"
-                          style={{ color: '#9e3324' }}
-                          onClick={() => onCancelExpense(expense)}
-                        >
-                          Void
-                        </button>
-                      </>
+                    {!isCancelled && allowEdit ? (
+                      <button
+                        type="button"
+                        className="exp-btn exp-btn--secondary exp-btn--sm"
+                        onClick={() => onEditExpense(expense)}
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                    {!isCancelled && allowCancel ? (
+                      <button
+                        type="button"
+                        className="exp-btn exp-btn--ghost exp-btn--sm"
+                        style={{ color: '#9e3324' }}
+                        onClick={() => onCancelExpense(expense)}
+                      >
+                        Void
+                      </button>
                     ) : null}
                   </div>
                 </td>

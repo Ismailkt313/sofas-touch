@@ -4,11 +4,11 @@ import { ReportsMobileList } from '../components/ReportsMobileList'
 import { ReportsPagination } from '../components/ReportsPagination'
 import { ReportsSummaryCards } from '../components/ReportsSummaryCards'
 import { ReportsTable } from '../components/ReportsTable'
+import { hasAllPermissions } from '../../permissions/constants/permissionsCatalog'
 import {
   downloadProjectReportsCsv,
   fetchProjectReports,
   hasActiveAuthToken,
-  isAdminUser,
 } from '../services/reportService'
 import '../styles/reports.css'
 import {
@@ -37,7 +37,10 @@ const EMPTY_SUMMARY = {
 }
 
 export function ReportsPage({ currentUser, onNavigate }) {
-  const adminAccess = isAdminUser(currentUser)
+  const adminAccess = hasAllPermissions(currentUser, [
+    'reports.view',
+    'reports.viewProfitability',
+  ])
   const [authRequired, setAuthRequired] = useState(() => !hasActiveAuthToken())
 
   const [projects, setProjects] = useState([])

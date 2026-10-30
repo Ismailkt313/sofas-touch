@@ -789,7 +789,7 @@ async function runTests(): Promise<void> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${dataEntryToken}`,
+        Authorization: `Bearer ${adminToken}`,
       },
       body: JSON.stringify({
         projectId: 'PRJ-0777',
@@ -800,11 +800,26 @@ async function runTests(): Promise<void> {
     });
     assert.strictEqual(manualIdHttpRes.status, 400);
 
-    const createHttpRes = await fetch(baseUrl, {
+    const dataEntryCreateForbidden = await fetch(baseUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${dataEntryToken}`,
+      },
+      body: JSON.stringify({
+        name: 'Unauthorized Operator Project',
+        clientName: 'Client Y',
+        category: 'Modular Sofa',
+        contractValue: 25000,
+      }),
+    });
+    assert.strictEqual(dataEntryCreateForbidden.status, 403);
+
+    const createHttpRes = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
       },
       body: JSON.stringify({
         name: 'Mayfair Velvet Sectional',
@@ -832,6 +847,17 @@ async function runTests(): Promise<void> {
     assert.strictEqual(createdBody.project.totalCost, 0);
     assert.strictEqual(createdBody.project.estimatedProfit, 25000);
 
+    const dataEntryProjectViewRes = await fetch(`${baseUrl}/PRJ-0001`, {
+      headers: { Authorization: `Bearer ${dataEntryToken}` },
+    });
+    assert.strictEqual(dataEntryProjectViewRes.status, 200);
+    const dataEntryProjectBody = (await dataEntryProjectViewRes.json()) as {
+      project: Record<string, unknown>;
+    };
+    assert.strictEqual(dataEntryProjectBody.project.projectId, 'PRJ-0001');
+    assert.strictEqual(dataEntryProjectBody.project.contractValue, null);
+    assert.strictEqual(dataEntryProjectBody.project.estimatedProfit, null);
+
     voucherProviderForHttp.upsert({
       id: 'http_pv_1',
       projectCode: 'PRJ-0001',
@@ -852,8 +878,16 @@ async function runTests(): Promise<void> {
       action: 'created',
     });
 
+    const dataEntrySummaryForbidden = await fetch(
+      `${baseUrl}/PRJ-0001/financial-summary`,
+      {
+        headers: { Authorization: `Bearer ${dataEntryToken}` },
+      },
+    );
+    assert.strictEqual(dataEntrySummaryForbidden.status, 403);
+
     const summaryRes = await fetch(`${baseUrl}/PRJ-0001/financial-summary`, {
-      headers: { Authorization: `Bearer ${dataEntryToken}` },
+      headers: { Authorization: `Bearer ${adminToken}` },
     });
     assert.strictEqual(summaryRes.status, 200);
     const summaryData = (await summaryRes.json()) as {
@@ -898,11 +932,23 @@ async function runTests(): Promise<void> {
     assert.strictEqual(adminAlertsBody.alerts[0].projectId, 'PRJ-0001');
     assert.strictEqual(adminAlertsBody.alerts[0].thresholdPercent, 80);
 
-    const patchTamperIdRes = await fetch(`${baseUrl}/PRJ-0001`, {
+    const dataEntryPatchForbidden = await fetch(`${baseUrl}/PRJ-0001`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${dataEntryToken}`,
+      },
+      body: JSON.stringify({
+        name: 'Operator Edit Attempt',
+      }),
+    });
+    assert.strictEqual(dataEntryPatchForbidden.status, 403);
+
+    const patchTamperIdRes = await fetch(`${baseUrl}/PRJ-0001`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
       },
       body: JSON.stringify({
         projectId: 'PRJ-0999',
@@ -915,7 +961,7 @@ async function runTests(): Promise<void> {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${dataEntryToken}`,
+        Authorization: `Bearer ${adminToken}`,
       },
       body: JSON.stringify({
         contractValue: 20000,
