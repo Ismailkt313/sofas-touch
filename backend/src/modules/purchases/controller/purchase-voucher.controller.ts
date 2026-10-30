@@ -3,6 +3,7 @@ import multer from 'multer';
 import { env } from '../../../config/env';
 import { AuthenticatedRequest } from '../../../types/auth';
 import { activityService } from '../../activity';
+import { isProjectAccessibleToCaller } from '../../permissions/constants/permissions.constants';
 import {
   DuplicateSupplierInvoiceError,
   PurchaseConflictError,
@@ -183,9 +184,49 @@ export class PurchaseVoucherController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const result = await this.service.listPurchaseVouchers(
-        (req.query || {}) as Record<string, unknown>,
-      );
+      const assignedIds = req.user?.assignedProjectIds ?? null;
+      const queryObj = (req.query || {}) as Record<string, unknown>;
+      if (
+        Array.isArray(assignedIds) &&
+        typeof queryObj.projectId === 'string' &&
+        queryObj.projectId.trim()
+      ) {
+        if (
+          !isProjectAccessibleToCaller(
+            assignedIds,
+            queryObj.projectId,
+            queryObj.projectId,
+          )
+        ) {
+          res.status(403).json({
+            error: 'Forbidden',
+            code: 'PROJECT_ACCESS_DENIED',
+            message:
+              'Access denied. Your account is not assigned to view purchase vouchers for this project.',
+          });
+          return;
+        }
+      }
+
+      const result = await this.service.listPurchaseVouchers(queryObj);
+      if (Array.isArray(assignedIds)) {
+        const filtered = result.items.filter((v) =>
+          isProjectAccessibleToCaller(
+            assignedIds,
+            v.projectRecordId || null,
+            v.projectCode || null,
+          ),
+        );
+        res.status(200).json({
+          ...result,
+          vouchers: filtered,
+          items: filtered,
+          total: filtered.length,
+          totalPages: Math.max(1, Math.ceil(filtered.length / result.limit)),
+        });
+        return;
+      }
+
       res.status(200).json(result);
     } catch (err) {
       this.handleError(err, res, next);
@@ -200,6 +241,21 @@ export class PurchaseVoucherController {
     try {
       const id = String(req.params.id || '');
       const result = await this.service.getPurchaseVoucherById(id);
+      if (
+        !isProjectAccessibleToCaller(
+          req.user?.assignedProjectIds,
+          result.voucher.projectRecordId || null,
+          result.voucher.projectCode || null,
+        )
+      ) {
+        res.status(403).json({
+          error: 'Forbidden',
+          code: 'PROJECT_ACCESS_DENIED',
+          message:
+            'Access denied. Your account is not assigned to access this purchase voucher.',
+        });
+        return;
+      }
       res.status(200).json(result);
     } catch (err) {
       this.handleError(err, res, next);
@@ -212,6 +268,27 @@ export class PurchaseVoucherController {
     next: NextFunction,
   ): Promise<void> => {
     try {
+      const assignedIds = req.user?.assignedProjectIds ?? null;
+      const bodyObj = (req.body || {}) as Record<string, unknown>;
+      if (
+        Array.isArray(assignedIds) &&
+        typeof bodyObj.projectId === 'string' &&
+        bodyObj.projectId.trim() &&
+        !isProjectAccessibleToCaller(
+          assignedIds,
+          bodyObj.projectId,
+          bodyObj.projectId,
+        )
+      ) {
+        res.status(403).json({
+          error: 'Forbidden',
+          code: 'PROJECT_ACCESS_DENIED',
+          message:
+            'Access denied. You cannot record a purchase voucher against an unassigned project.',
+        });
+        return;
+      }
+
       const caller = extractCaller(req);
       const files = extractUploadedFiles(req);
       const idempotencyHeader = req.header('Idempotency-Key') || undefined;
@@ -260,6 +337,44 @@ export class PurchaseVoucherController {
   ): Promise<void> => {
     try {
       const id = String(req.params.id || '');
+      const assignedIds = req.user?.assignedProjectIds ?? null;
+      if (Array.isArray(assignedIds)) {
+        const existing = await this.service.getPurchaseVoucherById(id);
+        if (
+          !isProjectAccessibleToCaller(
+            assignedIds,
+            existing.voucher.projectRecordId || null,
+            existing.voucher.projectCode || null,
+          )
+        ) {
+          res.status(403).json({
+            error: 'Forbidden',
+            code: 'PROJECT_ACCESS_DENIED',
+            message:
+              'Access denied. Your account is not assigned to modify this purchase voucher.',
+          });
+          return;
+        }
+        const bodyObj = (req.body || {}) as Record<string, unknown>;
+        if (
+          typeof bodyObj.projectId === 'string' &&
+          bodyObj.projectId.trim() &&
+          !isProjectAccessibleToCaller(
+            assignedIds,
+            bodyObj.projectId,
+            bodyObj.projectId,
+          )
+        ) {
+          res.status(403).json({
+            error: 'Forbidden',
+            code: 'PROJECT_ACCESS_DENIED',
+            message:
+              'Access denied. You cannot reassign a purchase voucher to an unassigned project.',
+          });
+          return;
+        }
+      }
+
       const caller = extractCaller(req);
       const files = extractUploadedFiles(req);
       const voucher = await this.service.updatePurchaseVoucher(
@@ -393,6 +508,24 @@ export class PurchaseVoucherController {
   ): Promise<void> => {
     try {
       const id = String(req.params.id || '');
+      if (Array.isArray(req.user?.assignedProjectIds)) {
+        const existing = await this.service.getPurchaseVoucherById(id);
+        if (
+          !isProjectAccessibleToCaller(
+            req.user?.assignedProjectIds,
+            existing.voucher.projectRecordId || null,
+            existing.voucher.projectCode || null,
+          )
+        ) {
+          res.status(403).json({
+            error: 'Forbidden',
+            code: 'PROJECT_ACCESS_DENIED',
+            message:
+              'Access denied. Your account is not assigned to view attachments for this purchase voucher.',
+          });
+          return;
+        }
+      }
       const attachmentId = String(req.params.attachmentId || '');
       const { attachment, buffer } = await this.service.openVoucherAttachment(
         id,

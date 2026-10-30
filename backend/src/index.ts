@@ -13,11 +13,19 @@ import expenseRoutes from './routes/expenseRoutes';
 import reportRoutes from './routes/reportRoutes';
 import activityRoutes from './routes/activityRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
+import permissionRoutes from './routes/permissionRoutes';
+import settingsRoutes from './routes/settingsRoutes';
 
 const app = express();
 const PORT = env.PORT;
 
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(
+  helmet({
+    frameguard: false,
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }),
+);
 
 connectDB();
 
@@ -29,7 +37,10 @@ const corsOptions: CorsOptions = {
     }
 
     const normalizedOrigin = origin.replace(/\/+$/, '');
-    if (env.CORS_ORIGINS.includes(normalizedOrigin)) {
+    if (
+      env.CORS_ORIGINS.includes(normalizedOrigin) ||
+      /^https:\/\/[a-z0-9-]+\.e2b\.app$/i.test(normalizedOrigin)
+    ) {
       callback(null, true);
     } else {
       callback(
@@ -76,6 +87,8 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/activities', activityRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/permissions', permissionRoutes);
+app.use('/api/settings', settingsRoutes);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({
@@ -104,8 +117,8 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`Soft Touch Sofas server is running on http://localhost:${PORT}`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Soft Touch Sofas server is running on http://0.0.0.0:${PORT}`);
     console.log(`Allowed CORS origins: ${env.CORS_ORIGINS.join(', ')}`);
   });
 }

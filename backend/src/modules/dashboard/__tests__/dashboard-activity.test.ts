@@ -653,16 +653,20 @@ async function runDashboardAndActivityTests(): Promise<void> {
         token: actors.dataEntryToken,
       });
       assert.strictEqual(opDash.status, 200);
+      assert.strictEqual(opDash.body.mode, 'operational');
+      assert.strictEqual(opDash.body.kpis, null);
+      assert.strictEqual(opDash.body.projectPerformance, null);
+      assert.strictEqual(opDash.body.monthlyExpenses, null);
       assert.strictEqual(opDash.body.pendingApprovals, null);
 
-      const opPerf = (
-        opDash.body.projectPerformance as {
-          items: Array<Record<string, unknown>>;
-        }
-      ).items;
+      const opOperational = opDash.body.operational as {
+        projectSummary: { items: Array<Record<string, unknown>> };
+      };
       assert.ok(
-        opPerf.every(
-          (row) => !String(row.detailPath || '').endsWith('/report'),
+        opOperational.projectSummary.items.every(
+          (row) =>
+            !String(row.detailPath || '').endsWith('/report') &&
+            row.contractValue === undefined,
         ),
       );
 

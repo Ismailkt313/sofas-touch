@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  requireDataEntryOrAdmin,
+  requireAnyPermission,
   verifyToken,
 } from '../../middleware/auth';
 import { ActivityController } from './controller/activity.controller';
@@ -16,12 +16,12 @@ const activityRouter = Router();
 activityRouter.use(verifyToken);
 activityRouter.get(
   '/recent',
-  requireDataEntryOrAdmin,
+  requireAnyPermission(['activity.viewAll', 'activity.viewOwn']),
   activityController.listRecent,
 );
 activityRouter.get(
   '/',
-  requireDataEntryOrAdmin,
+  requireAnyPermission(['activity.viewAll', 'activity.viewOwn']),
   activityController.listPaginated,
 );
 

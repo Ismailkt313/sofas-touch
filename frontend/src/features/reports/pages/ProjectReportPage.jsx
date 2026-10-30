@@ -3,11 +3,11 @@ import { ProjectCostBreakdown } from '../components/ProjectCostBreakdown'
 import { ProjectDateWiseCostSection } from '../components/ProjectDateWiseCostSection'
 import { ProjectExpenseHistorySection } from '../components/ProjectExpenseHistorySection'
 import { ProjectPurchaseHistorySection } from '../components/ProjectPurchaseHistorySection'
+import { hasAllPermissions } from '../../permissions/constants/permissionsCatalog'
 import {
   downloadIndividualProjectReportPdf,
   fetchIndividualProjectReport,
   hasActiveAuthToken,
-  isAdminUser,
 } from '../services/reportService'
 import '../styles/reports.css'
 import {
@@ -31,7 +31,10 @@ function readInitialUrlDates() {
 }
 
 export function ProjectReportPage({ projectId, currentUser, onNavigate }) {
-  const adminAccess = isAdminUser(currentUser)
+  const adminAccess = hasAllPermissions(currentUser, [
+    'reports.view',
+    'reports.viewProfitability',
+  ])
   const [authRequired, setAuthRequired] = useState(() => !hasActiveAuthToken())
 
   const [fromDate, setFromDate] = useState(() => readInitialUrlDates().fromDate)

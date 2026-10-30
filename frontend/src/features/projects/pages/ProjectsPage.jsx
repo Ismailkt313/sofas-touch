@@ -19,7 +19,9 @@ export function ProjectsPage({ currentUser, onNavigate }) {
     setCurrentPage,
 
     statusCounts,
-    adminAccess,
+    canCreateProject,
+    canEditProject,
+    canViewProfitability,
 
     searchInput,
     statusFilter,
@@ -76,7 +78,7 @@ export function ProjectsPage({ currentUser, onNavigate }) {
           </p>
         </div>
 
-        {!authRequired ? (
+        {!authRequired && canCreateProject ? (
           <div className="projects-header__actions">
             <button
               type="button"
@@ -176,12 +178,12 @@ export function ProjectsPage({ currentUser, onNavigate }) {
             statusCounts={statusCounts}
             activeStatus={statusFilter}
             onSelectStatus={handleStatusFilterChange}
-            adminAccess={adminAccess}
+            adminAccess={canViewProfitability}
             automationState={automationState}
           />
 
           <ProjectAutomationBanners
-            adminAccess={adminAccess}
+            adminAccess={canEditProject || canViewProfitability}
             automationState={automationState}
             onViewProject={handleViewProject}
             onRunInactivityCheck={handleRunInactivityEvaluation}
@@ -308,15 +310,17 @@ export function ProjectsPage({ currentUser, onNavigate }) {
                       manufacturing project to start tracking contract value and
                       costs.
                     </p>
-                    <div className="projects-state__actions">
-                      <button
-                        type="button"
-                        className="admin-btn admin-btn--primary"
-                        onClick={openCreateModal}
-                      >
-                        Add Project
-                      </button>
-                    </div>
+                    {canCreateProject ? (
+                      <div className="projects-state__actions">
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--primary"
+                          onClick={openCreateModal}
+                        >
+                          Add Project
+                        </button>
+                      </div>
+                    ) : null}
                   </>
                 )}
               </div>
@@ -326,18 +330,22 @@ export function ProjectsPage({ currentUser, onNavigate }) {
                   projects={projects}
                   activeWarningByProjectCode={activeWarningByProjectCode}
                   updatingStatusKey={updatingStatusKey}
+                  canEditProject={canEditProject}
+                  canViewProfitability={canViewProfitability}
                   onViewDetails={handleViewProject}
-                  onEdit={openEditModal}
-                  onStatusChange={handleStatusSubmit}
+                  onEdit={canEditProject ? openEditModal : null}
+                  onStatusChange={canEditProject ? handleStatusSubmit : null}
                 />
 
                 <ProjectsMobileList
                   projects={projects}
                   activeWarningByProjectCode={activeWarningByProjectCode}
                   updatingStatusKey={updatingStatusKey}
+                  canEditProject={canEditProject}
+                  canViewProfitability={canViewProfitability}
                   onViewDetails={handleViewProject}
-                  onEdit={openEditModal}
-                  onStatusChange={handleStatusSubmit}
+                  onEdit={canEditProject ? openEditModal : null}
+                  onStatusChange={canEditProject ? handleStatusSubmit : null}
                 />
 
                 <ProjectsPagination

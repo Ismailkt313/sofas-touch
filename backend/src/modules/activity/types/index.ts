@@ -4,6 +4,8 @@ export const ACTIVITY_ENTITY_TYPES = [
   'expense',
   'material',
   'user',
+  'permission',
+  'settings',
 ] as const;
 
 export type ActivityEntityType = (typeof ACTIVITY_ENTITY_TYPES)[number];
@@ -32,6 +34,10 @@ export const ACTIVITY_ACTION_TYPES = [
   'user.status_changed',
   'user.approved',
   'user.rejected',
+  'permissions.updated',
+  'permissions.reset',
+  'permissions.user_overridden',
+  'settings.updated',
 ] as const;
 
 export type ActivityActionType = (typeof ACTIVITY_ACTION_TYPES)[number];
@@ -44,6 +50,8 @@ export interface ActivityCallerIdentity {
   email: string;
   name: string;
   role: 'admin' | 'data_entry';
+  permissions: string[];
+  assignedProjectIds?: string[] | null;
 }
 
 export interface RecordActivityInput {
@@ -105,6 +113,7 @@ export interface PaginatedActivitiesResponseDto {
   page: number;
   limit: number;
   totalPages: number;
+  scope: 'all' | 'own';
   filterOptions: {
     actors: ActivityActorOptionDto[];
     actionTypes: ActivityActionType[];

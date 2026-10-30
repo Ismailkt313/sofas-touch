@@ -13,6 +13,10 @@ function extractCaller(req: AuthenticatedRequest): ActivityCallerIdentity {
     email: String(req.user?.email || ''),
     name: String(req.user?.name || req.user?.email || 'Workspace User'),
     role: req.user?.role === 'admin' ? 'admin' : 'data_entry',
+    permissions: Array.isArray(req.user?.permissions)
+      ? req.user!.permissions!
+      : [],
+    assignedProjectIds: req.user?.assignedProjectIds ?? null,
   };
 }
 
@@ -48,6 +52,7 @@ export class ActivityController {
         activities: result.items,
         items: result.items,
         limit: result.limit,
+        scope: result.scope,
       });
     } catch (error: unknown) {
       next(error);

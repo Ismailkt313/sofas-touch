@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { generateToken } from '../../../middleware/auth';
 import { env } from '../../../config/env';
 import { UserResponse } from '../../../types/auth';
+import { permissionService } from '../../permissions/service/permission.service';
 import { LoginDto } from '../dto/login.dto';
 import { SignupDto } from '../dto/signup.dto';
 import { IAuthRepository, IAuthService } from '../types';
@@ -117,6 +118,9 @@ export class AuthService implements IAuthService {
       expiresIn,
     );
 
+    const effectivePermissions =
+      await permissionService.resolveEffectivePermissionsForUser(user);
+
     const publicUser: UserResponse = {
       id: String(user._id),
       name: user.name,
@@ -129,6 +133,17 @@ export class AuthService implements IAuthService {
       approvedBy: user.approvedBy ? String(user.approvedBy) : undefined,
       approvedAt: user.approvedAt,
       rejectionReason: user.rejectionReason,
+      permissions: effectivePermissions,
+      permissionOverrides: {
+        grant: user.permissionOverrides?.grant || [],
+        revoke: user.permissionOverrides?.revoke || [],
+      },
+      assignedProjectIds:
+        canonicalRole === 'admin'
+          ? null
+          : Array.isArray(user.assignedProjectIds)
+            ? user.assignedProjectIds
+            : null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -224,6 +239,9 @@ export class AuthService implements IAuthService {
       );
     }
 
+    const effectivePermissions =
+      await permissionService.resolveEffectivePermissionsForUser(user);
+
     return {
       id: String(user._id),
       name: user.name,
@@ -236,6 +254,17 @@ export class AuthService implements IAuthService {
       approvedBy: user.approvedBy ? String(user.approvedBy) : undefined,
       approvedAt: user.approvedAt,
       rejectionReason: user.rejectionReason,
+      permissions: effectivePermissions,
+      permissionOverrides: {
+        grant: user.permissionOverrides?.grant || [],
+        revoke: user.permissionOverrides?.revoke || [],
+      },
+      assignedProjectIds:
+        canonicalRole === 'admin'
+          ? null
+          : Array.isArray(user.assignedProjectIds)
+            ? user.assignedProjectIds
+            : null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

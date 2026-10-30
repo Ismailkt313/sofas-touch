@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAdmin, verifyToken } from '../../middleware/auth';
+import { requirePermission, verifyToken } from '../../middleware/auth';
 import { UserModel } from '../auth/models/user.model';
 import { UserRepository, IUserRepository } from './repository/user.repository';
 import {
@@ -29,16 +29,35 @@ const userController: IUserController = new UserController(userService);
 const userRouter = Router();
 
 userRouter.use(verifyToken);
-userRouter.use(requireAdmin);
 
-userRouter.get('/pending-approvals', userController.listPendingApprovals);
-userRouter.get('/', userController.list);
-userRouter.get('/:id', userController.getById);
-userRouter.post('/', userController.create);
-userRouter.patch('/:id/approve', userController.approveUser);
-userRouter.patch('/:id/reject', userController.rejectUser);
-userRouter.patch('/:id/status', userController.updateStatus);
-userRouter.patch('/:id', userController.update);
+userRouter.get(
+  '/pending-approvals',
+  requirePermission('users.approve'),
+  userController.listPendingApprovals,
+);
+userRouter.get('/', requirePermission('users.view'), userController.list);
+userRouter.get('/:id', requirePermission('users.view'), userController.getById);
+userRouter.post('/', requirePermission('users.manage'), userController.create);
+userRouter.patch(
+  '/:id/approve',
+  requirePermission('users.approve'),
+  userController.approveUser,
+);
+userRouter.patch(
+  '/:id/reject',
+  requirePermission('users.approve'),
+  userController.rejectUser,
+);
+userRouter.patch(
+  '/:id/status',
+  requirePermission('users.manage'),
+  userController.updateStatus,
+);
+userRouter.patch(
+  '/:id',
+  requirePermission('users.manage'),
+  userController.update,
+);
 
 export {
   userRouter,

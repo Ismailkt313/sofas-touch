@@ -14,6 +14,8 @@ export interface DashboardCallerIdentity {
   email: string;
   name: string;
   role: 'admin' | 'data_entry';
+  permissions: string[];
+  assignedProjectIds?: string[] | null;
 }
 
 export interface DashboardOverviewQueryDto {
@@ -114,6 +116,8 @@ export interface DashboardRecentTransactionDto {
   transactionDate: Date;
   createdAt?: Date;
   status: 'active' | 'cancelled';
+  hasAttachment?: boolean;
+  createdByUserId?: string | null;
   detailPath: string;
 }
 
@@ -150,15 +154,58 @@ export interface DashboardPendingApprovalsDto {
   items: DashboardPendingApprovalUserDto[];
 }
 
+export interface DashboardOperationalQuickActionDto {
+  id: string;
+  label: string;
+  description: string;
+  path: string;
+  permission: string;
+}
+
+export interface DashboardOperationalProjectItemDto {
+  id: string;
+  projectId: string;
+  name: string;
+  clientName: string;
+  category: ProjectCategory;
+  status: ProjectStatus;
+  detailPath: string;
+}
+
+export interface DashboardValidationAlertDto {
+  id: string;
+  severity: 'warning' | 'info';
+  title: string;
+  description: string;
+  actionLabel: string | null;
+  actionPath: string | null;
+}
+
+export interface DashboardOperationalSummaryDto {
+  guidanceNote: string;
+  quickActions: DashboardOperationalQuickActionDto[];
+  projectSummary: {
+    totalAccessible: number;
+    inProgress: number;
+    underReview: number;
+    completed: number;
+    items: DashboardOperationalProjectItemDto[];
+  } | null;
+  myRecentCount: number;
+  validationAlerts: DashboardValidationAlertDto[];
+}
+
 export interface DashboardOverviewResponseDto {
   generatedAt: string;
-  kpis: DashboardKpiSummaryDto;
+  mode: 'executive' | 'operational';
+  kpis: DashboardKpiSummaryDto | null;
   projectPerformance: {
     totalMatching: number;
     items: DashboardProjectPerformanceRowDto[];
-  };
-  monthlyExpenses: DashboardMonthlyExpensesDto;
+  } | null;
+  monthlyExpenses: DashboardMonthlyExpensesDto | null;
   recentTransactions: DashboardRecentTransactionDto[];
-  stockAlerts: DashboardStockAlertsDto;
+  stockAlerts: DashboardStockAlertsDto | null;
   pendingApprovals: DashboardPendingApprovalsDto | null;
+  operational: DashboardOperationalSummaryDto | null;
 }

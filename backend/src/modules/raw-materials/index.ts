@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import {
-  requireAdmin,
-  requireDataEntryOrAdmin,
+  requirePermission,
   verifyToken,
 } from '../../middleware/auth';
 import { RawMaterialsController } from './controller/raw-materials.controller';
@@ -20,20 +19,36 @@ const router = Router();
 
 router.use(verifyToken);
 
-router.get('/', requireDataEntryOrAdmin, rawMaterialsController.list);
-router.get('/:id', requireDataEntryOrAdmin, rawMaterialsController.getById);
-router.post('/', requireAdmin, rawMaterialsController.create);
+router.get(
+  '/',
+  requirePermission('materials.view'),
+  rawMaterialsController.list,
+);
+router.get(
+  '/:id',
+  requirePermission('materials.view'),
+  rawMaterialsController.getById,
+);
+router.post(
+  '/',
+  requirePermission('materials.create'),
+  rawMaterialsController.create,
+);
 router.patch(
   '/:id/status',
-  requireAdmin,
+  requirePermission('materials.edit'),
   rawMaterialsController.updateStatus,
 );
 router.patch(
   '/:id/stock',
-  requireAdmin,
+  requirePermission('materials.manageStock'),
   rawMaterialsController.adjustStock,
 );
-router.patch('/:id', requireAdmin, rawMaterialsController.update);
+router.patch(
+  '/:id',
+  requirePermission('materials.edit'),
+  rawMaterialsController.update,
+);
 
 export {
   DuplicateRawMaterialKeyError,

@@ -9,6 +9,7 @@ import {
 
 export function PurchasesMobileList({
   vouchers,
+  canEditVoucher = true,
   onViewVoucher,
   onEditVoucher,
 }) {
@@ -86,7 +87,7 @@ export function PurchasesMobileList({
                 >
                   View
                 </button>
-                {!isCancelled ? (
+                {!isCancelled && canEditVoucher ? (
                   <button
                     type="button"
                     className="pv-action-btn pv-action-btn--edit"

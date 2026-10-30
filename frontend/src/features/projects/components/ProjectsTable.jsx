@@ -3,6 +3,7 @@ import { ProjectRowActionsMenu } from './ProjectRowActionsMenu'
 import {
   ProjectCostThresholdBadge,
   ProjectInactivityBadge,
+  ProjectStatusBadge,
 } from './ProjectStatusBadge'
 import { ProjectStatusDropdown } from './ProjectStatusDropdown'
 
@@ -10,6 +11,8 @@ export function ProjectsTable({
   projects,
   activeWarningByProjectCode,
   updatingStatusKey,
+  canEditProject = true,
+  canViewProfitability = true,
   onViewDetails,
   onEdit,
   onStatusChange,
@@ -23,9 +26,11 @@ export function ProjectsTable({
             <th scope="col">Project Name</th>
             <th scope="col">Client</th>
             <th scope="col">Site Location</th>
-            <th scope="col" className="projects-table__col-numeric">
-              Contract Value
-            </th>
+            {canViewProfitability ? (
+              <th scope="col" className="projects-table__col-numeric">
+                Contract Value
+              </th>
+            ) : null}
             <th scope="col">Status</th>
             <th scope="col" className="projects-table__col-actions">
               Actions
@@ -47,12 +52,12 @@ export function ProjectsTable({
                 ) || null
               : null
 
-            const isOverrun = Boolean(
-              project.costThresholdState?.exceededCrossed,
-            )
-            const isWarning = Boolean(
-              project.costThresholdState?.warningCrossed,
-            )
+            const isOverrun =
+              canViewProfitability &&
+              Boolean(project.costThresholdState?.exceededCrossed)
+            const isWarning =
+              canViewProfitability &&
+              Boolean(project.costThresholdState?.warningCrossed)
 
             let rowClassName = ''
             if (isOverrun) {
@@ -87,10 +92,12 @@ export function ProjectsTable({
                       <span className="projects-cell-category">
                         {project.category}
                       </span>
-                      <ProjectCostThresholdBadge
-                        costThresholdState={project.costThresholdState}
-                        costPercentage={project.costPercentage}
-                      />
+                      {canViewProfitability ? (
+                        <ProjectCostThresholdBadge
+                          costThresholdState={project.costThresholdState}
+                          costPercentage={project.costPercentage}
+                        />
+                      ) : null}
                       <ProjectInactivityBadge warning={inactivityWarning} />
                     </div>
                   </div>
@@ -126,26 +133,32 @@ export function ProjectsTable({
                   </span>
                 </td>
 
-                <td className="projects-table__col-numeric">
-                  <span className="projects-cell-currency">
-                    {formatCurrency(project.contractValue)}
-                  </span>
-                </td>
+                {canViewProfitability ? (
+                  <td className="projects-table__col-numeric">
+                    <span className="projects-cell-currency">
+                      {formatCurrency(project.contractValue)}
+                    </span>
+                  </td>
+                ) : null}
 
                 <td>
-                  <ProjectStatusDropdown
-                    project={project}
-                    isUpdating={isUpdatingStatus}
-                    onStatusChange={onStatusChange}
-                  />
+                  {canEditProject && typeof onStatusChange === 'function' ? (
+                    <ProjectStatusDropdown
+                      project={project}
+                      isUpdating={isUpdatingStatus}
+                      onStatusChange={onStatusChange}
+                    />
+                  ) : (
+                    <ProjectStatusBadge status={project.status} />
+                  )}
                 </td>
 
                 <td className="projects-table__col-actions">
                   <ProjectRowActionsMenu
                     project={project}
                     onViewDetails={onViewDetails}
-                    onEdit={onEdit}
-                    onStatusChange={onStatusChange}
+                    onEdit={canEditProject ? onEdit : null}
+                    onStatusChange={canEditProject ? onStatusChange : null}
                     showQuickViewButton
                   />
                 </td>

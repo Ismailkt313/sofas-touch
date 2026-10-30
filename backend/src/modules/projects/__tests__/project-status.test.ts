@@ -7,7 +7,6 @@ import { validateUpdateProjectStatusDto } from '../dto/update-status.dto';
 async function testProjectStatus() {
   console.log('--- Testing Project Status DTO & Logic ---');
 
-  // 1. Valid DTOs
   const validInProgress = validateUpdateProjectStatusDto({ status: 'In Progress' });
   assert.strictEqual(validInProgress.isValid, true);
   assert.strictEqual(validInProgress.value?.status, 'In Progress');
@@ -20,7 +19,6 @@ async function testProjectStatus() {
   assert.strictEqual(validCompleted.isValid, true);
   assert.strictEqual(validCompleted.value?.status, 'Completed');
 
-  // 2. Invalid DTOs
   const emptyStatus = validateUpdateProjectStatusDto({});
   assert.strictEqual(emptyStatus.isValid, false);
   assert.ok(emptyStatus.errors?.status);
@@ -40,11 +38,11 @@ async function testProjectStatus() {
   console.log('✓ Project Status DTO validation tests passed successfully.');
 
   console.log('--- Testing HTTP PATCH /api/projects/:id/status ---');
-  const userId = 'usr_status_test_de';
-  sharedUserMemoryStore.set(userId, {
-    _id: userId as any,
-    name: 'Status Tester',
-    email: 'status.tester@softtouchsofas.com',
+  const defaultOperatorId = 'usr_status_test_de_default';
+  sharedUserMemoryStore.set(defaultOperatorId, {
+    _id: defaultOperatorId as any,
+    name: 'Default Operator',
+    email: 'default.operator@softtouchsofas.com',
     role: 'data_entry',
     isActive: true,
     approvalStatus: 'approved',
@@ -52,11 +50,35 @@ async function testProjectStatus() {
     updatedAt: new Date(),
   } as any);
 
-  const dataEntryToken = generateToken({
-    id: userId,
-    email: 'status.tester@softtouchsofas.com',
+  const authorizedEditorId = 'usr_status_test_de_editor';
+  sharedUserMemoryStore.set(authorizedEditorId, {
+    _id: authorizedEditorId as any,
+    name: 'Status Editor',
+    email: 'status.editor@softtouchsofas.com',
     role: 'data_entry',
-    name: 'Status Tester',
+    isActive: true,
+    approvalStatus: 'approved',
+    permissionOverrides: {
+      grant: ['projects.create', 'projects.edit'],
+      revoke: [],
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as any);
+
+  const defaultDataEntryToken = generateToken({
+    id: defaultOperatorId,
+    email: 'default.operator@softtouchsofas.com',
+    role: 'data_entry',
+    name: 'Default Operator',
+    approvalStatus: 'approved',
+  });
+
+  const authorizedEditorToken = generateToken({
+    id: authorizedEditorId,
+    email: 'status.editor@softtouchsofas.com',
+    role: 'data_entry',
+    name: 'Status Editor',
     approvalStatus: 'approved',
   });
 
@@ -65,7 +87,6 @@ async function testProjectStatus() {
   const baseUrl = `http://127.0.0.1:${address.port}/api/projects`;
 
   try {
-    // 1. Unauthenticated request
     const unauthRes = await fetch(`${baseUrl}/PRJ-9999/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -73,23 +94,21 @@ async function testProjectStatus() {
     });
     assert.strictEqual(unauthRes.status, 401);
 
-    // 2. Invalid status value
-    const invalidStatusRes = await fetch(`${baseUrl}/PRJ-9999/status`, {
+    const forbiddenDefaultRes = await fetch(`${baseUrl}/PRJ-9999/status`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${dataEntryToken}`,
+        Authorization: `Bearer ${defaultDataEntryToken}`,
       },
-      body: JSON.stringify({ status: 'NotAStatus' }),
+      body: JSON.stringify({ status: 'Completed' }),
     });
-    assert.strictEqual(invalidStatusRes.status, 400);
+    assert.strictEqual(forbiddenDefaultRes.status, 403);
 
-    // 3. Create a test project to test status patching
-    const createRes = await fetch(baseUrl, {
+    const forbiddenContractValueRes = await fetch(baseUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${dataEntryToken}`,
+        Authorization: `Bearer ${authorizedEditorToken}`,
       },
       body: JSON.stringify({
         name: 'Status Test Sectional',
@@ -99,17 +118,41 @@ async function testProjectStatus() {
         status: 'In Progress',
       }),
     });
+    assert.strictEqual(forbiddenContractValueRes.status, 403);
+
+    const createRes = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authorizedEditorToken}`,
+      },
+      body: JSON.stringify({
+        name: 'Status Test Sectional',
+        clientName: 'Status Test Client',
+        category: 'Modular Sofa',
+        status: 'In Progress',
+      }),
+    });
     assert.strictEqual(createRes.status, 201);
     const createdProject = ((await createRes.json()) as any).project;
     const testProjectId = createdProject.projectId;
     assert.strictEqual(createdProject.status, 'In Progress');
 
-    // 4. Update status to 'Under Review'
+    const invalidStatusRes = await fetch(`${baseUrl}/${testProjectId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authorizedEditorToken}`,
+      },
+      body: JSON.stringify({ status: 'NotAStatus' }),
+    });
+    assert.strictEqual(invalidStatusRes.status, 400);
+
     const patchUnderReviewRes = await fetch(`${baseUrl}/${testProjectId}/status`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${dataEntryToken}`,
+        Authorization: `Bearer ${authorizedEditorToken}`,
       },
       body: JSON.stringify({ status: 'Under Review' }),
     });
@@ -118,12 +161,11 @@ async function testProjectStatus() {
     assert.strictEqual(underReviewJson.project.status, 'Under Review');
     assert.ok(underReviewJson.message.includes('successfully'));
 
-    // 5. Update status to 'Completed'
     const patchCompletedRes = await fetch(`${baseUrl}/${testProjectId}/status`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${dataEntryToken}`,
+        Authorization: `Bearer ${authorizedEditorToken}`,
       },
       body: JSON.stringify({ status: 'Completed' }),
     });
@@ -131,12 +173,11 @@ async function testProjectStatus() {
     const completedJson = (await patchCompletedRes.json()) as any;
     assert.strictEqual(completedJson.project.status, 'Completed');
 
-    // 6. Test 404 for non-existent project
     const notFoundRes = await fetch(`${baseUrl}/PRJ-NONEXISTENT-99999/status`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${dataEntryToken}`,
+        Authorization: `Bearer ${authorizedEditorToken}`,
       },
       body: JSON.stringify({ status: 'Completed' }),
     });

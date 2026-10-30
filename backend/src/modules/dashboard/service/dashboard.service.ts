@@ -1,4 +1,5 @@
 import { env } from '../../../config/env';
+import { isProjectAccessibleToCaller } from '../../permissions/constants/permissions.constants';
 import {
   calculateProjectFinancialMetrics,
   roundFinancialAmount,
@@ -9,6 +10,7 @@ import {
   ReportsRepository,
   reportsRepository,
 } from '../../reports';
+import { appSettingsRepository } from '../../settings';
 import { IUserService, userService } from '../../users';
 import { DashboardRepository } from '../repository/dashboard.repository';
 import {
@@ -16,10 +18,12 @@ import {
   DashboardKpiSummaryDto,
   DashboardMonthlyExpensesDto,
   DashboardMonthlyExpensesQueryDto,
+  DashboardOperationalQuickActionDto,
   DashboardOverviewQueryDto,
   DashboardOverviewResponseDto,
   DashboardPendingApprovalsDto,
   DashboardProjectPerformanceRowDto,
+  DashboardValidationAlertDto,
   MonthlyExpenseBucketDto,
 } from '../types';
 
@@ -94,6 +98,68 @@ function resolveDefaultMonthlyBounds(monthsCount: number): {
   };
 }
 
+function buildQuickActions(
+  perms: Set<string>,
+): DashboardOperationalQuickActionDto[] {
+  const actions: DashboardOperationalQuickActionDto[] = [];
+  if (perms.has('purchases.create')) {
+    actions.push({
+      id: 'record-purchase',
+      label: 'Record Purchase Voucher',
+      description: 'Log supplier material bills and update stock on hand.',
+      path: '/purchases/new',
+      permission: 'purchases.create',
+    });
+  }
+  if (perms.has('expenses.create')) {
+    actions.push({
+      id: 'record-expense',
+      label: 'Record Expense',
+      description: 'Enter transport, labour, or workshop project expenses.',
+      path: '/expenses',
+      permission: 'expenses.create',
+    });
+  }
+  if (perms.has('projects.create')) {
+    actions.push({
+      id: 'create-project',
+      label: 'Create Project',
+      description: 'Open a new client upholstery or interior order.',
+      path: '/projects',
+      permission: 'projects.create',
+    });
+  } else if (perms.has('projects.view')) {
+    actions.push({
+      id: 'view-projects',
+      label: 'Browse Active Projects',
+      description: 'Look up client codes and active workshop statuses.',
+      path: '/projects',
+      permission: 'projects.view',
+    });
+  }
+  if (perms.has('materials.view')) {
+    actions.push({
+      id: 'lookup-materials',
+      label: 'Raw Materials Lookup',
+      description: 'Check current stock quantities and material units.',
+      path: '/raw-materials',
+      permission: 'materials.view',
+    });
+  }
+  if (perms.has('activity.viewOwn') || perms.has('activity.viewAll')) {
+    actions.push({
+      id: 'view-activity',
+      label: 'My Activity Log',
+      description: 'Review your recently submitted vouchers and updates.',
+      path: '/activity',
+      permission: perms.has('activity.viewAll')
+        ? 'activity.viewAll'
+        : 'activity.viewOwn',
+    });
+  }
+  return actions;
+}
+
 export class DashboardService {
   constructor(
     private readonly repository: DashboardRepository = new DashboardRepository(),
@@ -165,10 +231,11 @@ export class DashboardService {
     };
   }
 
-  private async fetchPendingApprovalsForAdmin(
-    caller: DashboardCallerIdentity,
+  private async fetchPendingApprovalsForCaller(
+    perms: Set<string>,
+    isAdmin: boolean,
   ): Promise<DashboardPendingApprovalsDto | null> {
-    if (caller.role !== 'admin') {
+    if (!isAdmin && !perms.has('users.approve')) {
       return null;
     }
 
@@ -192,6 +259,167 @@ export class DashboardService {
     query: DashboardOverviewQueryDto,
     caller: DashboardCallerIdentity,
   ): Promise<DashboardOverviewResponseDto> {
+    const isAdmin = caller.role === 'admin';
+    const perms = new Set(caller.permissions || []);
+    const canViewProfitability =
+      isAdmin || perms.has('reports.viewProfitability');
+    const canViewProjects = isAdmin || perms.has('projects.view');
+    const canViewPurchases = isAdmin || perms.has('purchases.view');
+    const canViewExpenses = isAdmin || perms.has('expenses.view');
+    const canViewMaterials = isAdmin || perms.has('materials.view');
+    const canViewReports =
+      isAdmin || (perms.has('reports.view') && canViewProfitability);
+    const assignedProjectIds = isAdmin ? null : caller.assignedProjectIds;
+
+    if (!canViewProfitability) {
+      const [candidateProjects, recentTransactions, stockAlerts, settings] =
+        await Promise.all([
+          canViewProjects
+            ? this.reportsRepo.findCandidateProjects({ status: 'all' })
+            : Promise.resolve([]),
+          this.repository.findRecentTransactions(query.recentLimit, {
+            includePurchases: canViewPurchases,
+            includeExpenses: canViewExpenses,
+            assignedProjectIds,
+          }),
+          canViewMaterials
+            ? this.repository.findStockAlerts()
+            : Promise.resolve(null),
+          appSettingsRepository.getSettings(),
+        ]);
+
+      const accessibleProjects = candidateProjects.filter((p) =>
+        isProjectAccessibleToCaller(
+          assignedProjectIds,
+          String(p._id || ''),
+          p.projectId,
+        ),
+      );
+
+      let inProgress = 0;
+      let underReview = 0;
+      let completed = 0;
+      for (const p of accessibleProjects) {
+        if (p.status === 'In Progress') inProgress += 1;
+        else if (p.status === 'Under Review') underReview += 1;
+        else if (p.status === 'Completed') completed += 1;
+      }
+
+      let filteredProjects = accessibleProjects;
+      if (query.projectStatus !== 'all') {
+        filteredProjects = filteredProjects.filter(
+          (p) => p.status === query.projectStatus,
+        );
+      }
+      if (query.projectSearch) {
+        const q = query.projectSearch.toLowerCase();
+        filteredProjects = filteredProjects.filter(
+          (p) =>
+            p.projectId.toLowerCase().includes(q) ||
+            p.name.toLowerCase().includes(q) ||
+            p.clientName.toLowerCase().includes(q),
+        );
+      }
+
+      const operationalProjectItems = filteredProjects
+        .slice(0, 12)
+        .map((p) => ({
+          id: String(p._id || ''),
+          projectId: p.projectId,
+          name: p.name,
+          clientName: p.clientName,
+          category: p.category,
+          status: p.status,
+          detailPath: `/projects/${encodeURIComponent(p.projectId)}`,
+        }));
+
+      const missingPurchaseDocs = recentTransactions.filter(
+        (t) =>
+          t.type === 'purchase' &&
+          t.status === 'active' &&
+          t.hasAttachment === false,
+      );
+      const missingExpenseDocs = recentTransactions.filter(
+        (t) =>
+          t.type === 'expense' &&
+          t.status === 'active' &&
+          t.hasAttachment === false,
+      );
+
+      const validationAlerts: DashboardValidationAlertDto[] = [];
+      if (missingPurchaseDocs.length > 0 && canViewPurchases) {
+        validationAlerts.push({
+          id: 'missing-purchase-bills',
+          severity: 'warning',
+          title: `${missingPurchaseDocs.length} recent purchase voucher${
+            missingPurchaseDocs.length === 1 ? ' is' : 's are'
+          } missing supplier bill attachments`,
+          description:
+            'Upload scanned supplier invoices so material purchases remain ready for verification.',
+          actionLabel: 'Review Purchases',
+          actionPath: missingPurchaseDocs[0]?.detailPath || '/purchases',
+        });
+      }
+      if (missingExpenseDocs.length > 0 && canViewExpenses) {
+        validationAlerts.push({
+          id: 'missing-expense-receipts',
+          severity: 'info',
+          title: `${missingExpenseDocs.length} recent expense entr${
+            missingExpenseDocs.length === 1 ? 'y has' : 'ies have'
+          } no receipt attached`,
+          description:
+            'Attach supporting receipts whenever a printed bill or slip is available.',
+          actionLabel: 'View Expenses',
+          actionPath: '/expenses',
+        });
+      }
+      if (
+        canViewProjects &&
+        accessibleProjects.length === 0 &&
+        (perms.has('purchases.create') || perms.has('expenses.create'))
+      ) {
+        validationAlerts.push({
+          id: 'no-active-projects',
+          severity: 'warning',
+          title: 'No accessible projects are currently open',
+          description:
+            'Purchase and expense vouchers require an active project code. Contact an Administrator if a project needs to be assigned.',
+          actionLabel: null,
+          actionPath: null,
+        });
+      }
+
+      const myRecentCount = recentTransactions.filter(
+        (t) => t.createdByUserId && t.createdByUserId === caller.id,
+      ).length;
+
+      return {
+        generatedAt: new Date().toISOString(),
+        mode: 'operational',
+        kpis: null,
+        projectPerformance: null,
+        monthlyExpenses: null,
+        recentTransactions,
+        stockAlerts,
+        pendingApprovals: null,
+        operational: {
+          guidanceNote: settings.operatorGuidanceBanner,
+          quickActions: buildQuickActions(perms),
+          projectSummary: canViewProjects
+            ? {
+                totalAccessible: accessibleProjects.length,
+                inProgress,
+                underReview,
+                completed,
+                items: operationalProjectItems,
+              }
+            : null,
+          myRecentCount,
+          validationAlerts,
+        },
+      };
+    }
+
     const allProjectsPromise = this.reportsRepo.findCandidateProjects({
       status: 'all',
     });
@@ -206,11 +434,28 @@ export class DashboardService {
 
     const recentPromise = this.repository.findRecentTransactions(
       query.recentLimit,
+      {
+        includePurchases: canViewPurchases,
+        includeExpenses: canViewExpenses,
+        assignedProjectIds,
+      },
     );
-    const stockAlertsPromise = this.repository.findStockAlerts();
-    const pendingApprovalsPromise = this.fetchPendingApprovalsForAdmin(caller);
+    const stockAlertsPromise = canViewMaterials
+      ? this.repository.findStockAlerts()
+      : Promise.resolve(null);
+    const pendingApprovalsPromise = this.fetchPendingApprovalsForCaller(
+      perms,
+      isAdmin,
+    );
 
-    const allProjects = await allProjectsPromise;
+    const candidateProjects = await allProjectsPromise;
+    const allProjects = candidateProjects.filter((p) =>
+      isProjectAccessibleToCaller(
+        assignedProjectIds,
+        String(p._id || ''),
+        p.projectId,
+      ),
+    );
     const totalsMap = await this.reportsRepo.aggregateTotalsForProjects(
       allProjects,
       {},
@@ -282,10 +527,11 @@ export class DashboardService {
 
       const marginApplicable = metrics.contractValue > 0;
       const encodedCode = encodeURIComponent(proj.projectId);
-      const detailPath =
-        caller.role === 'admin'
-          ? `/projects/${encodedCode}/report`
-          : `/projects/${encodedCode}`;
+      const detailPath = canViewReports
+        ? `/projects/${encodedCode}/report`
+        : canViewProjects
+          ? `/projects/${encodedCode}`
+          : '/dashboard';
 
       allPerformanceRows.push({
         id: recId,
@@ -394,6 +640,7 @@ export class DashboardService {
 
     return {
       generatedAt: new Date().toISOString(),
+      mode: 'executive',
       kpis,
       projectPerformance: {
         totalMatching: filteredRows.length,
@@ -403,6 +650,7 @@ export class DashboardService {
       recentTransactions,
       stockAlerts,
       pendingApprovals,
+      operational: null,
     };
   }
 }

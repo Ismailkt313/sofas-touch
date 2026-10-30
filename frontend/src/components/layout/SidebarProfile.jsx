@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 
 function formatRoleLabel(role) {
   if (!role || typeof role !== 'string') {
-    return 'Admin'
+    return 'Signed In'
   }
   const normalized = role.trim().toLowerCase().replace(/\s+/g, '_')
   if (normalized === 'admin') {
-    return 'Admin'
+    return 'Administrator'
   }
   if (normalized === 'data_entry') {
-    return 'Data Entry'
+    return 'Data Entry Operator'
   }
   return role
 }
@@ -41,11 +41,11 @@ export function SidebarProfile({
 
   const hasAuthenticatedUser = Boolean(currentUser && (currentUser.email || currentUser.name))
   const displayName = hasAuthenticatedUser
-    ? currentUser.name || 'Authenticated User'
-    : 'Admin Account'
+    ? currentUser.name || 'Workspace User'
+    : 'Loading Account...'
   const displayRole = hasAuthenticatedUser
     ? formatRoleLabel(currentUser.role)
-    : 'Admin'
+    : 'Verifying access'
   const imageUrl =
     hasAuthenticatedUser && typeof currentUser.image === 'string'
       ? currentUser.image.trim()
@@ -105,6 +105,10 @@ export function SidebarProfile({
   const handleOpenProfile = () => {
     setMenuOpen(false)
     onCloseMobileDrawer?.()
+    if (typeof onNavigate === 'function') {
+      onNavigate('/profile')
+      return
+    }
     setProfileModalOpen(true)
   }
 

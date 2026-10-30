@@ -14,6 +14,10 @@ function extractCaller(req: AuthenticatedRequest): ReportCallerIdentity {
     email: String(req.user?.email || ''),
     name: String(req.user?.name || req.user?.email || ''),
     role: req.user?.role === 'admin' ? 'admin' : 'data_entry',
+    permissions: Array.isArray(req.user?.permissions)
+      ? req.user!.permissions!
+      : [],
+    assignedProjectIds: req.user?.assignedProjectIds ?? null,
   };
 }
 

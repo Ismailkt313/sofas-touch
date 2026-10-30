@@ -927,7 +927,7 @@ async function runTests(): Promise<void> {
       baseUrl,
       'GET',
       `/api/projects/${projectARecordId}`,
-      { token: operatorToken },
+      { token: adminToken },
     );
     const projAPurchasesBefore = Number(
       (projABeforeMixed.body.project as Record<string, unknown>).totalPurchases,
@@ -1027,11 +1027,23 @@ async function runTests(): Promise<void> {
     assert.strictEqual(curtainMovement?.quantityDelta, 15);
     assert.strictEqual(curtainMovement?.resultingQuantityOnHand, 15);
 
-    const projAAfterMixed = await jsonReq(
+    const projAAfterMixedOperator = await jsonReq(
       baseUrl,
       'GET',
       `/api/projects/${projectARecordId}`,
       { token: operatorToken },
+    );
+    assert.strictEqual(
+      (projAAfterMixedOperator.body.project as Record<string, unknown>)
+        .contractValue,
+      null,
+    );
+
+    const projAAfterMixed = await jsonReq(
+      baseUrl,
+      'GET',
+      `/api/projects/${projectARecordId}`,
+      { token: adminToken },
     );
     assert.strictEqual(
       Number(

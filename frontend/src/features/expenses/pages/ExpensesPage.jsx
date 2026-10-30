@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import { fetchProjects } from '../../projects'
 import { CancelExpenseModal } from '../components/CancelExpenseModal'
 import { ExpenseCategoriesModal } from '../components/ExpenseCategoriesModal'
@@ -17,7 +18,6 @@ import {
   fetchExpenseCategories,
   fetchExpenses,
   hasActiveAuthToken,
-  isAdminUser,
   updateExpense,
   updateExpenseCategory,
 } from '../services/expenseService'
@@ -26,7 +26,10 @@ import '../styles/expenses.css'
 const PAGE_LIMIT = 10
 
 export function ExpensesPage({ currentUser, onNavigate }) {
-  const adminAccess = isAdminUser(currentUser)
+  const canCreateExpense = hasPermission(currentUser, 'expenses.create')
+  const canEditExpense = hasPermission(currentUser, 'expenses.edit')
+  const canDeleteExpense = hasPermission(currentUser, 'expenses.delete')
+  const canViewProjects = hasPermission(currentUser, 'projects.view')
   const [authRequired, setAuthRequired] = useState(() => !hasActiveAuthToken())
 
   const [expenses, setExpenses] = useState([])
@@ -95,8 +98,10 @@ export function ExpensesPage({ currentUser, onNavigate }) {
     let cancelled = false
 
     Promise.all([
-      fetchExpenseCategories({ includeInactive: adminAccess }),
-      fetchProjects({ page: 1, limit: 100 }).catch(() => ({ projects: [] })),
+      fetchExpenseCategories({ includeInactive: canEditExpense }),
+      canViewProjects
+        ? fetchProjects({ page: 1, limit: 100 }).catch(() => ({ projects: [] }))
+        : Promise.resolve({ projects: [] }),
     ])
       .then(([cats, projResult]) => {
         if (cancelled) return
@@ -110,7 +115,7 @@ export function ExpensesPage({ currentUser, onNavigate }) {
     return () => {
       cancelled = true
     }
-  }, [adminAccess])
+  }, [canEditExpense, canViewProjects])
 
   useEffect(() => {
     return loadReferenceData()
@@ -330,7 +335,7 @@ export function ExpensesPage({ currentUser, onNavigate }) {
 
       if (payload.newCategoryName) {
         const refreshedCats = await fetchExpenseCategories({
-          includeInactive: adminAccess,
+          includeInactive: canEditExpense,
         }).catch(() => null)
         if (refreshedCats) {
           setCategories(refreshedCats)
@@ -355,7 +360,7 @@ export function ExpensesPage({ currentUser, onNavigate }) {
   const handleCreateCategoryFromManager = async (payload) => {
     const created = await createExpenseCategory(payload)
     const refreshed = await fetchExpenseCategories({
-      includeInactive: adminAccess,
+      includeInactive: canEditExpense,
     })
     setCategories(refreshed)
     setToastMessage(`Category '${created.name}' added.`)
@@ -365,7 +370,7 @@ export function ExpensesPage({ currentUser, onNavigate }) {
   const handleUpdateCategoryFromManager = async (categoryId, payload) => {
     const updated = await updateExpenseCategory(categoryId, payload)
     const refreshed = await fetchExpenseCategories({
-      includeInactive: adminAccess,
+      includeInactive: canEditExpense,
     })
     setCategories(refreshed)
     if (payload.name) {
@@ -456,7 +461,7 @@ export function ExpensesPage({ currentUser, onNavigate }) {
         </div>
 
         <div className="exp-header__actions">
-          {adminAccess ? (
+          {canEditExpense ? (
             <button
               type="button"
               className="exp-btn exp-btn--secondary"
@@ -474,21 +479,23 @@ export function ExpensesPage({ currentUser, onNavigate }) {
             </button>
           ) : null}
 
-          <button
-            type="button"
-            className="exp-btn exp-btn--primary"
-            onClick={handleOpenCreateModal}
-          >
-            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path
-                d="M10 4.25v11.5M4.25 10h11.5"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-            </svg>
-            Record Expense
-          </button>
+          {canCreateExpense ? (
+            <button
+              type="button"
+              className="exp-btn exp-btn--primary"
+              onClick={handleOpenCreateModal}
+            >
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path
+                  d="M10 4.25v11.5M4.25 10h11.5"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+              </svg>
+              Record Expense
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -588,20 +595,24 @@ export function ExpensesPage({ currentUser, onNavigate }) {
                   Reset Filters
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="exp-btn exp-btn--primary"
-                onClick={handleOpenCreateModal}
-              >
-                Record Expense
-              </button>
+              {canCreateExpense ? (
+                <button
+                  type="button"
+                  className="exp-btn exp-btn--primary"
+                  onClick={handleOpenCreateModal}
+                >
+                  Record Expense
+                </button>
+              ) : null}
             </div>
           </div>
         ) : (
           <>
             <ExpensesTable
               expenses={expenses}
-              isAdmin={adminAccess}
+              isAdmin={canEditExpense}
+              canEdit={canEditExpense}
+              canCancel={canDeleteExpense}
               onViewExpense={handleOpenViewModal}
               onEditExpense={handleOpenEditModal}
               onCancelExpense={(exp) => {
@@ -614,7 +625,9 @@ export function ExpensesPage({ currentUser, onNavigate }) {
 
             <ExpensesMobileList
               expenses={expenses}
-              isAdmin={adminAccess}
+              isAdmin={canEditExpense}
+              canEdit={canEditExpense}
+              canCancel={canDeleteExpense}
               onViewExpense={handleOpenViewModal}
               onEditExpense={handleOpenEditModal}
               onCancelExpense={(exp) => {
@@ -646,7 +659,7 @@ export function ExpensesPage({ currentUser, onNavigate }) {
           expense={formModalState.expense}
           categories={categories}
           projects={projects}
-          isAdmin={adminAccess}
+          isAdmin={canEditExpense}
           isSubmitting={isSavingExpense}
           serverError={formServerError}
           onSave={handleSaveExpense}
@@ -670,7 +683,7 @@ export function ExpensesPage({ currentUser, onNavigate }) {
         />
       ) : null}
 
-      {isCategoriesModalOpen && adminAccess ? (
+      {isCategoriesModalOpen && canEditExpense ? (
         <ExpenseCategoriesModal
           categories={categories}
           onCreateCategory={handleCreateCategoryFromManager}

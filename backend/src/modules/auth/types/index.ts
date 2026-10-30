@@ -8,6 +8,11 @@ export interface IAuthController {
   login(req: Request, res: Response, next: NextFunction): Promise<void>;
   signup(req: Request, res: Response, next: NextFunction): Promise<void>;
   me(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
+  updateProfile?(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void>;
 }
 
 export interface IAuthService {

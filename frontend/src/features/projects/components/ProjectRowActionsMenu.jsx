@@ -210,25 +210,27 @@ export function ProjectRowActionsMenu({
                 </button>
               ) : null}
 
-              <button
-                type="button"
-                className="project-portal-menu__item"
-                role="menuitem"
-                onClick={() => {
-                  setIsOpen(false)
-                  onEdit(project)
-                }}
-              >
-                <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                  <path
-                    d="M12.65 3.1L14.9 5.35L6.1 14.15H3.85V11.9L12.65 3.1Z"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span>Edit Project</span>
-              </button>
+              {typeof onEdit === 'function' ? (
+                <button
+                  type="button"
+                  className="project-portal-menu__item"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsOpen(false)
+                    onEdit(project)
+                  }}
+                >
+                  <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                    <path
+                      d="M12.65 3.1L14.9 5.35L6.1 14.15H3.85V11.9L12.65 3.1Z"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <span>Edit Project</span>
+                </button>
+              ) : null}
 
               {typeof onStatusChange === 'function' ? (
                 <>

@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import {
-  requireAdmin,
-  requireDataEntryOrAdmin,
+  requirePermission,
   verifyToken,
 } from '../../middleware/auth';
 import { projectRepository, projectService } from '../projects';
@@ -50,43 +49,63 @@ expenseRouter.use(verifyToken);
 
 expenseRouter.get(
   '/categories',
-  requireDataEntryOrAdmin,
+  requirePermission('expenses.view'),
   expenseController.listCategories,
 );
-expenseRouter.post('/categories', requireAdmin, expenseController.createCategory);
+expenseRouter.post(
+  '/categories',
+  requirePermission('expenses.edit'),
+  expenseController.createCategory,
+);
 expenseRouter.patch(
   '/categories/:categoryId',
-  requireAdmin,
+  requirePermission('expenses.edit'),
   expenseController.updateCategory,
 );
 
-expenseRouter.get('/', requireDataEntryOrAdmin, expenseController.list);
+expenseRouter.get(
+  '/',
+  requirePermission('expenses.view'),
+  expenseController.list,
+);
 expenseRouter.post(
   '/',
-  requireDataEntryOrAdmin,
+  requirePermission('expenses.create'),
   parseExpenseReceiptsMiddleware,
   expenseController.create,
 );
 expenseRouter.get(
   '/:id/attachments/:attachmentId',
-  requireDataEntryOrAdmin,
+  requirePermission('expenses.view'),
   expenseController.streamAttachment,
 );
-expenseRouter.get('/:id', requireDataEntryOrAdmin, expenseController.getById);
+expenseRouter.get(
+  '/:id',
+  requirePermission('expenses.view'),
+  expenseController.getById,
+);
 expenseRouter.patch(
   '/:id',
-  requireAdmin,
+  requirePermission('expenses.edit'),
   parseExpenseReceiptsMiddleware,
   expenseController.update,
 );
 expenseRouter.put(
   '/:id',
-  requireAdmin,
+  requirePermission('expenses.edit'),
   parseExpenseReceiptsMiddleware,
   expenseController.update,
 );
-expenseRouter.post('/:id/cancel', requireAdmin, expenseController.cancel);
-expenseRouter.delete('/:id', requireAdmin, expenseController.cancel);
+expenseRouter.post(
+  '/:id/cancel',
+  requirePermission('expenses.delete'),
+  expenseController.cancel,
+);
+expenseRouter.delete(
+  '/:id',
+  requirePermission('expenses.delete'),
+  expenseController.cancel,
+);
 
 export {
   ExpenseController,

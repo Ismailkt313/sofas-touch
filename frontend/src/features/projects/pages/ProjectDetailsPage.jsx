@@ -24,7 +24,8 @@ export function ProjectDetailsPage({
     financialSummary,
     summaryUnavailableMessage,
     automationFeed,
-    adminAccess,
+    canEditProject,
+    canViewProfitability,
 
     isLoading,
     isRefreshing,
@@ -262,16 +263,22 @@ export function ProjectDetailsPage({
             <span className="project-code-pill project-code-pill--lg">
               {project.projectId}
             </span>
-            <ProjectStatusDropdown
-              project={project}
-              isUpdating={isUpdatingStatus}
-              onStatusChange={handleStatusSubmit}
-            />
+            {canEditProject ? (
+              <ProjectStatusDropdown
+                project={project}
+                isUpdating={isUpdatingStatus}
+                onStatusChange={handleStatusSubmit}
+              />
+            ) : (
+              <ProjectStatusBadge status={project.status} />
+            )}
             <span className="project-category-pill">{project.category}</span>
-            <ProjectCostThresholdBadge
-              costThresholdState={authoritativeThresholdState}
-              costPercentage={financialSummary?.costPercentage}
-            />
+            {canViewProfitability ? (
+              <ProjectCostThresholdBadge
+                costThresholdState={authoritativeThresholdState}
+                costPercentage={financialSummary?.costPercentage}
+              />
+            ) : null}
           </div>
 
           <h1 className="project-detail-header__title">{project.name}</h1>
@@ -287,7 +294,7 @@ export function ProjectDetailsPage({
         </div>
 
         <div className="project-detail-header__actions">
-          {adminAccess ? (
+          {canViewProfitability ? (
             <button
               type="button"
               className="admin-btn admin-btn--secondary"
@@ -298,13 +305,15 @@ export function ProjectDetailsPage({
             </button>
           ) : null}
 
-          <button
-            type="button"
-            className="admin-btn admin-btn--primary"
-            onClick={openEditModal}
-          >
-            Edit Project
-          </button>
+          {canEditProject ? (
+            <button
+              type="button"
+              className="admin-btn admin-btn--primary"
+              onClick={openEditModal}
+            >
+              Edit Project
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -332,7 +341,7 @@ export function ProjectDetailsPage({
         </div>
       ) : null}
 
-      {isCriticalOverrun ? (
+      {canViewProfitability && isCriticalOverrun ? (
         <div
           className="project-detail-banner project-detail-banner--critical"
           role="alert"
@@ -354,7 +363,7 @@ export function ProjectDetailsPage({
             ). Review purchases and expenses immediately.
           </p>
         </div>
-      ) : isWarningThreshold ? (
+      ) : canViewProfitability && isWarningThreshold ? (
         <div
           className="project-detail-banner project-detail-banner--warning"
           role="status"
@@ -393,10 +402,11 @@ export function ProjectDetailsPage({
         </div>
       ))}
 
-      <section
-        className="projects-surface project-detail-section"
-        aria-labelledby="project-financial-heading"
-      >
+      {canViewProfitability ? (
+        <section
+          className="projects-surface project-detail-section"
+          aria-labelledby="project-financial-heading"
+        >
         <div className="project-section-header">
           <div>
             <div className="project-section-header__title-row">
@@ -613,6 +623,7 @@ export function ProjectDetailsPage({
           </>
         )}
       </section>
+      ) : null}
 
       <div className="project-detail-columns">
         <section

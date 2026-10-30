@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { AdminLayout } from './components/layout/AdminLayout'
 import { AdminPlaceholderPage } from './components/layout/AdminPlaceholderPage'
-import { findNavItemByPath, isNavItemActive } from './components/layout/navigationConfig'
+import {
+  findNavItemByPath,
+  isNavItemActive,
+} from './components/layout/navigationConfig'
 import { ActivityHistoryPage } from './features/activity'
 import { ApprovalsProvider, UserApprovalsPage } from './features/approvals'
 import {
@@ -12,8 +15,15 @@ import {
   getStoredSession,
 } from './features/auth'
 import { DashboardPage } from './features/dashboard'
-import { ProjectDetailsPage, ProjectsPage } from './features/projects'
 import { ExpensesPage } from './features/expenses'
+import {
+  PermissionsProvider,
+  ProtectedRouteGuard,
+  RolesPermissionsPage,
+  hasPermission,
+  resolveFirstPermittedPath,
+} from './features/permissions'
+import { ProjectDetailsPage, ProjectsPage } from './features/projects'
 import {
   PurchaseDetailsPage,
   PurchaseVoucherFormPage,
@@ -21,6 +31,7 @@ import {
 } from './features/purchases'
 import { RawMaterialsPage } from './features/raw-materials'
 import { ProjectReportPage, ReportsPage } from './features/reports'
+import { ProfilePage, SettingsPage } from './features/settings'
 import { UserManagementPage } from './features/users'
 
 const ROUTE_CHANGE_EVENT = 'sts:routechange'
@@ -42,6 +53,17 @@ function getServerPathnameSnapshot() {
   return '/'
 }
 
+function WorkspaceProviders({ currentUser, children }) {
+  if (hasPermission(currentUser, 'users.approve')) {
+    return (
+      <ApprovalsProvider currentUser={currentUser}>
+        {children}
+      </ApprovalsProvider>
+    )
+  }
+  return children
+}
+
 function App() {
   const pathname = useSyncExternalStore(
     subscribeToPathname,
@@ -52,6 +74,9 @@ function App() {
   const [currentUser, setCurrentUser] = useState(
     () => getStoredSession()?.user || null,
   )
+  const [isCheckingSession, setIsCheckingSession] = useState(() =>
+    Boolean(getStoredSession()?.token),
+  )
 
   const navigate = useCallback((nextPath) => {
     const currentFull = `${window.location.pathname}${window.location.search}`
@@ -59,6 +84,39 @@ function App() {
       window.history.pushState({}, '', nextPath)
       window.dispatchEvent(new Event(ROUTE_CHANGE_EVENT))
       window.scrollTo({ top: 0, behavior: 'auto' })
+    }
+  }, [])
+
+  const refreshCurrentSession = useCallback(async () => {
+    const stored = getStoredSession()
+    if (!stored?.token) {
+      setCurrentUser(null)
+      setIsCheckingSession(false)
+      return null
+    }
+
+    try {
+      const verifiedUser = await fetchCurrentUser()
+      if (verifiedUser) {
+        setCurrentUser(verifiedUser)
+        return verifiedUser
+      }
+      return null
+    } catch (error) {
+      const status = error?.response?.status
+      const code = error?.response?.data?.code
+      if (
+        status === 401 ||
+        code === 'ACCOUNT_INACTIVE' ||
+        code === 'PENDING_APPROVAL' ||
+        code === 'ACCOUNT_REJECTED'
+      ) {
+        clearStoredSession()
+        setCurrentUser(null)
+      }
+      return null
+    } finally {
+      setIsCheckingSession(false)
     }
   }, [])
 
@@ -76,9 +134,23 @@ function App() {
         }
       })
       .catch((error) => {
-        if (!cancelled && error?.response?.status === 401) {
-          clearStoredSession()
-          setCurrentUser(null)
+        if (!cancelled) {
+          const status = error?.response?.status
+          const code = error?.response?.data?.code
+          if (
+            status === 401 ||
+            code === 'ACCOUNT_INACTIVE' ||
+            code === 'PENDING_APPROVAL' ||
+            code === 'ACCOUNT_REJECTED'
+          ) {
+            clearStoredSession()
+            setCurrentUser(null)
+          }
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsCheckingSession(false)
         }
       })
 
@@ -87,13 +159,19 @@ function App() {
     }
   }, [])
 
-  const matchedAdminNav = findNavItemByPath(pathname)
+  const isLoginRoute = pathname === '/login'
+  const isSignupRoute = pathname === '/signup' || pathname === '/register'
+  const hasSession = Boolean(currentUser || isCheckingSession)
+
+  const matchedAdminNav = findNavItemByPath(pathname, currentUser)
   const isDashboardRoute =
-    isNavItemActive(pathname, '/dashboard') ||
-    (pathname === '/' && Boolean(currentUser))
+    pathname === '/dashboard' || (pathname === '/' && hasSession)
   const isActivityRoute = isNavItemActive(pathname, '/activity')
   const isUsersRoute = isNavItemActive(pathname, '/users')
   const isUserApprovalsRoute = isNavItemActive(pathname, '/user-approvals')
+  const isPermissionsRoute = isNavItemActive(pathname, '/permissions')
+  const isSettingsRoute = isNavItemActive(pathname, '/settings')
+  const isProfileRoute = pathname === '/profile'
   const isProjectsListRoute = pathname === '/projects'
   const projectReportMatch =
     pathname.match(/^\/projects\/([^/]+)\/report$/) ||
@@ -124,11 +202,44 @@ function App() {
   const purchaseDetailsIdentifier = purchaseDetailsMatch
     ? decodeURIComponent(purchaseDetailsMatch[1])
     : ''
-  const isSignupRoute = pathname === '/signup' || pathname === '/register'
+
+  const isProtectedWorkspacePath =
+    !isLoginRoute &&
+    !isSignupRoute &&
+    (isDashboardRoute ||
+      isActivityRoute ||
+      isUserApprovalsRoute ||
+      isUsersRoute ||
+      isPermissionsRoute ||
+      isSettingsRoute ||
+      isProfileRoute ||
+      Boolean(projectReportIdentifier) ||
+      isReportsListRoute ||
+      Boolean(projectDetailsIdentifier) ||
+      isProjectsListRoute ||
+      isRawMaterialsRoute ||
+      isExpensesRoute ||
+      isPurchaseCreateRoute ||
+      Boolean(purchaseEditIdentifier) ||
+      Boolean(purchaseDetailsIdentifier) ||
+      isPurchasesListRoute ||
+      Boolean(matchedAdminNav))
+
+  useEffect(() => {
+    if (isProtectedWorkspacePath && !hasSession) {
+      navigate('/login')
+    }
+  }, [isProtectedWorkspacePath, hasSession, navigate])
 
   useEffect(() => {
     if (isDashboardRoute) {
       document.title = 'Soft Touch Sofas — Dashboard'
+    } else if (isPermissionsRoute) {
+      document.title = 'Soft Touch Sofas — Roles & Permissions'
+    } else if (isSettingsRoute) {
+      document.title = 'Soft Touch Sofas — Application Settings'
+    } else if (isProfileRoute) {
+      document.title = 'Soft Touch Sofas — My Profile'
     } else if (isActivityRoute) {
       document.title = 'Soft Touch Sofas — Activity History'
     } else if (isUserApprovalsRoute) {
@@ -158,10 +269,13 @@ function App() {
     } else if (isSignupRoute) {
       document.title = 'Soft Touch Sofas — Create Account'
     } else {
-      document.title = 'Soft Touch Sofas — Admin Sign In'
+      document.title = 'Soft Touch Sofas — Sign In'
     }
   }, [
     isDashboardRoute,
+    isPermissionsRoute,
+    isSettingsRoute,
+    isProfileRoute,
     isActivityRoute,
     isUserApprovalsRoute,
     isUsersRoute,
@@ -180,8 +294,10 @@ function App() {
 
   const handleAuthenticated = useCallback(
     (sessionPayload) => {
-      setCurrentUser(sessionPayload?.user || null)
-      navigate('/dashboard')
+      const user = sessionPayload?.user || null
+      setCurrentUser(user)
+      setIsCheckingSession(false)
+      navigate(resolveFirstPermittedPath(user))
     },
     [navigate],
   )
@@ -189,6 +305,7 @@ function App() {
   const handleLogout = useCallback(() => {
     clearStoredSession()
     setCurrentUser(null)
+    setIsCheckingSession(false)
     navigate('/login')
   }, [navigate])
 
@@ -201,104 +318,117 @@ function App() {
     )
   }
 
-  if (
-    isDashboardRoute ||
-    isActivityRoute ||
-    isUserApprovalsRoute ||
-    isUsersRoute ||
-    matchedAdminNav
-  ) {
+  if (isProtectedWorkspacePath && hasSession) {
+    const activePathname = isDashboardRoute ? '/dashboard' : pathname
+
     return (
-      <ApprovalsProvider currentUser={currentUser}>
-        <AdminLayout
-          pathname={isDashboardRoute ? '/dashboard' : pathname}
-          currentUser={currentUser}
-          onNavigate={navigate}
-          onLogout={handleLogout}
-        >
-          {isDashboardRoute ? (
-            <DashboardPage
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : isActivityRoute ? (
-            <ActivityHistoryPage
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : isUserApprovalsRoute ? (
-            <UserApprovalsPage
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : isUsersRoute ? (
-            <UserManagementPage
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : projectDetailsIdentifier ? (
-            <ProjectDetailsPage
-              projectIdentifier={projectDetailsIdentifier}
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : isProjectsListRoute ? (
-            <ProjectsPage
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : isRawMaterialsRoute ? (
-            <RawMaterialsPage
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : isPurchaseCreateRoute ? (
-            <PurchaseVoucherFormPage
-              mode="create"
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : purchaseEditIdentifier ? (
-            <PurchaseVoucherFormPage
-              key={`edit-purchase-${purchaseEditIdentifier}`}
-              mode="edit"
-              voucherIdentifier={purchaseEditIdentifier}
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : purchaseDetailsIdentifier ? (
-            <PurchaseDetailsPage
-              voucherIdentifier={purchaseDetailsIdentifier}
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : isPurchasesListRoute ? (
-            <PurchasesPage
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : isExpensesRoute ? (
-            <ExpensesPage
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : projectReportIdentifier ? (
-            <ProjectReportPage
-              key={`report-${projectReportIdentifier}`}
-              projectId={projectReportIdentifier}
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : isReportsListRoute ? (
-            <ReportsPage
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          ) : (
-            <AdminPlaceholderPage pathname={pathname} onNavigate={navigate} />
-          )}
-        </AdminLayout>
-      </ApprovalsProvider>
+      <PermissionsProvider
+        currentUser={currentUser}
+        isCheckingSession={isCheckingSession}
+        onRefreshSession={refreshCurrentSession}
+      >
+        <WorkspaceProviders currentUser={currentUser}>
+          <AdminLayout
+            pathname={activePathname}
+            currentUser={currentUser}
+            onNavigate={navigate}
+            onLogout={handleLogout}
+          >
+            <ProtectedRouteGuard pathname={activePathname} onNavigate={navigate}>
+              {isDashboardRoute ? (
+                <DashboardPage
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : isPermissionsRoute ? (
+                <RolesPermissionsPage />
+              ) : isSettingsRoute ? (
+                <SettingsPage />
+              ) : isProfileRoute ? (
+                <ProfilePage
+                  currentUser={currentUser}
+                  onLogout={handleLogout}
+                />
+              ) : isActivityRoute ? (
+                <ActivityHistoryPage
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : isUserApprovalsRoute ? (
+                <UserApprovalsPage
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : isUsersRoute ? (
+                <UserManagementPage
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : projectDetailsIdentifier ? (
+                <ProjectDetailsPage
+                  projectIdentifier={projectDetailsIdentifier}
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : isProjectsListRoute ? (
+                <ProjectsPage
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : isRawMaterialsRoute ? (
+                <RawMaterialsPage
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : isPurchaseCreateRoute ? (
+                <PurchaseVoucherFormPage
+                  mode="create"
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : purchaseEditIdentifier ? (
+                <PurchaseVoucherFormPage
+                  key={`edit-purchase-${purchaseEditIdentifier}`}
+                  mode="edit"
+                  voucherIdentifier={purchaseEditIdentifier}
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : purchaseDetailsIdentifier ? (
+                <PurchaseDetailsPage
+                  voucherIdentifier={purchaseDetailsIdentifier}
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : isPurchasesListRoute ? (
+                <PurchasesPage
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : isExpensesRoute ? (
+                <ExpensesPage
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : projectReportIdentifier ? (
+                <ProjectReportPage
+                  key={`report-${projectReportIdentifier}`}
+                  projectId={projectReportIdentifier}
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : isReportsListRoute ? (
+                <ReportsPage
+                  currentUser={currentUser}
+                  onNavigate={navigate}
+                />
+              ) : (
+                <AdminPlaceholderPage pathname={pathname} onNavigate={navigate} />
+              )}
+            </ProtectedRouteGuard>
+          </AdminLayout>
+        </WorkspaceProviders>
+      </PermissionsProvider>
     )
   }
 

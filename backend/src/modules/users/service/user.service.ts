@@ -66,6 +66,16 @@ export function toUserResponse(user: IUser): UserResponse {
     approvedBy: user.approvedBy ? String(user.approvedBy) : undefined,
     approvedAt: user.approvedAt,
     rejectionReason: user.rejectionReason,
+    permissionOverrides: {
+      grant: user.permissionOverrides?.grant || [],
+      revoke: user.permissionOverrides?.revoke || [],
+    },
+    assignedProjectIds:
+      canonicalRole === 'admin'
+        ? null
+        : Array.isArray(user.assignedProjectIds)
+          ? user.assignedProjectIds
+          : null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

@@ -78,7 +78,21 @@ api.interceptors.response.use(
     }
     return response
   },
-  (error) => Promise.reject(error),
+  (error) => {
+    if (typeof window !== 'undefined') {
+      const status = error?.response?.status
+      const code = error?.response?.data?.code
+      const url = String(error?.config?.url || '')
+      if (
+        status === 403 &&
+        code === 'PERMISSION_DENIED' &&
+        !url.includes('/auth/me')
+      ) {
+        window.dispatchEvent(new CustomEvent('sts:permissions-updated'))
+      }
+    }
+    return Promise.reject(error)
+  },
 )
 
 export default api

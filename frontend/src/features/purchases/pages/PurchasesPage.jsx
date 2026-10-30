@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import { fetchProjects } from '../../projects'
 import { PurchasesFiltersBar } from '../components/PurchasesFiltersBar'
 import { PurchasesMobileList } from '../components/PurchasesMobileList'
@@ -8,14 +9,16 @@ import { PurchasesTable } from '../components/PurchasesTable'
 import {
   fetchPurchaseVouchers,
   hasActiveAuthToken,
-  isAdminUser,
 } from '../services/purchaseService'
 import '../styles/purchases.css'
 
 const PAGE_LIMIT = 10
 
 export function PurchasesPage({ currentUser, onNavigate }) {
-  const adminAccess = isAdminUser(currentUser)
+  const canCreateVoucher = hasPermission(currentUser, 'purchases.create')
+  const canEditVoucher = hasPermission(currentUser, 'purchases.edit')
+  const canDeleteVoucher = hasPermission(currentUser, 'purchases.delete')
+  const canViewProjects = hasPermission(currentUser, 'projects.view')
   const [authRequired, setAuthRequired] = useState(() => !hasActiveAuthToken())
 
   const [vouchers, setVouchers] = useState([])
@@ -58,7 +61,7 @@ export function PurchasesPage({ currentUser, onNavigate }) {
   }, [searchInput])
 
   useEffect(() => {
-    if (!hasActiveAuthToken()) {
+    if (!hasActiveAuthToken() || !canViewProjects) {
       return undefined
     }
     let cancelled = false
@@ -75,7 +78,7 @@ export function PurchasesPage({ currentUser, onNavigate }) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [canViewProjects])
 
   useEffect(() => {
     if (!hasActiveAuthToken()) {
@@ -219,7 +222,7 @@ export function PurchasesPage({ currentUser, onNavigate }) {
           
         </div>
 
-        {!authRequired ? (
+        {!authRequired && canCreateVoucher ? (
           <div className="pv-header__actions">
             <button
               type="button"
@@ -264,7 +267,7 @@ export function PurchasesPage({ currentUser, onNavigate }) {
           <PurchasesSummaryStrip
             summary={summary}
             activeStatus={statusFilter}
-            adminAccess={adminAccess}
+            adminAccess={canDeleteVoucher}
             onSelectStatus={handleStatusFilterChange}
           />
 
@@ -356,15 +359,17 @@ export function PurchasesPage({ currentUser, onNavigate }) {
                       Upload a supplier bill image or PDF to extract details
                       with local OCR, or enter a material purchase manually.
                     </p>
-                    <div className="pv-state__actions">
-                      <button
-                        type="button"
-                        className="admin-btn admin-btn--primary"
-                        onClick={() => onNavigate?.('/purchases/new')}
-                      >
-                        New Purchase Voucher
-                      </button>
-                    </div>
+                    {canCreateVoucher ? (
+                      <div className="pv-state__actions">
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--primary"
+                          onClick={() => onNavigate?.('/purchases/new')}
+                        >
+                          New Purchase Voucher
+                        </button>
+                      </div>
+                    ) : null}
                   </>
                 )}
               </div>
@@ -372,19 +377,26 @@ export function PurchasesPage({ currentUser, onNavigate }) {
               <>
                 <PurchasesTable
                   vouchers={vouchers}
+                  canEditVoucher={canEditVoucher}
                   onViewVoucher={(id) =>
                     onNavigate?.(`/purchases/${encodeURIComponent(id)}`)
                   }
                   onEditVoucher={(id) =>
                     onNavigate?.(`/purchases/${encodeURIComponent(id)}/edit`)
                   }
-                  onViewProject={(projId) =>
-                    onNavigate?.(`/projects/${encodeURIComponent(projId)}`)
+                  onViewProject={
+                    canViewProjects
+                      ? (projId) =>
+                          onNavigate?.(
+                            `/projects/${encodeURIComponent(projId)}`,
+                          )
+                      : null
                   }
                 />
 
                 <PurchasesMobileList
                   vouchers={vouchers}
+                  canEditVoucher={canEditVoucher}
                   onViewVoucher={(id) =>
                     onNavigate?.(`/purchases/${encodeURIComponent(id)}`)
                   }

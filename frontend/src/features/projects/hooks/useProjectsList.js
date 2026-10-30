@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import {
   createProject,
   fetchProjectActivityWarnings,
@@ -15,6 +16,12 @@ const DEFAULT_PAGE_SIZE = 10
 
 export function useProjectsList({ currentUser }) {
   const adminAccess = isAdminUser(currentUser)
+  const canCreateProject = hasPermission(currentUser, 'projects.create')
+  const canEditProject = hasPermission(currentUser, 'projects.edit')
+  const canViewProfitability = hasPermission(
+    currentUser,
+    'reports.viewProfitability',
+  )
   const initialHasToken = hasActiveAuthToken()
 
   const [projects, setProjects] = useState([])
@@ -491,6 +498,9 @@ export function useProjectsList({ currentUser }) {
 
     statusCounts,
     adminAccess,
+    canCreateProject,
+    canEditProject,
+    canViewProfitability,
 
     searchInput,
     statusFilter,

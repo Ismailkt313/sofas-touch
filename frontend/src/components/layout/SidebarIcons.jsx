@@ -134,6 +134,27 @@ export function SidebarNavIcon({ id, className = '' }) {
           <path d="M10 6.25V10.15L12.65 11.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
+    case 'permissions':
+      return (
+        <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M10 2.75L16.25 5.25V9.85C16.25 13.55 13.62 16.55 10 17.5C6.38 16.55 3.75 13.55 3.75 9.85V5.25L10 2.75Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+          <path d="M7.65 10.1L9.25 11.7L12.6 8.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'settings':
+      return (
+        <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M10 3.25V4.85M10 15.15V16.75M3.25 10H4.85M15.15 10H16.75M5.22 5.22L6.35 6.35M13.65 13.65L14.78 14.78M14.78 5.22L13.65 6.35M6.35 13.65L5.22 14.78" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      )
+    case 'profile':
+      return (
+        <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <circle cx="10" cy="6.75" r="3.1" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M4.25 16.25C4.85 13.6 7.15 12 10 12C12.85 12 15.15 13.6 15.75 16.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      )
     default:
       return null
   }

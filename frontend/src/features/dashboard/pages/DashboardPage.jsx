@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useApprovalsContext } from '../../approvals/context/ApprovalsContext'
 import { ACTIVITY_UPDATED_EVENT } from '../../../services/api'
+import { useApprovalsContext } from '../../approvals/context/ApprovalsContext'
+import {
+  hasAllPermissions,
+  hasPermission,
+  normalizeRoleKey,
+} from '../../permissions/constants/permissionsCatalog'
 import { DashboardKpiGrid } from '../components/DashboardKpiGrid'
 import { MonthlyExpenseSection } from '../components/MonthlyExpenseSection'
+import { OperationalDashboardView } from '../components/OperationalDashboardView'
 import { PendingApprovalsCard } from '../components/PendingApprovalsCard'
 import { ProjectProfitabilitySection } from '../components/ProjectProfitabilitySection'
 import { RecentTransactionsCard } from '../components/RecentTransactionsCard'
@@ -14,7 +20,23 @@ import {
 import '../styles/dashboard.css'
 
 export function DashboardPage({ currentUser, onNavigate }) {
-  const isAdmin = currentUser?.role === 'admin'
+  const isAdmin = normalizeRoleKey(currentUser?.role) === 'admin'
+  const canViewProfitability = hasPermission(
+    currentUser,
+    'reports.viewProfitability',
+  )
+  const canViewReports = hasAllPermissions(currentUser, [
+    'reports.view',
+    'reports.viewProfitability',
+  ])
+  const canCreatePurchase = hasPermission(currentUser, 'purchases.create')
+  const canCreateExpense = hasPermission(currentUser, 'expenses.create')
+  const canViewProjects = hasPermission(currentUser, 'projects.view')
+  const canViewPurchases = hasPermission(currentUser, 'purchases.view')
+  const canViewExpenses = hasPermission(currentUser, 'expenses.view')
+  const canViewMaterials = hasPermission(currentUser, 'materials.view')
+  const canApproveUsers = hasPermission(currentUser, 'users.approve')
+
   const { pendingCount } = useApprovalsContext()
 
   const [overview, setOverview] = useState(null)
@@ -132,7 +154,7 @@ export function DashboardPage({ currentUser, onNavigate }) {
     return () => {
       active = false
     }
-  }, [buildOverviewQuery, dateRangeError])
+  }, [buildOverviewQuery, dateRangeError, canViewProfitability])
 
   useEffect(() => {
     const handleActivityUpdate = () => {
@@ -147,7 +169,7 @@ export function DashboardPage({ currentUser, onNavigate }) {
   const handlePeriodPresetChange = useCallback(
     async (nextPreset) => {
       setPeriodPreset(nextPreset)
-      if (nextPreset === 'custom') {
+      if (nextPreset === 'custom' || !canViewProfitability) {
         return
       }
       setCustomFromDate('')
@@ -166,7 +188,7 @@ export function DashboardPage({ currentUser, onNavigate }) {
         setMonthlyLoading(false)
       }
     },
-    [],
+    [canViewProfitability],
   )
 
   const handleResetProjectFilters = useCallback(() => {
@@ -177,6 +199,8 @@ export function DashboardPage({ currentUser, onNavigate }) {
     setProjectSortOrder('desc')
   }, [])
 
+  const isOperationalView =
+    !canViewProfitability || overview?.mode === 'operational'
   const effectiveMonthly = monthlyOverride || overview?.monthlyExpenses || null
 
   return (
@@ -184,12 +208,17 @@ export function DashboardPage({ currentUser, onNavigate }) {
       <header className="sts-dash-hero">
         <div className="sts-dash-hero__copy">
           <span className="sts-dash-hero__eyebrow">
-            Soft Touch Sofas &bull; Operations Overview
+            {isOperationalView
+              ? 'Soft Touch Sofas \u2022 Data Entry Workspace'
+              : 'Soft Touch Sofas \u2022 Executive Overview'}
           </span>
-          <h1 className="sts-dash-hero__title">Business Dashboard</h1>
+          <h1 className="sts-dash-hero__title">
+            {isOperationalView ? 'Operations Desk' : 'Business Dashboard'}
+          </h1>
           <p className="sts-dash-hero__sub">
-            Real-time project contract performance, monthly procurement &amp;
-            expense trends, raw material stock alerts, and recent vouchers.
+            {isOperationalView
+              ? 'Daily material purchase vouchers, workshop expenses, active project codes, and stock lookup.'
+              : 'Real-time project contract performance, monthly procurement & expense trends, raw material stock alerts, and recent vouchers.'}
           </p>
         </div>
 
@@ -202,20 +231,32 @@ export function DashboardPage({ currentUser, onNavigate }) {
           >
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </button>
-          <button
-            type="button"
-            className="sts-dash-btn sts-dash-btn--secondary"
-            onClick={() => onNavigate?.('/purchases/new')}
-          >
-            + Purchase Voucher
-          </button>
-          <button
-            type="button"
-            className="sts-dash-btn sts-dash-btn--primary"
-            onClick={() => onNavigate?.('/projects')}
-          >
-            View Projects
-          </button>
+          {canCreatePurchase ? (
+            <button
+              type="button"
+              className="sts-dash-btn sts-dash-btn--secondary"
+              onClick={() => onNavigate?.('/purchases/new')}
+            >
+              + Purchase Voucher
+            </button>
+          ) : canCreateExpense ? (
+            <button
+              type="button"
+              className="sts-dash-btn sts-dash-btn--secondary"
+              onClick={() => onNavigate?.('/expenses')}
+            >
+              + Record Expense
+            </button>
+          ) : null}
+          {canViewProjects ? (
+            <button
+              type="button"
+              className="sts-dash-btn sts-dash-btn--primary"
+              onClick={() => onNavigate?.('/projects')}
+            >
+              View Projects
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -242,8 +283,8 @@ export function DashboardPage({ currentUser, onNavigate }) {
             </h2>
             <p className="sts-dash-error-card__desc">{errorMessage}</p>
             <p className="sts-dash-error-card__hint">
-              Financial figures are hidden rather than displaying misleading zero
-              balances when the server cannot be reached.
+              Figures are hidden rather than displaying misleading zero balances
+              when the server cannot be reached.
             </p>
           </div>
           <button
@@ -269,68 +310,82 @@ export function DashboardPage({ currentUser, onNavigate }) {
             </div>
           ) : null}
 
-          <DashboardKpiGrid
-            kpis={overview.kpis}
-            isAdmin={isAdmin}
-            onNavigate={onNavigate}
-          />
-
-          <ProjectProfitabilitySection
-            items={overview.projectPerformance?.items || []}
-            totalMatching={overview.projectPerformance?.totalMatching || 0}
-            searchInput={searchInput}
-            projectStatus={projectStatus}
-            projectSortBy={projectSortBy}
-            projectSortOrder={projectSortOrder}
-            isAdmin={isAdmin}
-            onSearchChange={setSearchInput}
-            onStatusChange={setProjectStatus}
-            onSortChange={(nextField, nextOrd) => {
-              setProjectSortBy(nextField)
-              setProjectSortOrder(nextOrd)
-            }}
-            onResetFilters={handleResetProjectFilters}
-            onNavigate={onNavigate}
-          />
-
-          <MonthlyExpenseSection
-            monthlyExpenses={effectiveMonthly}
-            periodPreset={periodPreset}
-            customFromDate={customFromDate}
-            customToDate={customToDate}
-            dateRangeError={dateRangeError}
-            monthlyLoading={monthlyLoading}
-            isAdmin={isAdmin}
-            onPeriodPresetChange={handlePeriodPresetChange}
-            onCustomFromChange={setCustomFromDate}
-            onCustomToChange={setCustomToDate}
-            onNavigate={onNavigate}
-          />
-
-          <div className="sts-dash-bottom-grid">
-            <div className="sts-dash-bottom-grid__main">
-              <RecentTransactionsCard
-                transactions={overview.recentTransactions || []}
+          {isOperationalView ? (
+            <OperationalDashboardView
+              overview={overview}
+              canViewMaterials={canViewMaterials}
+              canViewPurchases={canViewPurchases}
+              canViewExpenses={canViewExpenses}
+              onNavigate={onNavigate}
+            />
+          ) : (
+            <>
+              <DashboardKpiGrid
+                kpis={overview.kpis}
+                isAdmin={canViewReports}
                 onNavigate={onNavigate}
               />
-            </div>
 
-            <div className="sts-dash-bottom-grid__side">
-              {isAdmin && overview.pendingApprovals ? (
-                <PendingApprovalsCard
-                  pendingApprovals={overview.pendingApprovals}
-                  contextPendingCount={pendingCount}
-                  onNavigate={onNavigate}
-                />
-              ) : null}
-
-              <StockAlertsCard
-                stockAlerts={overview.stockAlerts}
-                isAdmin={isAdmin}
+              <ProjectProfitabilitySection
+                items={overview.projectPerformance?.items || []}
+                totalMatching={overview.projectPerformance?.totalMatching || 0}
+                searchInput={searchInput}
+                projectStatus={projectStatus}
+                projectSortBy={projectSortBy}
+                projectSortOrder={projectSortOrder}
+                isAdmin={canViewReports}
+                onSearchChange={setSearchInput}
+                onStatusChange={setProjectStatus}
+                onSortChange={(nextField, nextOrd) => {
+                  setProjectSortBy(nextField)
+                  setProjectSortOrder(nextOrd)
+                }}
+                onResetFilters={handleResetProjectFilters}
                 onNavigate={onNavigate}
               />
-            </div>
-          </div>
+
+              <MonthlyExpenseSection
+                monthlyExpenses={effectiveMonthly}
+                periodPreset={periodPreset}
+                customFromDate={customFromDate}
+                customToDate={customToDate}
+                dateRangeError={dateRangeError}
+                monthlyLoading={monthlyLoading}
+                isAdmin={canViewReports}
+                onPeriodPresetChange={handlePeriodPresetChange}
+                onCustomFromChange={setCustomFromDate}
+                onCustomToChange={setCustomToDate}
+                onNavigate={onNavigate}
+              />
+
+              <div className="sts-dash-bottom-grid">
+                <div className="sts-dash-bottom-grid__main">
+                  <RecentTransactionsCard
+                    transactions={overview.recentTransactions || []}
+                    onNavigate={onNavigate}
+                  />
+                </div>
+
+                <div className="sts-dash-bottom-grid__side">
+                  {canApproveUsers && overview.pendingApprovals ? (
+                    <PendingApprovalsCard
+                      pendingApprovals={overview.pendingApprovals}
+                      contextPendingCount={pendingCount}
+                      onNavigate={onNavigate}
+                    />
+                  ) : null}
+
+                  {canViewMaterials && overview.stockAlerts ? (
+                    <StockAlertsCard
+                      stockAlerts={overview.stockAlerts}
+                      isAdmin={isAdmin}
+                      onNavigate={onNavigate}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </>
+          )}
         </>
       ) : null}
     </div>
