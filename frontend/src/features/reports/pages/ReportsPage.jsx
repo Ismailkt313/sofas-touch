@@ -1,3 +1,4 @@
+import { useListingState } from '../../../services/navigationState'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ReportsFiltersBar } from '../components/ReportsFiltersBar'
 import { ReportsMobileList } from '../components/ReportsMobileList'
@@ -18,6 +19,16 @@ import {
 } from '../utils/reportFormatters'
 
 const PAGE_LIMIT = 10
+const REPORTS_LISTING_SCHEMA = {
+  page: { type: 'number', default: 1, min: 1 },
+  search: { type: 'string', default: '' },
+  status: { type: 'string', default: 'all' },
+  fromDate: { type: 'string', default: '' },
+  toDate: { type: 'string', default: '' },
+  sortBy: { type: 'string', default: 'createdAt' },
+  sortOrder: { type: 'string', default: 'desc' },
+}
+
 
 const EMPTY_SUMMARY = {
   projectCount: 0,
@@ -57,14 +68,29 @@ export function ReportsPage({ currentUser, onNavigate }) {
     totalPages: 1,
   })
 
-  const [searchInput, setSearchInput] = useState('')
-  const [appliedSearch, setAppliedSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
-  const [sortBy, setSortBy] = useState('createdAt')
-  const [sortOrder, setSortOrder] = useState('desc')
-  const [currentPage, setCurrentPage] = useState(1)
+  const { values, setValue, resetAll, clampPage } = useListingState(REPORTS_LISTING_SCHEMA, {
+    routeKey: 'reports',
+  })
+
+  const currentPage = values.page
+  const statusFilter = values.status
+  const fromDate = values.fromDate
+  const toDate = values.toDate
+  const sortBy = values.sortBy
+  const sortOrder = values.sortOrder
+
+  const setCurrentPage = useCallback(
+    (pageNumber) => setValue('page', pageNumber, { push: true }),
+    [setValue],
+  )
+
+  const [searchInput, setSearchInput] = useState(values.search)
+  const [appliedSearch, setAppliedSearch] = useState(values.search)
+
+  useEffect(() => {
+    setSearchInput(values.search)
+    setAppliedSearch(values.search)
+  }, [values.search])
 
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -312,10 +338,6 @@ export function ReportsPage({ currentUser, onNavigate }) {
         <div className="rep-header__titles">
           <span className="rep-header__eyebrow">Financial Intelligence</span>
           <h1 className="rep-header__title">Project Reports</h1>
-          <p className="rep-header__subtitle">
-            Track project costs, compare budgets, and monitor estimated
-            profitability.
-          </p>
         </div>
 
         <div className="rep-header__actions rep-no-print">
@@ -343,13 +365,7 @@ export function ReportsPage({ currentUser, onNavigate }) {
         </div>
       </header>
 
-      <div className="rep-disclaimer">
-        <strong>Estimated Operational Figures:</strong> Financial values are
-        computed directly from saved active project purchase vouchers and
-        project expense records. Cancelled vouchers and general workshop
-        overheads are excluded. Figures represent operational estimates, not
-        audited statutory accounting.
-      </div>
+
 
       {period?.isDateFiltered ? (
         <section

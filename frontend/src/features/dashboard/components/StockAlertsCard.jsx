@@ -33,15 +33,9 @@ export function StockAlertsCard({ stockAlerts, isAdmin, onNavigate }) {
     >
       <header className="sts-dash-card__header">
         <div>
-          <span className="sts-dash-card__eyebrow">Inventory Watch</span>
           <h2 id="sts-dash-stock-heading" className="sts-dash-card__title">
             Stock Alerts
           </h2>
-          <p className="sts-dash-card__subtitle">
-            {totalActive > 0
-              ? `${configuredCount} of ${totalActive} active materials have a configured minimum level.`
-              : 'Monitors zero-stock and configured minimum thresholds.'}
-          </p>
         </div>
 
         <a

@@ -1,3 +1,4 @@
+import { useListingState } from '../../../services/navigationState'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import {
@@ -13,6 +14,13 @@ import {
 } from '../services/projectService'
 
 const DEFAULT_PAGE_SIZE = 10
+const PROJECTS_LISTING_SCHEMA = {
+  page: { type: 'number', default: 1, min: 1 },
+  search: { type: 'string', default: '' },
+  status: { type: 'string', default: 'all' },
+  category: { type: 'string', default: 'all' },
+}
+
 
 export function useProjectsList({ currentUser }) {
   const adminAccess = isAdminUser(currentUser)
@@ -24,10 +32,21 @@ export function useProjectsList({ currentUser }) {
   )
   const initialHasToken = hasActiveAuthToken()
 
+  const { values, setValue, resetAll, clampPage } = useListingState(PROJECTS_LISTING_SCHEMA, {
+    routeKey: 'projects',
+  })
+
   const [projects, setProjects] = useState([])
   const [totalProjects, setTotalProjects] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
-  const [currentPage, setCurrentPage] = useState(1)
+  const currentPage = values.page
+  const statusFilter = values.status
+  const categoryFilter = values.category
+
+  const setCurrentPage = useCallback(
+    (pageNumber) => setValue('page', pageNumber, { push: true }),
+    [setValue],
+  )
 
   const [statusCounts, setStatusCounts] = useState({
     all: 0,
@@ -36,10 +55,13 @@ export function useProjectsList({ currentUser }) {
     completed: 0,
   })
 
-  const [searchInput, setSearchInput] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [searchInput, setSearchInput] = useState(values.search)
+  const [debouncedSearch, setDebouncedSearch] = useState(values.search)
+
+  useEffect(() => {
+    setSearchInput(values.search)
+    setDebouncedSearch(values.search)
+  }, [values.search])
 
   const [isLoading, setIsLoading] = useState(initialHasToken)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -71,10 +93,14 @@ export function useProjectsList({ currentUser }) {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setDebouncedSearch(searchInput.trim())
+      const trimmed = searchInput.trim()
+      setDebouncedSearch(trimmed)
+      if (trimmed !== values.search) {
+        setValue('search', trimmed, { resetPage: true })
+      }
     }, 240)
     return () => window.clearTimeout(timer)
-  }, [searchInput])
+  }, [searchInput, values.search, setValue])
 
   useEffect(() => {
     const hasToken = hasActiveAuthToken()
@@ -140,7 +166,7 @@ export function useProjectsList({ currentUser }) {
         setTotalProjects(listResult.total)
         setTotalPages(listResult.totalPages)
         if (currentPage > listResult.totalPages && listResult.totalPages >= 1) {
-          setCurrentPage(listResult.totalPages)
+          clampPage(listResult.totalPages)
         }
 
         setStatusCounts({
@@ -334,7 +360,7 @@ export function useProjectsList({ currentUser }) {
   const handleCreateSubmit = useCallback(async (formValues) => {
     const created = await createProject(formValues)
     setIsCreateModalOpen(false)
-    setCurrentPage(1)
+    setValue('page', 1, { push: true })
     setFeedbackBanner({
       tone: 'success',
       text: `Project ${created.projectId} ("${created.name}") was created successfully.`,

@@ -5,22 +5,13 @@ import {
 
 export function ExpensesMobileList({
   expenses,
-  isAdmin,
-  canEdit,
-  canCancel,
   onViewExpense,
-  onEditExpense,
-  onCancelExpense,
-  onPreviewReceipt,
   onViewProject,
 }) {
-  const allowEdit = canEdit ?? isAdmin
-  const allowCancel = canCancel ?? isAdmin
   return (
     <div className="exp-mobile-list">
       {expenses.map((expense) => {
         const isCancelled = expense.status === 'cancelled'
-        const hasReceipt = expense.attachmentCount > 0
 
         return (
           <article
@@ -29,6 +20,7 @@ export function ExpensesMobileList({
               isCancelled ? 'exp-mobile-card--cancelled' : ''
             }`}
           >
+            {/* Top row: Voucher number, Date, Compact status */}
             <div className="exp-mobile-card__top">
               <button
                 type="button"
@@ -37,19 +29,49 @@ export function ExpensesMobileList({
               >
                 {expense.voucherNumber}
               </button>
-              <span
-                className={`exp-status-badge ${
-                  isCancelled
-                    ? 'exp-status-badge--cancelled'
-                    : 'exp-status-badge--active'
-                }`}
-              >
-                {isCancelled ? 'Cancelled' : 'Active'}
-              </span>
+              <div className="exp-mobile-card__top-right">
+                <span className="exp-mobile-card__date">
+                  {formatExpenseDate(expense.expenseDate)}
+                </span>
+                {isCancelled ? (
+                  <span className="exp-status-badge exp-status-badge--cancelled">
+                    Cancelled
+                  </span>
+                ) : null}
+              </div>
             </div>
 
-            <div className="exp-mobile-card__amount-row">
-              <span className="exp-category-pill">{expense.categoryName}</span>
+            {/* Main content: Description, Category badge, Project name */}
+            <div className="exp-mobile-card__body">
+              {expense.description ? (
+                <p className="exp-mobile-card__desc" title={expense.description}>
+                  {expense.description}
+                </p>
+              ) : null}
+
+              <div className="exp-mobile-card__tags">
+                <span className="exp-category-pill">
+                  {expense.categoryName || 'General'}
+                </span>
+
+                {expense.projectRecordId ? (
+                  <button
+                    type="button"
+                    className="exp-project-link"
+                    onClick={() => onViewProject?.(expense.projectRecordId)}
+                  >
+                    {expense.projectCode
+                      ? `${expense.projectCode} • ${expense.projectName || ''}`
+                      : expense.projectName || 'Linked Project'}
+                  </button>
+                ) : (
+                  <span className="exp-project-general">General Workshop</span>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom row: Amount prominently displayed, Compact View action */}
+            <div className="exp-mobile-card__bottom">
               <span
                 className={`exp-mobile-card__amount ${
                   isCancelled ? 'exp-amount--cancelled' : ''
@@ -57,65 +79,24 @@ export function ExpensesMobileList({
               >
                 {formatExpenseCurrency(expense.amount)}
               </span>
-            </div>
 
-            <p className="exp-mobile-card__desc">{expense.description}</p>
-
-            <div className="exp-mobile-card__meta">
-              <span>{formatExpenseDate(expense.expenseDate)}</span>
-              <span>·</span>
-              {expense.projectRecordId ? (
-                <button
-                  type="button"
-                  className="exp-project-link"
-                  onClick={() => onViewProject(expense.projectRecordId)}
-                >
-                  {expense.projectCode || expense.projectName}
-                </button>
-              ) : (
-                <span className="exp-project-general">General Workshop</span>
-              )}
-              {hasReceipt ? (
-                <>
-                  <span>·</span>
-                  <button
-                    type="button"
-                    className="exp-receipt-chip"
-                    onClick={() => onPreviewReceipt(expense, 0)}
-                  >
-                    Receipt ({expense.attachmentCount})
-                  </button>
-                </>
-              ) : null}
-            </div>
-
-            <div className="exp-mobile-card__actions">
               <button
                 type="button"
-                className="exp-btn exp-btn--ghost exp-btn--sm"
+                className="exp-btn-view exp-btn-view--mobile-compact"
                 onClick={() => onViewExpense(expense)}
+                aria-label={`View details for expense ${expense.voucherNumber}`}
               >
-                Details
+                <span>View</span>
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M3.5 8H12.5M12.5 8L8.75 4.25M12.5 8L8.75 11.75"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
-              {!isCancelled && allowEdit ? (
-                <button
-                  type="button"
-                  className="exp-btn exp-btn--secondary exp-btn--sm"
-                  onClick={() => onEditExpense(expense)}
-                >
-                  Edit
-                </button>
-              ) : null}
-              {!isCancelled && allowCancel ? (
-                <button
-                  type="button"
-                  className="exp-btn exp-btn--ghost exp-btn--sm"
-                  style={{ color: '#9e3324' }}
-                  onClick={() => onCancelExpense(expense)}
-                >
-                  Void
-                </button>
-              ) : null}
             </div>
           </article>
         )

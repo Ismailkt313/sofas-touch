@@ -1,4 +1,4 @@
-import { Dropdown } from '../../../components/common'
+import { Dropdown, DatePicker } from '../../../components/common'
 import {
   DASHBOARD_EXPENSE_PERIOD_OPTIONS,
   formatDashboardCurrency,
@@ -74,22 +74,28 @@ export function MonthlyExpenseSection({
 
       {periodPreset === 'custom' ? (
         <div className="sts-dash-custom-dates">
-          <label className="sts-dash-date-field">
+          <div className="sts-dash-date-field">
             <span>From Date</span>
-            <input
-              type="date"
+            <DatePicker
               value={customFromDate}
-              onChange={(e) => onCustomFromChange(e.target.value)}
+              onChange={onCustomFromChange}
+              placeholder="From date"
+              maxDate={customToDate || undefined}
+              variant="filter"
+              ariaLabel="Select from date"
             />
-          </label>
-          <label className="sts-dash-date-field">
+          </div>
+          <div className="sts-dash-date-field">
             <span>To Date</span>
-            <input
-              type="date"
+            <DatePicker
               value={customToDate}
-              onChange={(e) => onCustomToChange(e.target.value)}
+              onChange={onCustomToChange}
+              placeholder="To date"
+              minDate={customFromDate || undefined}
+              variant="filter"
+              ariaLabel="Select to date"
             />
-          </label>
+          </div>
           {dateRangeError ? (
             <p className="sts-dash-date-error" role="alert">
               {dateRangeError}

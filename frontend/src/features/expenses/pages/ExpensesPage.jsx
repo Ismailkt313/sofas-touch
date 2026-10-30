@@ -1,3 +1,4 @@
+import { useListingState } from '../../../services/navigationState'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import { fetchProjects } from '../../projects'
@@ -24,6 +25,17 @@ import {
 import '../styles/expenses.css'
 
 const PAGE_LIMIT = 10
+const EXPENSES_LISTING_SCHEMA = {
+  page: { type: 'number', default: 1, min: 1 },
+  search: { type: 'string', default: '' },
+  category: { type: 'string', default: 'all' },
+  project: { type: 'string', default: 'all' },
+  fromDate: { type: 'string', default: '' },
+  toDate: { type: 'string', default: '' },
+  status: { type: 'string', default: 'active' },
+  view: { type: 'string', default: '' },
+}
+
 
 export function ExpensesPage({ currentUser, onNavigate }) {
   const canCreateExpense = hasPermission(currentUser, 'expenses.create')
@@ -32,10 +44,25 @@ export function ExpensesPage({ currentUser, onNavigate }) {
   const canViewProjects = hasPermission(currentUser, 'projects.view')
   const [authRequired, setAuthRequired] = useState(() => !hasActiveAuthToken())
 
+  const { values, setValue, resetAll, clampPage } = useListingState(EXPENSES_LISTING_SCHEMA, {
+    routeKey: 'expenses',
+  })
+
   const [expenses, setExpenses] = useState([])
   const [totalExpenses, setTotalExpenses] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
-  const [currentPage, setCurrentPage] = useState(1)
+  const currentPage = values.page
+  const categoryFilter = values.category
+  const projectFilter = values.project
+  const fromDate = values.fromDate
+  const toDate = values.toDate
+  const statusFilter = values.status
+
+  const setCurrentPage = useCallback(
+    (pageNumber) => setValue('page', pageNumber, { push: true }),
+    [setValue],
+  )
+
   const [summary, setSummary] = useState({
     activeCount: 0,
     cancelledCount: 0,
@@ -50,13 +77,13 @@ export function ExpensesPage({ currentUser, onNavigate }) {
   const [categories, setCategories] = useState([])
   const [projects, setProjects] = useState([])
 
-  const [searchInput, setSearchInput] = useState('')
-  const [appliedSearch, setAppliedSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('all')
-  const [projectFilter, setProjectFilter] = useState('all')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
-  const [statusFilter, setStatusFilter] = useState('active')
+  const [searchInput, setSearchInput] = useState(values.search)
+  const [appliedSearch, setAppliedSearch] = useState(values.search)
+
+  useEffect(() => {
+    setSearchInput(values.search)
+    setAppliedSearch(values.search)
+  }, [values.search])
 
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -79,17 +106,15 @@ export function ExpensesPage({ currentUser, onNavigate }) {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setAppliedSearch((prev) => {
-        const next = searchInput.trim()
-        if (prev !== next) {
-          setCurrentPage(1)
-        }
-        return next
-      })
+      const next = searchInput.trim()
+      setAppliedSearch(next)
+      if (next !== values.search) {
+        setValue('search', next, { resetPage: true })
+      }
     }, 260)
 
     return () => window.clearTimeout(timer)
-  }, [searchInput])
+  }, [searchInput, values.search, setValue])
 
   const loadReferenceData = useCallback(() => {
     if (!hasActiveAuthToken()) {
@@ -241,59 +266,57 @@ export function ExpensesPage({ currentUser, onNavigate }) {
   const handleCategoryFilterChange = useCallback(
     (val) => {
       markRefreshing()
-      setCategoryFilter(val)
-      setCurrentPage(1)
+      setValue('category', val, { resetPage: true })
     },
-    [markRefreshing],
+    [markRefreshing, setValue],
   )
 
   const handleProjectFilterChange = useCallback(
     (val) => {
       markRefreshing()
-      setProjectFilter(val)
-      setCurrentPage(1)
+      setValue('project', val, { resetPage: true })
     },
-    [markRefreshing],
+    [markRefreshing, setValue],
   )
 
   const handleFromDateChange = useCallback(
     (val) => {
       markRefreshing()
-      setFromDate(val)
-      setCurrentPage(1)
+      setValue('fromDate', val, { resetPage: true })
     },
-    [markRefreshing],
+    [markRefreshing, setValue],
   )
 
   const handleToDateChange = useCallback(
     (val) => {
       markRefreshing()
-      setToDate(val)
-      setCurrentPage(1)
+      setValue('toDate', val, { resetPage: true })
     },
-    [markRefreshing],
+    [markRefreshing, setValue],
   )
 
   const handleStatusFilterChange = useCallback(
     (val) => {
       markRefreshing()
-      setStatusFilter(val)
-      setCurrentPage(1)
+      setValue('status', val, { resetPage: true })
     },
-    [markRefreshing],
+    [markRefreshing, setValue],
+  )
+
+  const handlePageChange = useCallback(
+    (nextPage) => {
+      markRefreshing()
+      setValue('page', nextPage, { push: true })
+    },
+    [markRefreshing, setValue],
   )
 
   const handleResetFilters = useCallback(() => {
     markRefreshing()
     setSearchInput('')
     setAppliedSearch('')
-    setCategoryFilter('all')
-    setProjectFilter('all')
-    setFromDate('')
-    setToDate('')
-    setStatusFilter('active')
-    setCurrentPage(1)
-  }, [markRefreshing])
+    resetAll()
+  }, [markRefreshing, resetAll])
 
   const handleOpenCreateModal = () => {
     setFormServerError('')
@@ -306,12 +329,32 @@ export function ExpensesPage({ currentUser, onNavigate }) {
 
   const handleOpenViewModal = (expense) => {
     setFormServerError('')
+    if (expense?.voucherNumber || expense?.id) {
+      setValue('view', expense.voucherNumber || expense.id, { push: true })
+    }
     setFormModalState({
       key: `view-${expense.id}`,
       mode: 'view',
       expense,
     })
   }
+
+  useEffect(() => {
+    if (values.view && expenses.length > 0 && !formModalState) {
+      const match = expenses.find(
+        (e) => e.voucherNumber === values.view || String(e.id) === String(values.view)
+      )
+      if (match) {
+        setFormModalState({
+          key: `view-${match.id}`,
+          mode: 'view',
+          expense: match,
+        })
+      }
+    } else if (!values.view && formModalState?.mode === 'view') {
+      setFormModalState(null)
+    }
+  }, [values.view, expenses])
 
   const handleOpenEditModal = (expense) => {
     setFormServerError('')
@@ -452,12 +495,9 @@ export function ExpensesPage({ currentUser, onNavigate }) {
   return (
     <div className="exp-page">
       <header className="exp-header">
-        <div>
+        <div className="exp-header__text">
           <h1 className="exp-header__title">Expenses</h1>
-          <p className="exp-header__subtitle">
-            Record workshop, delivery, labour, installation, and project
-            expenses in one place.
-          </p>
+
         </div>
 
         <div className="exp-header__actions">
@@ -475,7 +515,8 @@ export function ExpensesPage({ currentUser, onNavigate }) {
                   strokeLinecap="round"
                 />
               </svg>
-              Categories ({categories.length})
+              <span className="exp-btn-label--full">Categories ({categories.length})</span>
+              <span className="exp-btn-label--short">Categories</span>
             </button>
           ) : null}
 
@@ -493,7 +534,8 @@ export function ExpensesPage({ currentUser, onNavigate }) {
                   strokeLinecap="round"
                 />
               </svg>
-              Record Expense
+              <span className="exp-btn-label--full">Record Expense</span>
+              <span className="exp-btn-label--short">Record</span>
             </button>
           ) : null}
         </div>
@@ -643,10 +685,7 @@ export function ExpensesPage({ currentUser, onNavigate }) {
               totalPages={totalPages}
               totalItems={totalExpenses}
               limit={PAGE_LIMIT}
-              onPageChange={(nextPage) => {
-                markRefreshing()
-                setCurrentPage(nextPage)
-              }}
+              onPageChange={handlePageChange}
             />
           </>
         )}
@@ -660,6 +699,8 @@ export function ExpensesPage({ currentUser, onNavigate }) {
           categories={categories}
           projects={projects}
           isAdmin={canEditExpense}
+          canEdit={canEditExpense}
+          canCancel={canDeleteExpense}
           isSubmitting={isSavingExpense}
           serverError={formServerError}
           onSave={handleSaveExpense}

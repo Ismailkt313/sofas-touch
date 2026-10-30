@@ -1,3 +1,4 @@
+import { navigateBackOrFallback } from '../../../services/navigationState'
 import { useCallback, useEffect, useState } from 'react'
 import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import { formatMaterialUnit } from '../../raw-materials'
@@ -131,7 +132,7 @@ export function PurchaseDetailsPage({
         <button
           type="button"
           className="pv-back-btn"
-          onClick={() => onNavigate?.('/purchases')}
+          onClick={() => navigateBackOrFallback(onNavigate, '/purchases')}
         >
           <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path
@@ -174,7 +175,7 @@ export function PurchaseDetailsPage({
               <button
                 type="button"
                 className="admin-btn admin-btn--secondary"
-                onClick={() => onNavigate?.('/purchases')}
+                onClick={() => navigateBackOrFallback(onNavigate, '/purchases')}
               >
                 Back to Purchases
               </button>

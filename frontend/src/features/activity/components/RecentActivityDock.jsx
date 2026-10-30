@@ -46,53 +46,19 @@ export function RecentActivityDock({ pathname, currentUser, onNavigate }) {
   }, [])
 
   useEffect(() => {
-    let active = true
-    fetchRecentActivities(50)
-      .then((result) => {
-        if (!active) return
-        setActivities(result.items)
-        setErrorMessage('')
-        setLoading(false)
-      })
-      .catch((error) => {
-        if (!active) return
-        setErrorMessage(
-          error?.response?.data?.message ||
-            'Unable to load recent activity right now.',
-        )
-        setLoading(false)
-      })
-
-    return () => {
-      active = false
+    if (typeof window === 'undefined') return undefined
+    const mql = window.matchMedia('(max-width: 767px)')
+    const handleChange = (e) => {
+      setIsMobile(e.matches)
+      setIsExpanded(false)
     }
-  }, [userRole])
-
-  useEffect(() => {
-    const handleMutationBroadcast = () => {
-      loadRecent({ silent: true })
+    setIsMobile(mql.matches)
+    if (mql.addEventListener) {
+      mql.addEventListener('change', handleChange)
+      return () => mql.removeEventListener('change', handleChange)
     }
-    window.addEventListener(ACTIVITY_UPDATED_EVENT, handleMutationBroadcast)
-    return () => {
-      window.removeEventListener(
-        ACTIVITY_UPDATED_EVENT,
-        handleMutationBroadcast,
-      )
-    }
-  }, [loadRecent])
-
-  useEffect(() => {
-    const handleResize = () => {
-      const nextMobile = checkIsMobileViewport()
-      setIsMobile((prev) => {
-        if (prev !== nextMobile) {
-          setIsExpanded(false)
-        }
-        return nextMobile
-      })
-    }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    mql.addListener(handleChange)
+    return () => mql.removeListener(handleChange)
   }, [])
 
   useEffect(() => {
@@ -195,12 +161,27 @@ export function RecentActivityDock({ pathname, currentUser, onNavigate }) {
             onClick={() => setIsExpanded(true)}
             aria-expanded={isExpanded}
             aria-controls="sts-recent-activity-sheet"
+            aria-label={`Recent Activity (${activities.length || 0})`}
+            title="Recent Activity"
           >
             <span className="sts-activity-dock__pulse" aria-hidden="true" />
-            <span className="sts-activity-mobile-trigger__label">Activity</span>
-            {!loading && !errorMessage ? (
-              <span className="sts-activity-dock__count">
-                {activities.length}
+            <svg
+              className="sts-activity-mobile-trigger__icon"
+              viewBox="0 0 18 18"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M9 4.5V9L12 10.75M15.5 9A6.5 6.5 0 1 1 2.5 9A6.5 6.5 0 0 1 15.5 9Z"
+                stroke="currentColor"
+                strokeWidth="1.55"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {!loading && !errorMessage && activities.length > 0 ? (
+              <span className="sts-activity-mobile-trigger__badge">
+                {activities.length > 99 ? '99+' : activities.length}
               </span>
             ) : null}
           </button>

@@ -589,38 +589,39 @@
 
 .header-notifications__badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
-  min-width: 19px;
-  height: 19px;
-  padding: 0 0.32rem;
+  top: -3px;
+  right: -3px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 3px;
   border-radius: 999px;
   background-color: var(--sts-error-accent);
   color: #ffffff;
   border: 2px solid var(--admin-surface);
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   font-weight: 700;
   line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 }
 
 .header-notifications__popover {
   position: absolute;
-  top: calc(100% + 0.55rem);
+  top: calc(100% + 0.45rem);
   right: 0;
-  width: 360px;
+  width: 340px;
   max-width: calc(100vw - 1.5rem);
-  max-height: min(460px, calc(100svh - 5rem));
+  max-height: min(440px, calc(100svh - 4.5rem));
   display: flex;
   flex-direction: column;
   background-color: var(--admin-surface);
   border: 1px solid var(--admin-border-strong);
-  border-radius: 14px;
+  border-radius: 12px;
   box-shadow:
-    0 20px 42px -12px rgba(24, 15, 9, 0.28),
-    0 6px 16px -6px rgba(24, 15, 9, 0.12);
+    0 18px 36px -10px rgba(24, 15, 9, 0.22),
+    0 6px 14px -4px rgba(24, 15, 9, 0.08);
   color: var(--sts-charcoal);
   z-index: 60;
   overflow: hidden;
@@ -630,8 +631,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
+  gap: 0.6rem;
+  padding: 0.65rem 0.85rem;
   border-bottom: 1px solid var(--admin-border);
   background-color: var(--admin-surface-subtle);
 }
@@ -1377,16 +1378,18 @@
   }
 
   .header-notifications {
-    position: static;
+    position: relative;
   }
 
   .header-notifications__popover {
-    position: fixed;
-    left: 0.65rem;
-    right: 0.65rem;
-    top: calc(48px + 0.4rem);
-    width: auto;
-    max-width: none;
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    left: auto;
+    width: min(320px, calc(100vw - 1rem));
+    max-height: min(390px, calc(100svh - 4.2rem));
+    border-radius: 12px;
+    box-shadow: 0 12px 30px -4px rgba(24, 15, 9, 0.22);
   }
 
   .admin-modal-backdrop {

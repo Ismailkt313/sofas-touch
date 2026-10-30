@@ -1,158 +1,131 @@
-import {
-  formatReportCurrency,
-  formatSafePercentage,
-  getHealthIndicatorMeta,
-} from '../utils/reportFormatters'
+import { formatReportCurrency } from '../utils/reportFormatters'
 
 function getStatusPillClass(status) {
-  if (status === 'Completed') return 'rep-status-pill rep-status-pill--completed'
-  if (status === 'Under Review') return 'rep-status-pill rep-status-pill--review'
+  const norm = String(status || '').toLowerCase()
+  if (norm === 'completed') return 'rep-status-pill rep-status-pill--completed'
+  if (norm.includes('progress')) return 'rep-status-pill rep-status-pill--progress'
+  if (norm.includes('review')) return 'rep-status-pill rep-status-pill--review'
+  if (norm === 'upcoming') return 'rep-status-pill rep-status-pill--upcoming'
   return 'rep-status-pill'
 }
 
-export function ReportsTable({ rows, period, onOpenProjectReport }) {
-  const isPeriodFiltered = Boolean(period?.isDateFiltered)
+function getProfitClass(estimatedProfit, contractValue) {
+  const numProfit = Number(estimatedProfit || 0)
+  const numContract = Number(contractValue || 0)
+  if (numContract === 0 && numProfit === 0) return 'rep-profit-val--neutral'
+  if (numProfit > 0) return 'rep-profit-val--positive'
+  if (numProfit < 0) return 'rep-profit-val--loss'
+  return 'rep-profit-val--neutral'
+}
 
+export function ReportsTable({ rows, onOpenProjectReport }) {
   return (
-    <div className="rep-table-wrap rep-table-wrap--main">
+    <div className="rep-table-wrap">
       <table className="rep-table">
         <thead>
           <tr>
-            <th scope="col">Project ID</th>
-            <th scope="col">Project Name</th>
-            <th scope="col">Client Name</th>
-            <th scope="col">Site Location</th>
-            <th scope="col">Project Status</th>
-            <th scope="col" className="rep-table__num">
+            <th scope="col" className="rep-table__th-project">
+              Project Name
+            </th>
+            <th scope="col" className="rep-table__th-status">
+              Project Status
+            </th>
+            <th scope="col" className="rep-table__th-num">
               Contract Value
             </th>
-            <th scope="col" className="rep-table__num">
-              Material Purchase Costs
-            </th>
-            <th scope="col" className="rep-table__num">
-              Other Project Expenses
-            </th>
-            <th scope="col" className="rep-table__num">
+            <th scope="col" className="rep-table__th-num">
               Total Project Costs
             </th>
-            <th scope="col" className="rep-table__num">
-              {isPeriodFiltered ? 'Contract − Period Costs' : 'Estimated Profit'}
+            <th scope="col" className="rep-table__th-num">
+              Estimated Profit
             </th>
-            <th scope="col" className="rep-table__num">
-              {isPeriodFiltered ? 'Period Margin' : 'Profit Margin'}
-            </th>
-            <th scope="col" className="rep-table__actions">
-              Actions
+            <th scope="col" className="rep-table__th-action">
+              Action
             </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => {
-            const health = getHealthIndicatorMeta(row.healthStatus)
-            const isNegativeProfit = row.estimatedProfit < 0
+            const numContract = Number(row.contractValue || 0)
+            const numCosts = Number(row.totalProjectCosts || 0)
+            const isOverBudget = numContract > 0 && numCosts > numContract
+            const profitClass = getProfitClass(row.estimatedProfit, row.contractValue)
 
             return (
               <tr key={row.id || row.projectId}>
-                <td>
-                  <button
-                    type="button"
-                    className="rep-code-link"
-                    onClick={() => onOpenProjectReport(row.projectId)}
-                  >
-                    {row.projectId}
-                  </button>
-                </td>
-
-                <td>
-                  <button
-                    type="button"
-                    className="rep-name-btn"
-                    onClick={() => onOpenProjectReport(row.projectId)}
-                  >
-                    {row.name}
-                  </button>
-                  <span className="rep-sub-line">{row.category}</span>
-                </td>
-
-                <td>{row.clientName || '—'}</td>
-
-                <td>
-                  <span
-                    className={row.siteLocation ? '' : 'rep-muted'}
-                    title={
-                      row.siteLocation ||
-                      'Site location is not persisted in the current Project schema'
-                    }
-                  >
-                    {row.siteLocation || '—'}
-                  </span>
-                </td>
-
-                <td>
-                  <span className={getStatusPillClass(row.status)}>
-                    {row.status}
-                  </span>
-                </td>
-
-                <td className="rep-table__num">
-                  {formatReportCurrency(row.contractValue)}
-                </td>
-
-                <td className="rep-table__num">
-                  {formatReportCurrency(row.materialPurchaseCosts)}
-                </td>
-
-                <td className="rep-table__num">
-                  {formatReportCurrency(row.otherProjectExpenses)}
-                </td>
-
-                <td className="rep-table__num">
-                  <strong>{formatReportCurrency(row.totalProjectCosts)}</strong>
-                  {isPeriodFiltered ? (
-                    <span className="rep-sub-line">
-                      Lifetime:{' '}
-                      {formatReportCurrency(row.lifetimeTotalProjectCosts)}
-                    </span>
-                  ) : null}
-                </td>
-
-                <td className="rep-table__num">
-                  <span
-                    className={`rep-profit-val ${
-                      isNegativeProfit ? 'rep-profit-val--loss' : ''
-                    }`}
-                  >
-                    {formatReportCurrency(row.estimatedProfit)}
-                  </span>
-                  <div>
-                    <span className={`rep-health ${health.className}`}>
-                      <span className="rep-health__dot" aria-hidden="true" />
-                      {health.label}
-                    </span>
+                {/* 1. Project Name */}
+                <td className="rep-table__td-project">
+                  <div className="rep-project-cell">
+                    <button
+                      type="button"
+                      className="rep-project-title-btn"
+                      onClick={() => onOpenProjectReport(row.projectId)}
+                      title={`View financial report for ${row.name}`}
+                    >
+                      {row.name}
+                    </button>
+                    {row.projectId ? (
+                      <span className="rep-project-code-tag">{row.projectId}</span>
+                    ) : null}
                   </div>
                 </td>
 
-                <td className="rep-table__num">
-                  <span
-                    className={
-                      row.marginApplicable &&
-                      row.profitMargin !== null &&
-                      row.profitMargin < 0
-                        ? 'rep-profit-val--loss'
-                        : ''
-                    }
-                  >
-                    {formatSafePercentage(row.profitMargin, row.marginApplicable)}
+                {/* 2. Project Status */}
+                <td className="rep-table__td-status">
+                  <span className={getStatusPillClass(row.status)}>
+                    {row.status || 'Active'}
                   </span>
                 </td>
 
-                <td className="rep-table__actions">
+                {/* 3. Contract Value */}
+                <td className="rep-table__td-num">
+                  <span className="rep-num-val">
+                    {formatReportCurrency(row.contractValue)}
+                  </span>
+                </td>
+
+                {/* 4. Total Project Costs */}
+                <td className="rep-table__td-num">
+                  <span className="rep-num-val rep-num-val--costs">
+                    {formatReportCurrency(row.totalProjectCosts)}
+                  </span>
+                </td>
+
+                {/* 5. Estimated Profit */}
+                <td className="rep-table__td-num">
+                  <div className="rep-profit-wrap">
+                    <span className={`rep-profit-val ${profitClass}`}>
+                      {formatReportCurrency(row.estimatedProfit)}
+                    </span>
+                    {isOverBudget ? (
+                      <span
+                        className="rep-overbudget-badge"
+                        title="Project costs exceed contract value"
+                      >
+                        Over budget
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+
+                {/* 6. Action */}
+                <td className="rep-table__td-action">
                   <button
                     type="button"
-                    className="rep-btn rep-btn--secondary rep-btn--sm"
+                    className="rep-btn-view"
                     onClick={() => onOpenProjectReport(row.projectId)}
+                    aria-label={`View detailed report for ${row.name}`}
                   >
-                    View Report
+                    <span>View</span>
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path
+                        d="M3.5 8H12.5M12.5 8L8.75 4.25M12.5 8L8.75 11.75"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
                   </button>
                 </td>
               </tr>

@@ -158,7 +158,7 @@ export function validateDashboardOverviewQuery(
     Object.assign(errors, monthlyCheck.errors);
   }
 
-  let recentLimit = 8;
+  let recentLimit = 7;
   if (query.recentLimit !== undefined && query.recentLimit !== '') {
     const parsed = Number(query.recentLimit);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 20) {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Dropdown } from '../../../components/common'
+import { Dropdown, DatePicker } from '../../../components/common'
 import {
   ActiveFilterChips,
   MobileFilterButton,
@@ -155,6 +155,24 @@ export function ExpensesFiltersBar({
               onChange={(event) => onSearchChange(event.target.value)}
               aria-label="Search expenses"
             />
+            {searchQuery ? (
+              <button
+                type="button"
+                className="exp-filters__clear-btn"
+                onClick={() => onSearchChange('')}
+                aria-label="Clear search query"
+                title="Clear search"
+              >
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M4 4L12 12M12 4L4 12"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            ) : null}
           </div>
 
           <div className="exp-filters__mobile-trigger">
@@ -190,27 +208,29 @@ export function ExpensesFiltersBar({
             />
           </div>
 
-          <label className="exp-filter-field">
+          <div className="exp-filter-field">
             <span className="exp-filter-field__label">From Date</span>
-            <input
-              type="date"
-              className="exp-date-input"
+            <DatePicker
               value={fromDate}
-              onChange={(event) => onFromDateChange(event.target.value)}
-              aria-label="Filter from expense date"
+              onChange={onFromDateChange}
+              maxDate={toDate || undefined}
+              variant="filter"
+              ariaLabel="Filter from expense date"
+              placeholder="From"
             />
-          </label>
+          </div>
 
-          <label className="exp-filter-field">
+          <div className="exp-filter-field">
             <span className="exp-filter-field__label">To Date</span>
-            <input
-              type="date"
-              className="exp-date-input"
+            <DatePicker
               value={toDate}
-              onChange={(event) => onToDateChange(event.target.value)}
-              aria-label="Filter to expense date"
+              onChange={onToDateChange}
+              minDate={fromDate || undefined}
+              variant="filter"
+              ariaLabel="Filter to expense date"
+              placeholder="To"
             />
-          </label>
+          </div>
 
           <div className="exp-filter-field">
             <span className="exp-filter-field__label">Status</span>
@@ -291,25 +311,27 @@ export function ExpensesFiltersBar({
             />
           </div>
 
-          <label className="exp-field">
+          <div className="exp-field">
             <span className="exp-field__label">From Date</span>
-            <input
-              type="date"
-              className="exp-input"
+            <DatePicker
+              variant="form"
               value={fromDate}
-              onChange={(event) => onFromDateChange(event.target.value)}
+              onChange={onFromDateChange}
+              maxDate={toDate || undefined}
+              placeholder="Select from date"
             />
-          </label>
+          </div>
 
-          <label className="exp-field">
+          <div className="exp-field">
             <span className="exp-field__label">To Date</span>
-            <input
-              type="date"
-              className="exp-input"
+            <DatePicker
+              variant="form"
               value={toDate}
-              onChange={(event) => onToDateChange(event.target.value)}
+              onChange={onToDateChange}
+              minDate={fromDate || undefined}
+              placeholder="Select to date"
             />
-          </label>
+          </div>
 
           <div className="exp-field">
             <span className="exp-field__label">Status</span>

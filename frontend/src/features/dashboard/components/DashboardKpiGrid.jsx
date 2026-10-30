@@ -30,7 +30,7 @@ export function DashboardKpiGrid({ kpis, isAdmin, onNavigate }) {
     >
       <a
         href="/projects"
-        className="sts-dash-kpi-card"
+        className="sts-dash-kpi-card sts-dash-kpi-card--projects sts-dash-kpi-card--desktop-only"
         onClick={(e) => handleCardLink(e, '/projects')}
       >
         <div className="sts-dash-kpi-card__top">
@@ -66,7 +66,7 @@ export function DashboardKpiGrid({ kpis, isAdmin, onNavigate }) {
 
       <a
         href="/projects"
-        className="sts-dash-kpi-card"
+        className="sts-dash-kpi-card sts-dash-kpi-card--contract"
         onClick={(e) => handleCardLink(e, '/projects')}
       >
         <div className="sts-dash-kpi-card__top">
@@ -99,7 +99,7 @@ export function DashboardKpiGrid({ kpis, isAdmin, onNavigate }) {
 
       <a
         href={costTargetRoute}
-        className="sts-dash-kpi-card"
+        className="sts-dash-kpi-card sts-dash-kpi-card--costs"
         onClick={(e) => handleCardLink(e, costTargetRoute)}
       >
         <div className="sts-dash-kpi-card__top">
@@ -137,7 +137,7 @@ export function DashboardKpiGrid({ kpis, isAdmin, onNavigate }) {
 
       <a
         href={profitTargetRoute}
-        className={`sts-dash-kpi-card${profitNegative ? ' sts-dash-kpi-card--loss' : ''}`}
+        className={`sts-dash-kpi-card sts-dash-kpi-card--profit${profitNegative ? ' sts-dash-kpi-card--loss' : ''}`}
         onClick={(e) => handleCardLink(e, profitTargetRoute)}
       >
         <div className="sts-dash-kpi-card__top">

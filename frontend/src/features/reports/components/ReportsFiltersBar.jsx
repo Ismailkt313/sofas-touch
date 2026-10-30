@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Dropdown } from '../../../components/common'
+import { Dropdown, DatePicker } from '../../../components/common'
 import {
   ActiveFilterChips,
   MobileFilterButton,
@@ -151,29 +151,31 @@ export function ReportsFiltersBar({
             />
           </div>
 
-          <label className="rep-filter-field">
+          <div className="rep-filter-field">
             <span className="rep-filter-field__label">
               Transactions From
             </span>
-            <input
-              type="date"
-              className="rep-date-input"
+            <DatePicker
               value={fromDate}
-              onChange={(e) => onFromDateChange(e.target.value)}
-              aria-label="Filter transactions from date"
+              onChange={onFromDateChange}
+              maxDate={toDate || undefined}
+              variant="filter"
+              ariaLabel="Filter transactions from date"
+              placeholder="From"
             />
-          </label>
+          </div>
 
-          <label className="rep-filter-field">
+          <div className="rep-filter-field">
             <span className="rep-filter-field__label">Transactions To</span>
-            <input
-              type="date"
-              className="rep-date-input"
+            <DatePicker
               value={toDate}
-              onChange={(e) => onToDateChange(e.target.value)}
-              aria-label="Filter transactions to date"
+              onChange={onToDateChange}
+              minDate={fromDate || undefined}
+              variant="filter"
+              ariaLabel="Filter transactions to date"
+              placeholder="To"
             />
-          </label>
+          </div>
 
           <div className="rep-filter-field">
             <span className="rep-filter-field__label">Sort Projects By</span>
@@ -255,25 +257,27 @@ export function ReportsFiltersBar({
             />
           </div>
 
-          <label className="rep-filter-field">
+          <div className="rep-filter-field">
             <span className="rep-filter-field__label">Transactions From</span>
-            <input
-              type="date"
-              className="rep-date-input"
+            <DatePicker
+              variant="form"
               value={fromDate}
-              onChange={(e) => onFromDateChange(e.target.value)}
+              onChange={onFromDateChange}
+              maxDate={toDate || undefined}
+              placeholder="Select from date"
             />
-          </label>
+          </div>
 
-          <label className="rep-filter-field">
+          <div className="rep-filter-field">
             <span className="rep-filter-field__label">Transactions To</span>
-            <input
-              type="date"
-              className="rep-date-input"
+            <DatePicker
+              variant="form"
               value={toDate}
-              onChange={(e) => onToDateChange(e.target.value)}
+              onChange={onToDateChange}
+              minDate={fromDate || undefined}
+              placeholder="Select to date"
             />
-          </label>
+          </div>
 
           <div className="rep-filter-field">
             <span className="rep-filter-field__label">Sort By</span>

@@ -72,43 +72,6 @@ export function ProjectsSummaryStrip({
         })}
       </div>
 
-      {adminAccess && automationState?.status === 'ready' ? (
-        <div
-          className="projects-automation-bar"
-          role="region"
-          aria-label="Automation monitoring summary"
-        >
-          <div className="projects-automation-bar__metrics">
-            <span
-              className={`projects-automation-chip${
-                activeAlertsCount > 0
-                  ? ' projects-automation-chip--alert'
-                  : ' projects-automation-chip--calm'
-              }`}
-            >
-              <strong>{activeAlertsCount}</strong> active cost threshold{' '}
-              {activeAlertsCount === 1 ? 'alert' : 'alerts'}
-            </span>
-            <span
-              className={`projects-automation-chip${
-                activeWarningsCount > 0
-                  ? ' projects-automation-chip--warning'
-                  : ' projects-automation-chip--calm'
-              }`}
-            >
-              <strong>{activeWarningsCount}</strong> inactive project{' '}
-              {activeWarningsCount === 1 ? 'warning' : 'warnings'} (
-              {automationState.inactivityThresholdDays}d window)
-            </span>
-          </div>
-          {!automationState.schedulerConfigured ? (
-            <span className="projects-automation-bar__note">
-              Inactivity checks run automatically on Admin view load (background
-              scheduler not yet configured).
-            </span>
-          ) : null}
-        </div>
-      ) : null}
     </section>
   )
 }

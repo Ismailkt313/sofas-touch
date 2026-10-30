@@ -3,7 +3,12 @@ import {
   formatDashboardDate,
 } from '../utils/dashboardFormatters'
 
-export function RecentTransactionsCard({ transactions = [], onNavigate }) {
+export function RecentTransactionsCard({
+  transactions = [],
+  maxItems = 7,
+  onNavigate,
+}) {
+  const displayedTransactions = maxItems ? transactions.slice(0, maxItems) : transactions
   const handleLinkClick = (event, path) => {
     if (
       event.button === 0 &&
@@ -79,7 +84,7 @@ export function RecentTransactionsCard({ transactions = [], onNavigate }) {
           className="sts-dash-tx-list"
           aria-label="Recent purchases and expenses"
         >
-          {transactions.map((tx) => {
+          {displayedTransactions.map((tx) => {
             const isPurchase = tx.type === 'purchase'
             const isCancelled = tx.status === 'cancelled'
 

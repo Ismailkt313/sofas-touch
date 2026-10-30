@@ -1,3 +1,4 @@
+import { useListingState } from '../../../services/navigationState'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   createManagedUser,
@@ -8,6 +9,14 @@ import {
 } from '../services/userManagementService'
 
 const DEFAULT_PAGE_SIZE = 5
+const USER_LISTING_SCHEMA = {
+  page: { type: 'number', default: 1, min: 1 },
+  search: { type: 'string', default: '' },
+  role: { type: 'string', default: 'all' },
+  status: { type: 'string', default: 'all' },
+  view: { type: 'string', default: '' },
+}
+
 
 export function useUsersManagement({ currentUser }) {
   const [users, setUsers] = useState([])
@@ -17,11 +26,14 @@ export function useUsersManagement({ currentUser }) {
   const [error, setError] = useState('')
   const [feedbackBanner, setFeedbackBanner] = useState(null)
 
-  // Search & Filter states
-  const [searchQuery, setSearchQuery] = useState('')
-  const [roleFilter, setRoleFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [currentPage, setCurrentPage] = useState(1)
+  // Search & Filter states synced with URL
+  const { values, setValue, resetAll, clampPage } = useListingState(USER_LISTING_SCHEMA, {
+    routeKey: 'users',
+  })
+  const searchQuery = values.search
+  const roleFilter = values.role
+  const statusFilter = values.status
+  const currentPage = values.page
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -111,18 +123,19 @@ export function useUsersManagement({ currentUser }) {
   )
 
   const handleSearchChange = (value) => {
-    setSearchQuery(value)
-    setCurrentPage(1)
+    setValue('search', value, { resetPage: true })
   }
 
   const handleRoleFilterChange = (value) => {
-    setRoleFilter(value)
-    setCurrentPage(1)
+    setValue('role', value, { resetPage: true })
   }
 
   const handleStatusFilterChange = (value) => {
-    setStatusFilter(value)
-    setCurrentPage(1)
+    setValue('status', value, { resetPage: true })
+  }
+
+  const setCurrentPage = (pageNumber) => {
+    setValue('page', pageNumber, { push: true })
   }
 
   const hasActiveFilters =
@@ -131,10 +144,7 @@ export function useUsersManagement({ currentUser }) {
     statusFilter !== 'all'
 
   const resetFilters = () => {
-    setSearchQuery('')
-    setRoleFilter('all')
-    setStatusFilter('all')
-    setCurrentPage(1)
+    resetAll()
   }
 
   const filteredUsers = useMemo(() => {
@@ -291,6 +301,23 @@ export function useUsersManagement({ currentUser }) {
     }
   }
 
+  useEffect(() => {
+    if (values.view) {
+      const match = users.find((u) => String(u.id) === String(values.view))
+      if (match) {
+        setViewingUser(match)
+      }
+    } else {
+      setViewingUser(null)
+    }
+  }, [values.view, users])
+
+  useEffect(() => {
+    if (totalPages >= 1 && currentPage > totalPages) {
+      clampPage(totalPages)
+    }
+  }, [totalPages, currentPage, clampPage])
+
   return {
     users,
     paginatedUsers,
@@ -331,8 +358,16 @@ export function useUsersManagement({ currentUser }) {
     handleUserCreated,
 
     viewingUser,
-    openViewModal: (user) => setViewingUser(user),
-    closeViewModal: () => setViewingUser(null),
+    openViewModal: (user) => {
+      setViewingUser(user)
+      if (user?.id) {
+        setValue('view', String(user.id), { push: true })
+      }
+    },
+    closeViewModal: () => {
+      setViewingUser(null)
+      setValue('view', '', { push: false })
+    },
 
     editingUser,
     openEditModal: (user) => setEditingUser(user),

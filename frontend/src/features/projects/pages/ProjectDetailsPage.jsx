@@ -416,15 +416,8 @@ export function ProjectDetailsPage({
               >
                 Financial Summary
               </h2>
-              <span className="project-estimate-badge">
-                Estimated Figures &bull; Unaudited
-              </span>
             </div>
-            <p className="project-section-header__subtitle">
-              Authoritative figures computed by the backend financial summary
-              API. Profitability values represent operational estimates, not
-              audited accounting profit.
-            </p>
+            
           </div>
 
           {financialSummary?.financialSummaryUpdatedAt ? (

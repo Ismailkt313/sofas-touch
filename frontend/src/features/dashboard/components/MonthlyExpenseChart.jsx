@@ -38,7 +38,7 @@ export function MonthlyExpenseChart({ buckets = [] }) {
   const plotHeight = 168
   const chartBottom = 38
   const svgWidth = Math.max(
-    420,
+    320,
     chartPaddingLeft + scale.bars.length * colWidth + chartPaddingRight,
   )
   const svgHeight = chartTop + plotHeight + chartBottom
@@ -104,6 +104,7 @@ export function MonthlyExpenseChart({ buckets = [] }) {
       <div className="sts-dash-monthly-svg-scroll">
         <svg
           className="sts-dash-monthly-svg"
+          preserveAspectRatio="xMidYMid meet"
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
           role="img"
           aria-label="Monthly material purchases versus other expenses chart"

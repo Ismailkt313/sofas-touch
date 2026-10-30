@@ -32,6 +32,13 @@
   margin-bottom: 0.22rem;
 }
 
+.sts-dash-hero__title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
 .sts-dash-hero__title {
   margin: 0;
   font-family: var(--sts-font-display);
@@ -39,6 +46,49 @@
   font-weight: 600;
   color: var(--sts-charcoal);
   line-height: 1.18;
+}
+
+.sts-dash-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #dfd3c3;
+  border-radius: 8px;
+  background-color: #ffffff;
+  color: var(--sts-charcoal);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sts-dash-refresh-btn:hover:not(:disabled) {
+  background-color: #f9f5ef;
+  border-color: #cbb8a2;
+  color: var(--sts-walnut);
+}
+
+.sts-dash-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sts-dash-refresh-btn svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.2s ease;
+}
+
+.sts-dash-refresh-btn--spinning svg {
+  animation: sts-dash-spin 0.8s linear infinite;
+}
+
+@keyframes sts-dash-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .sts-dash-hero__sub {
@@ -110,20 +160,134 @@
 
 .sts-dash-kpi-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.85rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
 }
 
-@media (min-width: 360px) {
-  .sts-dash-kpi-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+/* Tablet & Mobile: Hide Total Projects to focus on financial metrics */
+@media (max-width: 1023px) {
+  .sts-dash-kpi-card {
+    padding: 0.75rem 0.65rem !important;
+    gap: 0.35rem !important;
+    border-radius: 12px !important;
+    border: 1px solid #ebdcd0 !important;
+    background-color: #ffffff !important;
+    box-shadow: 0 1px 4px rgba(36, 24, 16, 0.03) !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+  }
+
+  .sts-dash-kpi-card__top {
+    width: 100% !important;
+    margin-bottom: 0.15rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .sts-dash-kpi-card__label {
+    font-size: clamp(0.64rem, 2.2vw, 0.72rem) !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+    color: var(--sts-muted) !important;
+    line-height: 1.25 !important;
+    white-space: normal !important;
+    margin: 0 !important;
+  }
+
+  .sts-dash-kpi-card__icon {
+    display: none !important;
+  }
+
+  .sts-dash-kpi-card__value {
+    font-size: clamp(0.92rem, 3.4vw, 1.2rem) !important;
+    font-weight: 700 !important;
+    font-variant-numeric: tabular-nums !important;
+    color: var(--sts-charcoal) !important;
+    line-height: 1.15 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    letter-spacing: -0.01em !important;
+  }
+
+  .sts-dash-kpi-card__meta,
+  .sts-dash-kpi-card__pills {
+    display: none !important;
+  }
+
+  /* Strict rule targeting Total Projects card placed AFTER .sts-dash-kpi-card */
+  .sts-dash-kpi-card.sts-dash-kpi-card--projects,
+  .sts-dash-kpi-card.sts-dash-kpi-card--desktop-only,
+  .sts-dash-kpi-grid > .sts-dash-kpi-card--projects,
+  .sts-dash-kpi-grid > .sts-dash-kpi-card--desktop-only {
+    display: none !important;
   }
 }
 
-@media (min-width: 1180px) {
+/* Tablet (768px - 1023px): 3 columns in one row */
+@media (min-width: 768px) and (max-width: 1023px) {
   .sts-dash-kpi-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0.75rem !important;
+  }
+}
+
+/* Mobile (<= 767px): 2 columns, with Estimated Profit spanning full width below */
+@media (max-width: 767px) {
+  .sts-dash-kpi-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.6rem !important;
+  }
+
+  .sts-dash-kpi-card.sts-dash-kpi-card--profit {
+    grid-column: 1 / -1 !important;
+    background: linear-gradient(135deg, #fdfbf7 0%, #ffffff 100%) !important;
+  }
+
+  .sts-dash-kpi-card--profit .sts-dash-kpi-card__top {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .sts-dash-kpi-card--profit .sts-dash-kpi-card__est-tag {
+    display: inline-block !important;
+    font-size: 0.62rem !important;
+    padding: 0.1rem 0.45rem !important;
+    border-radius: 999px !important;
+    background-color: #f1eae0 !important;
+    color: #6a5745 !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.02em !important;
+  }
+
+  .sts-dash-kpi-card:not(.sts-dash-kpi-card--profit) .sts-dash-kpi-card__est-tag {
+    display: none !important;
+  }
+
+  .sts-dash-kpi-card--profit .sts-dash-kpi-card__value {
+    font-size: clamp(1.1rem, 4.4vw, 1.4rem) !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .sts-dash-kpi-grid {
+    gap: 0.45rem !important;
+  }
+
+  .sts-dash-kpi-card {
+    padding: 0.65rem 0.5rem !important;
+  }
+
+  .sts-dash-kpi-card__label {
+    font-size: 0.62rem !important;
   }
 }
 
@@ -1372,16 +1536,192 @@
 }
 
 @media (max-width: 767px) {
-  .sts-dash-card {
-    padding: 0.95rem;
+  .sts-dash-page {
+    gap: 0.95rem !important;
+    padding-bottom: 5.5rem !important;
+  }
+
+  .sts-dash-hero {
+    gap: 0.35rem !important;
+    margin-bottom: 0.15rem !important;
+  }
+
+  .sts-dash-hero__eyebrow {
+    font-size: 0.64rem !important;
+    letter-spacing: 0.07em !important;
+    margin-bottom: 0.15rem !important;
+  }
+
+  .sts-dash-hero__title {
+    font-size: 1.25rem !important;
+    line-height: 1.2 !important;
   }
 
   .sts-dash-hero__actions {
-    width: 100%;
+    display: none !important;
   }
 
-  .sts-dash-hero__actions .sts-dash-btn {
-    flex: 1 1 auto;
+  /* Clean cards with soft luxury shadows and unified padding */
+  .sts-dash-card {
+    padding: 0.9rem 0.85rem !important;
+    gap: 0.75rem !important;
+    border-radius: 14px !important;
+    border: 1px solid #e4dbd0 !important;
+    box-shadow: 0 1px 6px rgba(36, 24, 16, 0.03) !important;
+  }
+
+  .sts-dash-card__header {
+    margin-bottom: 0.15rem !important;
+    gap: 0.45rem !important;
+  }
+
+  /* Tame noisy card eyebrows on mobile to keep focus on key content */
+  .sts-dash-card__eyebrow {
+    display: none !important;
+  }
+
+  .sts-dash-card__title {
+    font-size: 1.05rem !important;
+    font-weight: 600 !important;
+    color: var(--sts-charcoal) !important;
+  }
+
+  .sts-dash-card__subtitle {
+    font-size: 0.74rem !important;
+    line-height: 1.35 !important;
+    margin-top: 0.15rem !important;
+    color: var(--sts-muted) !important;
+  }
+
+  .sts-dash-card__header-links {
+    gap: 0.35rem !important;
+  }
+
+  .sts-dash-card__header-links .sts-dash-link-btn {
+    min-height: 30px !important;
+    padding: 0.25rem 0.65rem !important;
+    font-size: 0.74rem !important;
+    border-radius: 7px !important;
+  }
+
+  /* Sleek 3-stat summary strip with uniform height and compact micro-labels */
+  .sts-dash-monthly-summary {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0.45rem !important;
+    margin-bottom: 0.45rem !important;
+  }
+
+  .sts-dash-mini-stat {
+    padding: 0.55rem 0.45rem !important;
+    border-radius: 10px !important;
+    min-width: 0 !important;
+    background-color: #faf7f2 !important;
+    border: 1px solid #ebdcd0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    gap: 0.22rem !important;
+  }
+
+  .sts-dash-mini-stat--total {
+    background-color: #f5ede1 !important;
+    border-color: #dfcfbc !important;
+  }
+
+  .sts-dash-mini-stat__label {
+    font-size: clamp(0.58rem, 2vw, 0.64rem) !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.03em !important;
+    text-transform: uppercase !important;
+    color: var(--sts-muted) !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .sts-dash-mini-stat__val {
+    font-family: var(--sts-font-display) !important;
+    font-size: clamp(0.76rem, 2.8vw, 0.98rem) !important;
+    font-weight: 700 !important;
+    font-variant-numeric: tabular-nums !important;
+    color: var(--sts-charcoal) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    line-height: 1.15 !important;
+  }
+
+  /* Hide auxiliary description subtext on mobile to maintain clean equal heights */
+  .sts-dash-mini-stat__sub {
+    display: none !important;
+  }
+
+  .sts-dash-monthly-chart {
+    padding: 0.75rem 0.65rem !important;
+    border-radius: 10px !important;
+    gap: 0.55rem !important;
+  }
+
+  .sts-dash-chart-legend {
+    gap: 0.55rem !important;
+  }
+
+  .sts-dash-chart-legend__item {
+    font-size: 0.7rem !important;
+    gap: 0.3rem !important;
+  }
+
+  .sts-dash-chart-legend__swatch {
+    width: 9px !important;
+    height: 9px !important;
+  }
+
+  .sts-dash-perf-chart__scale-note {
+    font-size: 0.7rem !important;
+  }
+
+  /* Streamlined chart tooltip on mobile */
+  .sts-dash-chart-tooltip {
+    padding: 0.45rem 0.6rem !important;
+    border-radius: 8px !important;
+    gap: 0.35rem !important;
+  }
+
+  .sts-dash-chart-tooltip__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.35rem 0.5rem !important;
+  }
+
+  .sts-dash-chart-tooltip__metrics span {
+    font-size: 0.62rem !important;
+  }
+
+  .sts-dash-chart-tooltip__metrics strong {
+    font-size: 0.74rem !important;
+  }
+
+  .sts-dash-monthly-svg {
+    min-width: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: 180px !important;
+  }
+
+  .sts-dash-monthly-svg-scroll {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+
+  .sts-dash-monthly-svg-scroll::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .sts-dash-card__footer-links {
+    padding-top: 0.15rem !important;
+    gap: 0.85rem !important;
   }
 
   .sts-dash-table-wrap {
@@ -1401,25 +1741,208 @@
     flex: 1 1 100%;
   }
 
-  .sts-dash-tx-row,
+  /* Polished, compact 2-column mobile transaction rows - eliminates cluttered dashed split */
+  .sts-dash-tx-row {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.65rem !important;
+    padding: 0.65rem 0.75rem !important;
+    border-radius: 10px !important;
+    background-color: #ffffff !important;
+    border: 1px solid #ebdcd0 !important;
+    box-shadow: 0 1px 3px rgba(36, 24, 16, 0.02) !important;
+    text-decoration: none !important;
+    min-height: auto !important;
+  }
+
+  .sts-dash-tx-row:active {
+    background-color: #fbf7f1 !important;
+  }
+
+  .sts-dash-tx-row__left {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    gap: 0.15rem !important;
+  }
+
+  .sts-dash-tx-row__badges {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.3rem !important;
+    margin-bottom: 0.1rem !important;
+  }
+
+  .sts-dash-tx-type {
+    font-size: 0.62rem !important;
+    padding: 0.08rem 0.35rem !important;
+    border-radius: 4px !important;
+    letter-spacing: 0.02em !important;
+  }
+
+  .sts-dash-code-tag {
+    font-size: 0.64rem !important;
+    padding: 0.08rem 0.35rem !important;
+    border-radius: 4px !important;
+  }
+
+  /* Redundant Active pill hidden on mobile; Cancelled stays visible */
+  .sts-dash-tx-row .sts-dash-pill--success {
+    display: none !important;
+  }
+
+  .sts-dash-tx-row .sts-dash-pill--danger {
+    font-size: 0.62rem !important;
+    padding: 0.08rem 0.35rem !important;
+  }
+
+  .sts-dash-tx-row__title {
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+    color: var(--sts-charcoal) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    margin: 0 !important;
+  }
+
+  .sts-dash-tx-row__sub {
+    font-size: 0.7rem !important;
+    color: var(--sts-muted) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .sts-dash-tx-row__right {
+    flex: 0 0 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+    gap: 0.12rem !important;
+    border-top: none !important;
+    padding-top: 0 !important;
+    width: auto !important;
+  }
+
+  .sts-dash-tx-row__amount {
+    font-size: 0.86rem !important;
+    font-weight: 700 !important;
+    color: var(--sts-charcoal) !important;
+    font-variant-numeric: tabular-nums !important;
+    white-space: nowrap !important;
+  }
+
+  .sts-dash-tx-row__open {
+    display: none !important;
+  }
+
+  /* Compact Stock Alert rows matching mobile transaction styling */
   .sts-dash-stock-row {
-    flex-direction: column;
-    align-items: flex-start;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.65rem !important;
+    padding: 0.65rem 0.75rem !important;
+    border-radius: 10px !important;
+    background-color: #ffffff !important;
+    border: 1px solid #ebdcd0 !important;
+    box-shadow: 0 1px 3px rgba(36, 24, 16, 0.02) !important;
+    text-decoration: none !important;
+    min-height: auto !important;
   }
 
-  .sts-dash-tx-row__right,
+  .sts-dash-stock-row__left {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    gap: 0.15rem !important;
+  }
+
+  .sts-dash-stock-row__top {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.35rem !important;
+  }
+
+  .sts-dash-stock-row__name {
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .sts-dash-stock-row__meta {
+    font-size: 0.7rem !important;
+    color: var(--sts-muted) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
   .sts-dash-stock-row__right {
-    width: 100%;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    padding-top: 0.35rem;
-    border-top: 1px dashed #ece2d6;
+    flex: 0 0 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+    gap: 0.12rem !important;
+    border-top: none !important;
+    padding-top: 0 !important;
+    width: auto !important;
   }
 
-  .sts-dash-row-link,
-  .sts-dash-link-btn {
-    min-height: 44px;
+  .sts-dash-stock-row__qty {
+    font-size: 0.86rem !important;
+    font-weight: 700 !important;
+    white-space: nowrap !important;
+    font-variant-numeric: tabular-nums !important;
+  }
+
+  .sts-dash-stock-row .sts-dash-tx-row__open {
+    display: none !important;
+  }
+
+  .sts-dash-stock-summary {
+    gap: 0.35rem !important;
+  }
+
+  .sts-dash-stock-summary .sts-dash-pill {
+    font-size: 0.66rem !important;
+    padding: 0.12rem 0.45rem !important;
+  }
+
+  /* Compact Pending Approvals on mobile */
+  .sts-dash-approvals-item {
+    padding: 0.55rem 0.65rem !important;
+    border-radius: 9px !important;
+  }
+
+  .sts-dash-approvals-item__info strong {
+    font-size: 0.8rem !important;
+  }
+
+  .sts-dash-approvals-item__info span {
+    font-size: 0.7rem !important;
+  }
+
+  .sts-dash-approvals-item__date {
+    font-size: 0.68rem !important;
+  }
+
+  .sts-dash-approvals-footer .sts-dash-link-btn {
+    min-height: 38px !important;
+    font-size: 0.8rem !important;
+    border-radius: 8px !important;
+  }
+
+  .sts-dash-bottom-grid,
+  .sts-dash-bottom-grid__main,
+  .sts-dash-bottom-grid__side {
+    gap: 0.95rem !important;
   }
 }
 

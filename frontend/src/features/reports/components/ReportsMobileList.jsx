@@ -1,128 +1,97 @@
-import {
-  formatReportCurrency,
-  formatSafePercentage,
-  getHealthIndicatorMeta,
-} from '../utils/reportFormatters'
+import { formatReportCurrency } from '../utils/reportFormatters'
 
-export function ReportsMobileList({ rows, period, onOpenProjectReport }) {
-  const isPeriodFiltered = Boolean(period?.isDateFiltered)
+function getStatusPillClass(status) {
+  const norm = String(status || '').toLowerCase()
+  if (norm === 'completed') return 'rep-status-pill rep-status-pill--completed'
+  if (norm.includes('progress')) return 'rep-status-pill rep-status-pill--progress'
+  if (norm.includes('review')) return 'rep-status-pill rep-status-pill--review'
+  if (norm === 'upcoming') return 'rep-status-pill rep-status-pill--upcoming'
+  return 'rep-status-pill'
+}
 
+function getProfitClass(estimatedProfit, contractValue) {
+  const numProfit = Number(estimatedProfit || 0)
+  const numContract = Number(contractValue || 0)
+  if (numContract === 0 && numProfit === 0) return 'rep-profit-val--neutral'
+  if (numProfit > 0) return 'rep-profit-val--positive'
+  if (numProfit < 0) return 'rep-profit-val--loss'
+  return 'rep-profit-val--neutral'
+}
+
+export function ReportsMobileList({ rows, onOpenProjectReport }) {
   return (
     <div className="rep-mobile-list">
       {rows.map((row) => {
-        const health = getHealthIndicatorMeta(row.healthStatus)
-        const isNegativeProfit = row.estimatedProfit < 0
+        const numContract = Number(row.contractValue || 0)
+        const numCosts = Number(row.totalProjectCosts || 0)
+        const isOverBudget = numContract > 0 && numCosts > numContract
+        const profitClass = getProfitClass(row.estimatedProfit, row.contractValue)
 
         return (
           <article key={row.id || row.projectId} className="rep-mobile-card">
             <div className="rep-mobile-card__top">
-              <div style={{ minWidth: 0 }}>
+              <div className="rep-mobile-card__titles">
                 <button
                   type="button"
-                  className="rep-code-link"
+                  className="rep-project-title-btn"
                   onClick={() => onOpenProjectReport(row.projectId)}
                 >
-                  {row.projectId}
+                  {row.name}
                 </button>
-                <div style={{ marginTop: '0.12rem' }}>
-                  <button
-                    type="button"
-                    className="rep-name-btn"
-                    onClick={() => onOpenProjectReport(row.projectId)}
-                  >
-                    {row.name}
-                  </button>
-                </div>
+                {row.projectId ? (
+                  <span className="rep-project-code-tag">{row.projectId}</span>
+                ) : null}
               </div>
 
-              <span className="rep-status-pill">{row.status}</span>
+              <span className={getStatusPillClass(row.status)}>
+                {row.status || 'Active'}
+              </span>
             </div>
 
             <div className="rep-mobile-card__metrics">
               <div>
-                <span className="rep-mobile-metric__label">Contract</span>
+                <span className="rep-mobile-metric__label">Contract Value</span>
                 <span className="rep-mobile-metric__val">
                   {formatReportCurrency(row.contractValue)}
                 </span>
               </div>
 
               <div>
-                <span className="rep-mobile-metric__label">
-                  {isPeriodFiltered ? 'Period Costs' : 'Total Costs'}
-                </span>
+                <span className="rep-mobile-metric__label">Total Costs</span>
                 <span className="rep-mobile-metric__val">
                   {formatReportCurrency(row.totalProjectCosts)}
                 </span>
               </div>
 
               <div>
-                <span className="rep-mobile-metric__label">
-                  {isPeriodFiltered ? 'Net Balance' : 'Est. Profit'}
-                </span>
-                <span
-                  className={`rep-mobile-metric__val ${
-                    isNegativeProfit ? 'rep-profit-val--loss' : ''
-                  }`}
-                >
-                  {formatReportCurrency(row.estimatedProfit)}
-                </span>
+                <span className="rep-mobile-metric__label">Estimated Profit</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.15rem' }}>
+                  <span className={`rep-mobile-metric__val ${profitClass}`}>
+                    {formatReportCurrency(row.estimatedProfit)}
+                  </span>
+                  {isOverBudget ? (
+                    <span className="rep-overbudget-badge">Over budget</span>
+                  ) : null}
+                </div>
               </div>
             </div>
 
-            <details className="rep-mobile-details">
-              <summary>More details (Client, Breakdown &amp; Margin)</summary>
-              <div className="rep-mobile-details__grid">
-                <div>
-                  <span className="rep-muted">Client: </span>
-                  <strong>{row.clientName || '—'}</strong>
-                </div>
-                <div>
-                  <span className="rep-muted">Site Location: </span>
-                  <span>{row.siteLocation || '—'}</span>
-                </div>
-                <div>
-                  <span className="rep-muted">Material Purchases: </span>
-                  <strong>
-                    {formatReportCurrency(row.materialPurchaseCosts)}
-                  </strong>
-                </div>
-                <div>
-                  <span className="rep-muted">Other Expenses: </span>
-                  <strong>
-                    {formatReportCurrency(row.otherProjectExpenses)}
-                  </strong>
-                </div>
-                <div>
-                  <span className="rep-muted">Profit Margin: </span>
-                  <strong>
-                    {formatSafePercentage(
-                      row.profitMargin,
-                      row.marginApplicable,
-                    )}
-                  </strong>
-                </div>
-                {isPeriodFiltered ? (
-                  <div>
-                    <span className="rep-muted">Lifetime Profit: </span>
-                    <strong>
-                      {formatReportCurrency(row.lifetimeEstimatedProfit)}
-                    </strong>
-                  </div>
-                ) : null}
-              </div>
-            </details>
-
             <div className="rep-mobile-card__actions">
-              <span className={`rep-health ${health.className}`}>
-                <span className="rep-health__dot" aria-hidden="true" />
-                {health.label}
-              </span>
               <button
                 type="button"
-                className="rep-btn rep-btn--secondary rep-btn--sm"
+                className="rep-btn-view rep-btn-view--mobile"
                 onClick={() => onOpenProjectReport(row.projectId)}
               >
-                View Report
+                <span>View Detailed Report</span>
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M3.5 8H12.5M12.5 8L8.75 4.25M12.5 8L8.75 11.75"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
             </div>
           </article>

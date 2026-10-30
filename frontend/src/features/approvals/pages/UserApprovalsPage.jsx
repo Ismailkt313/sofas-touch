@@ -1,3 +1,4 @@
+import { useListingState } from '../../../services/navigationState'
 import { useCallback, useMemo, useState } from 'react'
 import { ApprovalDetailsModal } from '../components/ApprovalDetailsModal'
 import { ApprovalFiltersBar } from '../components/ApprovalFiltersBar'
@@ -8,6 +9,11 @@ import { ConfirmApprovalActionModal } from '../components/ConfirmApprovalActionM
 import { useApprovalsContext } from '../context/ApprovalsContext'
 import '../styles/approvals.css'
 
+
+const APPROVALS_LISTING_SCHEMA = {
+  search: { type: 'string', default: '' },
+  status: { type: 'string', default: 'pending' },
+}
 export function UserApprovalsPage({ currentUser, onNavigate }) {
   const {
     requests,
@@ -25,8 +31,24 @@ export function UserApprovalsPage({ currentUser, onNavigate }) {
     clearFocusedApprovalRequest,
   } = useApprovalsContext()
 
-  const [statusFilter, setStatusFilter] = useState('pending')
-  const [searchQuery, setSearchQuery] = useState('')
+  const { values, setValue, resetAll } = useListingState(APPROVALS_LISTING_SCHEMA, {
+    routeKey: 'user-approvals',
+  })
+  const statusFilter = values.status
+  const [searchQuery, setSearchQuery] = useState(values.search)
+
+  useEffect(() => {
+    setSearchQuery(values.search)
+  }, [values.search])
+
+  const setStatusFilter = useCallback((val) => {
+    setValue('status', val)
+  }, [setValue])
+
+  const handleSearchChange = useCallback((val) => {
+    setSearchQuery(val)
+    setValue('search', val)
+  }, [setValue])
   const [viewingRequestId, setViewingRequestId] = useState(null)
   const [confirmTarget, setConfirmTarget] = useState(null)
   const [processingRequestId, setProcessingRequestId] = useState(null)
@@ -48,8 +70,8 @@ export function UserApprovalsPage({ currentUser, onNavigate }) {
 
   const resetFilters = useCallback(() => {
     setSearchQuery('')
-    setStatusFilter('pending')
-  }, [])
+    resetAll()
+  }, [resetAll])
 
   const statusFilteredRequests = useMemo(() => {
     if (statusFilter === 'all') {
@@ -323,7 +345,7 @@ export function UserApprovalsPage({ currentUser, onNavigate }) {
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
           searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
+          onSearchChange={handleSearchChange}
           counts={counts}
           filteredCount={filteredRequests.length}
           hasActiveFilters={hasActiveFilters}

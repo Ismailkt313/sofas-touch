@@ -448,26 +448,73 @@
 
 .sts-activity-mobile-trigger-wrap {
   position: fixed;
-  right: 0.85rem;
-  bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
+  right: 0.75rem;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   z-index: 34;
 }
 
 .sts-activity-mobile-trigger {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  min-height: 44px;
-  padding: 0.5rem 0.9rem;
-  border-radius: 999px;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
   border: 1px solid rgba(228, 219, 208, 0.28);
   background-color: #241810;
   color: #f8f4ee;
-  font-family: var(--sts-font-sans);
-  font-size: 0.82rem;
-  font-weight: 600;
-  box-shadow: 0 8px 24px rgba(31, 22, 15, 0.25);
+  box-shadow: 0 4px 16px rgba(24, 15, 9, 0.32);
   cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sts-activity-mobile-trigger:active {
+  transform: scale(0.92);
+  background-color: #382619;
+}
+
+.sts-activity-mobile-trigger:focus-visible {
+  outline: 2px solid var(--sts-accent, #c47a27);
+  outline-offset: 2px;
+}
+
+.sts-activity-mobile-trigger__icon {
+  width: 19px;
+  height: 19px;
+  color: #f8f4ee;
+}
+
+.sts-activity-mobile-trigger .sts-activity-dock__pulse {
+  position: absolute;
+  bottom: 3px;
+  left: 3px;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid #241810;
+}
+
+.sts-activity-mobile-trigger__badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background-color: var(--sts-accent, #c47a27);
+  color: #ffffff;
+  border: 2px solid #241810;
+  font-family: var(--sts-font-sans);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
 }
 
 .sts-activity-sheet-layer {
@@ -523,4 +570,23 @@
 
 .sts-activity-sheet .sts-activity-dock__history-link {
   min-height: 44px;
+}
+
+
+/* Ensure strict separation between mobile minimal button and desktop dock */
+@media (max-width: 767px) {
+  .sts-activity-dock {
+    display: none !important;
+  }
+
+  .sts-activity-mobile-trigger-wrap {
+    display: block !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .sts-activity-mobile-trigger-wrap,
+  .sts-activity-sheet-layer {
+    display: none !important;
+  }
 }

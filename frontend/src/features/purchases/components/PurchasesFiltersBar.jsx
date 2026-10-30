@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Dropdown } from '../../../components/common'
+import { Dropdown, DatePicker } from '../../../components/common'
 import {
   ActiveFilterChips,
   MobileFilterButton,
@@ -29,69 +29,84 @@ export function PurchasesFiltersBar({
   onApplySearch,
   onResetFilters,
 }) {
-  const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
 
   const projectOptions = useMemo(() => {
-    const base = [
+    return [
       { value: 'all', label: 'All Projects' },
-      { value: 'unassigned', label: 'General Workshop Stock (No Project)' },
+      { value: 'none', label: 'General Procurement (No Project)' },
+      ...projects.map((p) => ({
+        value: p.id,
+        label: `${p.projectId} \u2014 ${p.projectName}`,
+      })),
     ]
-    const mapped = projects.map((proj) => ({
-      value: proj.id,
-      label: `${proj.projectId} — ${proj.name}`,
-    }))
-    return [...base, ...mapped]
   }, [projects])
 
-  const activeFilterChips = useMemo(() => {
-    const chips = []
+  const handleFormSubmit = (e) => {
+    e.preventDefault()
+    onApplySearch?.()
+  }
+
+  const chips = useMemo(() => {
+    const list = []
+    if (searchQuery) {
+      list.push({
+        key: 'search',
+        label: 'Search',
+        value: `"${searchQuery}"`,
+        onRemove: () => onSearchChange(''),
+      })
+    }
     if (projectFilter && projectFilter !== 'all') {
-      const match = projectOptions.find((o) => o.value === projectFilter)
-      chips.push({
+      const match = projectOptions.find((opt) => opt.value === projectFilter)
+      list.push({
         key: 'project',
-        label: `Project: ${match ? match.label : projectFilter}`,
+        label: 'Project',
+        value: match ? match.label : projectFilter,
         onRemove: () => onProjectFilterChange('all'),
       })
     }
     if (fromDate) {
-      chips.push({
+      list.push({
         key: 'fromDate',
-        label: `From: ${fromDate}`,
+        label: 'From',
+        value: fromDate,
         onRemove: () => onFromDateChange(''),
       })
     }
     if (toDate) {
-      chips.push({
+      list.push({
         key: 'toDate',
-        label: `To: ${toDate}`,
+        label: 'To',
+        value: toDate,
         onRemove: () => onToDateChange(''),
       })
     }
     if (statusFilter && statusFilter !== 'active') {
-      const st = STATUS_FILTER_OPTIONS.find((o) => o.value === statusFilter)
-      chips.push({
+      const match = STATUS_FILTER_OPTIONS.find((s) => s.value === statusFilter)
+      list.push({
         key: 'status',
-        label: `Status: ${st ? st.label : statusFilter}`,
+        label: 'Status',
+        value: match ? match.label : statusFilter,
         onRemove: () => onStatusFilterChange('active'),
       })
     }
-    return chips
+    return list
   }, [
+    searchQuery,
     projectFilter,
-    projectOptions,
     fromDate,
     toDate,
     statusFilter,
+    projectOptions,
+    onSearchChange,
     onProjectFilterChange,
     onFromDateChange,
     onToDateChange,
     onStatusFilterChange,
   ])
 
-  const handleFormSubmit = (event) => {
-    event.preventDefault()
-    onApplySearch?.()
-  }
+  const activeCount = chips.length
 
   return (
     <div className="pv-filters-wrap">
@@ -121,16 +136,35 @@ export function PurchasesFiltersBar({
             <input
               type="search"
               className="pv-filters__search-input"
-              placeholder="Search voucher no, supplier, invoice #, project, or material..."
+              placeholder="Search voucher #, supplier, invoice #, materials, notes..."
               value={searchQuery}
-              onChange={(event) => onSearchChange(event.target.value)}
+              onChange={(e) => onSearchChange(e.target.value)}
               aria-label="Search purchase vouchers"
             />
+            {searchQuery ? (
+              <button
+                type="button"
+                className="pv-filters__clear-btn"
+                onClick={() => onSearchChange('')}
+                aria-label="Clear search query"
+                title="Clear search"
+              >
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M4 4L12 12M12 4L4 12"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            ) : null}
           </div>
 
           <MobileFilterButton
-            activeCount={activeFilterChips.length}
-            onClick={() => setIsMobileSheetOpen(true)}
+            activeCount={activeCount}
+            onClick={() => setMobileSheetOpen(true)}
+            className="pv-filters__mobile-btn"
           />
         </div>
 
@@ -146,27 +180,24 @@ export function PurchasesFiltersBar({
           </div>
 
           <div className="pv-filters__date-pair">
-            <label className="pv-filters__date-field">
-              <span className="pv-filters__date-prefix">From</span>
-              <input
-                type="date"
-                className="pv-filters__date-input"
-                value={fromDate}
-                onChange={(event) => onFromDateChange(event.target.value)}
-                aria-label="Filter from purchase date"
-              />
-            </label>
-
-            <label className="pv-filters__date-field">
-              <span className="pv-filters__date-prefix">To</span>
-              <input
-                type="date"
-                className="pv-filters__date-input"
-                value={toDate}
-                onChange={(event) => onToDateChange(event.target.value)}
-                aria-label="Filter to purchase date"
-              />
-            </label>
+            <DatePicker
+              prefix="From"
+              value={fromDate}
+              onChange={onFromDateChange}
+              maxDate={toDate || undefined}
+              variant="filter"
+              ariaLabel="Filter from purchase date"
+              placeholder="From"
+            />
+            <DatePicker
+              prefix="To"
+              value={toDate}
+              onChange={onToDateChange}
+              minDate={fromDate || undefined}
+              variant="filter"
+              ariaLabel="Filter to purchase date"
+              placeholder="To"
+            />
           </div>
 
           <div className="pv-filters__control pv-filters__control--status">
@@ -198,50 +229,51 @@ export function PurchasesFiltersBar({
             : `${totalMatching} purchase vouchers`}
         </span>
         <ActiveFilterChips
-          chips={activeFilterChips}
+          chips={chips}
           onClearAll={hasActiveFilters ? onResetFilters : undefined}
         />
       </div>
 
       <MobileFilterSheet
-        isOpen={isMobileSheetOpen}
+        isOpen={mobileSheetOpen}
+        onClose={() => setMobileSheetOpen(false)}
         title="Filter Purchase Vouchers"
-        onClose={() => setIsMobileSheetOpen(false)}
-        onReset={() => {
-          onResetFilters?.()
-          setIsMobileSheetOpen(false)
-        }}
+        activeCount={activeCount}
+        onReset={onResetFilters}
+        onApply={() => setMobileSheetOpen(false)}
       >
-        <div className="pv-mobile-sheet-fields">
+        <div className="pv-mobile-filters-form">
           <div className="pv-form-field">
-            <label className="pv-form-label">Project</label>
+            <label className="pv-form-label">Project Allocation</label>
             <Dropdown
               variant="form"
               portal={false}
               value={projectFilter}
               options={projectOptions}
               onChange={(val) => onProjectFilterChange(val)}
-              ariaLabel="Mobile project filter"
+              placeholder="All Projects"
             />
           </div>
 
           <div className="pv-form-field">
             <label className="pv-form-label">From Date</label>
-            <input
-              type="date"
-              className="pv-input"
+            <DatePicker
+              variant="form"
               value={fromDate}
-              onChange={(event) => onFromDateChange(event.target.value)}
+              onChange={onFromDateChange}
+              maxDate={toDate || undefined}
+              placeholder="Select from date"
             />
           </div>
 
           <div className="pv-form-field">
             <label className="pv-form-label">To Date</label>
-            <input
-              type="date"
-              className="pv-input"
+            <DatePicker
+              variant="form"
               value={toDate}
-              onChange={(event) => onToDateChange(event.target.value)}
+              onChange={onToDateChange}
+              minDate={fromDate || undefined}
+              placeholder="Select to date"
             />
           </div>
 
@@ -253,7 +285,7 @@ export function PurchasesFiltersBar({
               value={statusFilter}
               options={STATUS_FILTER_OPTIONS}
               onChange={(val) => onStatusFilterChange(val)}
-              ariaLabel="Mobile status filter"
+              placeholder="Active Vouchers"
             />
           </div>
         </div>

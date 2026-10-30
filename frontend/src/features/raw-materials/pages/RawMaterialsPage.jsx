@@ -65,10 +65,7 @@ export function RawMaterialsPage({ currentUser, onNavigate }) {
       <header className="rm-header">
         <div className="rm-header__text">
           <h1 className="rm-header__title">Raw Materials</h1>
-          <p className="rm-header__subtitle">
-            Manage materials used across sofa and curtain manufacturing
-            projects.
-          </p>
+          
         </div>
 
         {!authRequired && canCreateMaterial ? (

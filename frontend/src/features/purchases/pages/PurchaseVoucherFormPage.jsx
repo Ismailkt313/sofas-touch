@@ -1,5 +1,6 @@
+import { navigateBackOrFallback } from '../../../services/navigationState'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Dropdown } from '../../../components/common'
+import { Dropdown, DatePicker } from '../../../components/common'
 import { fetchProjects } from '../../projects'
 import {
   fetchRawMaterials,
@@ -1725,7 +1726,7 @@ export function PurchaseVoucherFormPage({
               <button
                 type="button"
                 className="admin-btn admin-btn--secondary"
-                onClick={() => onNavigate?.('/purchases')}
+                onClick={() => navigateBackOrFallback(onNavigate, '/purchases')}
               >
                 Return to Purchases
               </button>
@@ -1803,17 +1804,17 @@ export function PurchaseVoucherFormPage({
                         hasValue={Boolean(headerValues.purchaseDate)}
                       />
                     </div>
-                    <input
+                    <DatePicker
                       id="pv-purchase-date"
-                      type="date"
-                      className={`pv-input${
-                        fieldErrors.purchaseDate ? ' pv-input--error' : ''
-                      }`}
                       value={headerValues.purchaseDate}
-                      onChange={(e) =>
-                        handleHeaderFieldChange('purchaseDate', e.target.value)
+                      onChange={(val) =>
+                        handleHeaderFieldChange('purchaseDate', val)
                       }
                       disabled={isSaving}
+                      error={Boolean(fieldErrors.purchaseDate)}
+                      variant="form"
+                      placeholder="Select purchase date"
+                      required
                     />
                     {fieldErrors.purchaseDate ? (
                       <p className="pv-field-error">

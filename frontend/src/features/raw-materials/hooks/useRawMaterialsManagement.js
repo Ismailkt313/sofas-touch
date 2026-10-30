@@ -1,3 +1,4 @@
+import { useListingState } from '../../../services/navigationState'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import {
@@ -12,6 +13,13 @@ import {
 } from '../services/rawMaterialService'
 
 const DEFAULT_PAGE_SIZE = 10
+const RAW_MATERIALS_LISTING_SCHEMA = {
+  page: { type: 'number', default: 1, min: 1 },
+  search: { type: 'string', default: '' },
+  category: { type: 'string', default: 'all' },
+  status: { type: 'string', default: 'all' },
+}
+
 
 export function useRawMaterialsManagement({ currentUser }) {
   const canCreateMaterial = hasPermission(currentUser, 'materials.create')
@@ -19,10 +27,21 @@ export function useRawMaterialsManagement({ currentUser }) {
   const adminAccess = canEditMaterial
   const initialHasToken = hasActiveAuthToken()
 
+  const { values, setValue, resetAll, clampPage } = useListingState(RAW_MATERIALS_LISTING_SCHEMA, {
+    routeKey: 'raw-materials',
+  })
+
   const [materials, setMaterials] = useState([])
   const [totalMaterials, setTotalMaterials] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
-  const [currentPage, setCurrentPage] = useState(1)
+  const currentPage = values.page
+  const categoryFilter = values.category
+  const statusFilter = values.status
+
+  const setCurrentPage = useCallback(
+    (pageNumber) => setValue('page', pageNumber, { push: true }),
+    [setValue],
+  )
 
   const [summaryCounts, setSummaryCounts] = useState({
     total: 0,
@@ -30,10 +49,13 @@ export function useRawMaterialsManagement({ currentUser }) {
     inactive: null,
   })
 
-  const [searchInput, setSearchInput] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [searchInput, setSearchInput] = useState(values.search)
+  const [debouncedSearch, setDebouncedSearch] = useState(values.search)
+
+  useEffect(() => {
+    setSearchInput(values.search)
+    setDebouncedSearch(values.search)
+  }, [values.search])
 
   const effectiveStatusFilter = adminAccess ? statusFilter : 'active'
 
@@ -72,10 +94,14 @@ export function useRawMaterialsManagement({ currentUser }) {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setDebouncedSearch(searchInput.trim())
+      const trimmed = searchInput.trim()
+      setDebouncedSearch(trimmed)
+      if (trimmed !== values.search) {
+        setValue('search', trimmed, { resetPage: true })
+      }
     }, 240)
     return () => window.clearTimeout(timer)
-  }, [searchInput])
+  }, [searchInput, values.search, setValue])
 
   useEffect(() => {
     if (!hasActiveAuthToken() || typeof window === 'undefined') {
@@ -208,7 +234,7 @@ export function useRawMaterialsManagement({ currentUser }) {
           setTotalMaterials(listRes.total)
           setTotalPages(listRes.totalPages)
           if (currentPage > listRes.totalPages && listRes.totalPages >= 1) {
-            setCurrentPage(listRes.totalPages)
+            clampPage(listRes.totalPages)
           }
 
           setSummaryCounts({
@@ -243,7 +269,7 @@ export function useRawMaterialsManagement({ currentUser }) {
           setTotalMaterials(listRes.total)
           setTotalPages(listRes.totalPages)
           if (currentPage > listRes.totalPages && listRes.totalPages >= 1) {
-            setCurrentPage(listRes.totalPages)
+            clampPage(listRes.totalPages)
           }
 
           setSummaryCounts({

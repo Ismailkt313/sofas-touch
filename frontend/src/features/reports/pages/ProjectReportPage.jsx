@@ -1,4 +1,6 @@
+import { navigateBackOrFallback } from '../../../services/navigationState'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { DatePicker } from '../../../components/common'
 import { ProjectCostBreakdown } from '../components/ProjectCostBreakdown'
 import { ProjectDateWiseCostSection } from '../components/ProjectDateWiseCostSection'
 import { ProjectExpenseHistorySection } from '../components/ProjectExpenseHistorySection'
@@ -190,7 +192,7 @@ export function ProjectReportPage({ projectId, currentUser, onNavigate }) {
           <button
             type="button"
             className="rep-btn rep-btn--secondary"
-            onClick={() => onNavigate?.('/projects')}
+            onClick={() => navigateBackOrFallback(onNavigate, '/projects')}
           >
             Back to Projects
           </button>
@@ -216,7 +218,7 @@ export function ProjectReportPage({ projectId, currentUser, onNavigate }) {
         <button
           type="button"
           className="rep-btn rep-btn--secondary rep-btn--sm"
-          onClick={() => onNavigate?.('/reports')}
+          onClick={() => navigateBackOrFallback(onNavigate, '/reports')}
         >
           ← Back to Project Reports
         </button>
@@ -244,10 +246,7 @@ export function ProjectReportPage({ projectId, currentUser, onNavigate }) {
               ? `${project.projectId} — ${project.name}`
               : `Project Report (${projectId})`}
           </h1>
-          <p className="rep-header__subtitle">
-            Detailed cost breakdown, purchase vouchers, project expenses, and
-            chronological cost audit.
-          </p>
+
         </div>
 
         <div className="rep-header__actions rep-no-print">
@@ -298,29 +297,33 @@ export function ProjectReportPage({ projectId, currentUser, onNavigate }) {
           }}
         >
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <label className="rep-filter-field">
+            <div className="rep-filter-field">
               <span className="rep-filter-field__label">
                 Transactions From Date
               </span>
-              <input
-                type="date"
-                className="rep-date-input"
+              <DatePicker
                 value={fromDate}
-                onChange={(e) => handleFromChange(e.target.value)}
+                onChange={handleFromChange}
+                maxDate={toDate || undefined}
+                variant="filter"
+                ariaLabel="Transactions from date"
+                placeholder="From date"
               />
-            </label>
+            </div>
 
-            <label className="rep-filter-field">
+            <div className="rep-filter-field">
               <span className="rep-filter-field__label">
                 Transactions To Date
               </span>
-              <input
-                type="date"
-                className="rep-date-input"
+              <DatePicker
                 value={toDate}
-                onChange={(e) => handleToChange(e.target.value)}
+                onChange={handleToChange}
+                minDate={fromDate || undefined}
+                variant="filter"
+                ariaLabel="Transactions to date"
+                placeholder="To date"
               />
-            </label>
+            </div>
 
             {fromDate || toDate ? (
               <div style={{ alignSelf: 'flex-end' }}>
@@ -374,11 +377,7 @@ export function ProjectReportPage({ projectId, currentUser, onNavigate }) {
         </div>
       ) : report && project && financialOverview ? (
         <>
-          <div className="rep-disclaimer">
-            <strong>Estimated Operational Report:</strong> Calculated from saved
-            active project purchase vouchers and project expenses. Cancelled
-            vouchers and general workshop expenses are excluded.
-          </div>
+
 
           {period?.isDateFiltered ? (
             <section className="rep-period-banner">
@@ -399,19 +398,18 @@ export function ProjectReportPage({ projectId, currentUser, onNavigate }) {
           <section className="rep-surface rep-section">
             <div className="rep-section__header">
               <div>
-                <h2 className="rep-section__title">1. Project Information</h2>
+                <h2 className="rep-section__title">1. Project Overview</h2>
                 <p className="rep-section__subtitle">
-                  Core project metadata and scope summary from saved project
-                  records.
+                  Core project metadata, client details, site information, and contract value.
                 </p>
               </div>
-              <span className="rep-status-pill">{project.status}</span>
+              <span className="rep-status-pill">{project.status || 'Active'}</span>
             </div>
 
             <div className="rep-info-grid">
               <div>
                 <span className="rep-info-item__label">Project ID</span>
-                <div className="rep-info-item__val">{project.projectId}</div>
+                <div className="rep-info-item__val rep-project-code-tag">{project.projectId}</div>
               </div>
 
               <div>
@@ -420,34 +418,33 @@ export function ProjectReportPage({ projectId, currentUser, onNavigate }) {
               </div>
 
               <div>
-                <span className="rep-info-item__label">Client Name</span>
+                <span className="rep-info-item__label">Client Details</span>
                 <div className="rep-info-item__val">
                   {project.clientName || '—'}
+                  {project.clientContact ? (
+                    <span className="rep-sub-line">{project.clientContact}</span>
+                  ) : null}
                 </div>
               </div>
 
               <div>
-                <span className="rep-info-item__label">Category</span>
+                <span className="rep-info-item__label">Site Location</span>
                 <div className="rep-info-item__val">
-                  {project.category || '—'}
+                  {project.siteLocation || '—'}
                 </div>
               </div>
 
               <div>
-                <span className="rep-info-item__label">Created Date</span>
+                <span className="rep-info-item__label">Created / Start Date</span>
                 <div className="rep-info-item__val">
                   {formatReportDate(project.createdAt)}
                 </div>
               </div>
 
               <div>
-                <span className="rep-info-item__label">
-                  Site Location / Client Contact
-                </span>
-                <div className="rep-info-item__val rep-muted">
-                  {project.siteLocation ||
-                    project.clientContact ||
-                    'Not recorded in project schema'}
+                <span className="rep-info-item__label">Contract Value</span>
+                <div className="rep-info-item__val rep-info-item__val--accent">
+                  {formatReportCurrency(lifetime?.contractValue ?? project?.contractValue)}
                 </div>
               </div>
             </div>
@@ -479,150 +476,127 @@ export function ProjectReportPage({ projectId, currentUser, onNavigate }) {
           <section className="rep-surface rep-section">
             <div className="rep-section__header">
               <div>
-                <h2 className="rep-section__title">2. Financial Overview</h2>
+                <h2 className="rep-section__title">2. Financial Summary</h2>
                 <p className="rep-section__subtitle">
                   {period?.isDateFiltered
-                    ? 'Comparison of selected reporting period costs and cumulative lifetime profitability.'
+                    ? 'Comparison of contract value, selected reporting period costs, and cumulative lifetime profitability.'
                     : 'Lifetime contract value, recorded project costs, budget utilization, and estimated profitability.'}
                 </p>
               </div>
               <span className={`rep-health ${health.className}`}>
                 <span className="rep-health__dot" aria-hidden="true" />
-                Lifetime: {health.label}
+                {health.label}
               </span>
             </div>
 
-            <div className="rep-overview-grid">
-              <div className="rep-overview-tile">
-                <span className="rep-overview-tile__label">Contract Value</span>
-                <span className="rep-overview-tile__val">
-                  {formatReportCurrency(
-                    lifetime?.contractValue ?? project?.contractValue,
-                  )}
+            {/* B. Four Summary Cards */}
+            <div className="rep-summary-grid rep-summary-grid--four">
+              {/* 1. Contract Value */}
+              <div className="rep-summary-card">
+                <span className="rep-summary-card__label">Contract Value</span>
+                <span className="rep-summary-card__val">
+                  {formatReportCurrency(lifetime?.contractValue ?? project?.contractValue)}
                 </span>
                 <span className="rep-summary-card__meta">
-                  Saved project contract value
+                  Committed project scope
                 </span>
               </div>
 
-              <div className="rep-overview-tile">
-                <span className="rep-overview-tile__label">
-                  {period?.isDateFiltered
-                    ? 'Period Material Purchases'
-                    : 'Total Material Purchases'}
+              {/* 2. Material Purchase Costs */}
+              <div className="rep-summary-card">
+                <span className="rep-summary-card__label">
+                  {period?.isDateFiltered ? 'Period Material Purchases' : 'Material Purchase Costs'}
                 </span>
-                <span className="rep-overview-tile__val">
+                <span className="rep-summary-card__val">
                   {formatReportCurrency(activeMetrics?.materialPurchaseCosts)}
                 </span>
-                {period?.isDateFiltered ? (
-                  <span className="rep-summary-card__meta">
-                    Lifetime:{' '}
-                    {formatReportCurrency(lifetime?.materialPurchaseCosts)}
-                  </span>
-                ) : null}
+                <span className="rep-summary-card__meta">
+                  {period?.isDateFiltered
+                    ? `Lifetime: ${formatReportCurrency(lifetime?.materialPurchaseCosts)}`
+                    : 'Active procurement vouchers'}
+                </span>
               </div>
 
-              <div className="rep-overview-tile">
-                <span className="rep-overview-tile__label">
-                  {period?.isDateFiltered
-                    ? 'Period Other Expenses'
-                    : 'Total Other Project Expenses'}
+              {/* 3. Other Project Expenses */}
+              <div className="rep-summary-card">
+                <span className="rep-summary-card__label">
+                  {period?.isDateFiltered ? 'Period Other Expenses' : 'Other Project Expenses'}
                 </span>
-                <span className="rep-overview-tile__val">
+                <span className="rep-summary-card__val">
                   {formatReportCurrency(activeMetrics?.otherProjectExpenses)}
                 </span>
-                {period?.isDateFiltered ? (
-                  <span className="rep-summary-card__meta">
-                    Lifetime:{' '}
-                    {formatReportCurrency(lifetime?.otherProjectExpenses)}
-                  </span>
-                ) : null}
+                <span className="rep-summary-card__meta">
+                  {period?.isDateFiltered
+                    ? `Lifetime: ${formatReportCurrency(lifetime?.otherProjectExpenses)}`
+                    : 'Site support, labor & transport'}
+                </span>
               </div>
 
-              <div className="rep-overview-tile">
-                <span className="rep-overview-tile__label">
-                  {period?.isDateFiltered
-                    ? 'Combined Period Costs'
-                    : 'Total Project Costs'}
+              {/* 4. Total Project Costs */}
+              <div className="rep-summary-card rep-summary-card--highlight">
+                <span className="rep-summary-card__label">
+                  {period?.isDateFiltered ? 'Combined Period Costs' : 'Total Project Costs'}
                 </span>
-                <span className="rep-overview-tile__val">
+                <span className="rep-summary-card__val">
                   {formatReportCurrency(activeMetrics?.totalProjectCosts)}
                 </span>
-                {period?.isDateFiltered ? (
-                  <span className="rep-summary-card__meta">
-                    Lifetime:{' '}
-                    {formatReportCurrency(lifetime?.totalProjectCosts)}
-                  </span>
-                ) : null}
-              </div>
-
-              <div className="rep-overview-tile">
-                <span className="rep-overview-tile__label">
-                  Lifetime Estimated Profit
-                </span>
-                <span
-                  className={`rep-overview-tile__val ${
-                    (lifetime?.estimatedProfit ?? 0) < 0
-                      ? 'rep-profit-val--loss'
-                      : ''
-                  }`}
-                >
-                  {formatReportCurrency(lifetime?.estimatedProfit)}
-                </span>
-                <span className="rep-summary-card__meta">
-                  Contract Value − Lifetime Costs
-                </span>
-              </div>
-
-              <div className="rep-overview-tile">
-                <span className="rep-overview-tile__label">
-                  Lifetime Profit Margin
-                </span>
-                <span
-                  className={`rep-overview-tile__val ${
-                    lifetime?.marginApplicable &&
-                    lifetime?.profitMargin !== null &&
-                    lifetime.profitMargin < 0
-                      ? 'rep-profit-val--loss'
-                      : ''
-                  }`}
-                >
-                  {formatSafePercentage(
-                    lifetime?.profitMargin,
-                    lifetime?.marginApplicable,
-                  )}
-                </span>
-                <span className="rep-summary-card__meta">
-                  {lifetime?.marginApplicable
-                    ? 'Est. Profit ÷ Contract Value'
-                    : 'Contract value is zero'}
-                </span>
-              </div>
-
-              <div className="rep-overview-tile">
-                <span className="rep-overview-tile__label">
-                  {period?.isDateFiltered
-                    ? 'Period Cost % of Contract'
-                    : 'Cost Percentage'}
-                </span>
-                <span className="rep-overview-tile__val">
-                  {formatSafePercentage(
-                    period?.isDateFiltered
-                      ? selectedPeriod?.costPercentageOfContract
-                      : lifetime?.costPercentage,
-                    activeMetrics?.marginApplicable,
-                  )}
-                </span>
                 <span className="rep-summary-card__meta">
                   {period?.isDateFiltered
-                    ? `Lifetime Cost %: ${formatSafePercentage(
-                        lifetime?.costPercentage,
-                        lifetime?.marginApplicable,
-                      )}`
-                    : 'Total Project Costs ÷ Contract Value'}
+                    ? `Lifetime: ${formatReportCurrency(lifetime?.totalProjectCosts)}`
+                    : 'Purchases + Other Expenses'}
                 </span>
               </div>
             </div>
+
+            {/* B. Visually Prominent Estimated Profit Section */}
+            {(() => {
+              const estProfit = lifetime?.estimatedProfit ?? 0
+              const isProfitPositive = estProfit > 0
+              const isProfitNegative = estProfit < 0
+              const numContract = Number(lifetime?.contractValue ?? 0)
+              const numCosts = Number(lifetime?.totalProjectCosts ?? 0)
+              const isOverBudget = numContract > 0 && numCosts > numContract
+              const overBudgetAmt = isOverBudget ? numCosts - numContract : 0
+
+              return (
+                <div className={`rep-profit-hero ${isProfitNegative ? 'rep-profit-hero--loss' : ''}`}>
+                  <div className="rep-profit-hero__main">
+                    <div className="rep-profit-hero__eyebrow">
+                      <span>Estimated Profit</span>
+                      <span className="rep-profit-hero__badge">Unaudited</span>
+                    </div>
+                    <div className={`rep-profit-hero__amount ${isProfitNegative ? 'rep-profit-hero__amount--loss' : 'rep-profit-hero__amount--positive'}`}>
+                      {formatReportCurrency(estProfit)}
+                    </div>
+                  </div>
+
+                  <div className="rep-profit-hero__meta">
+                    <div className="rep-profit-hero__stat">
+                      <span className="rep-profit-hero__stat-label">Profit Margin</span>
+                      <span className="rep-profit-hero__stat-val">
+                        {formatSafePercentage(lifetime?.profitMargin, lifetime?.marginApplicable)}
+                      </span>
+                    </div>
+
+                    <div className="rep-profit-hero__stat">
+                      <span className="rep-profit-hero__stat-label">Budget Status</span>
+                      <span className={`rep-health ${health.className}`}>
+                        <span className="rep-health__dot" aria-hidden="true" />
+                        {health.label}
+                      </span>
+                    </div>
+
+                    {isOverBudget ? (
+                      <div className="rep-profit-hero__alert">
+                        <span className="rep-overbudget-badge">
+                          Over budget by {formatReportCurrency(overBudgetAmt)}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })()}
           </section>
 
           <ProjectCostBreakdown

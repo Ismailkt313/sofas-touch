@@ -1,5 +1,6 @@
+import { useListingState } from '../../../services/navigationState'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Dropdown } from '../../../components/common'
+import { Dropdown, DatePicker } from '../../../components/common'
 import {
   ActiveFilterChips,
   MobileFilterButton,
@@ -16,6 +17,17 @@ import {
 import '../styles/activity-page.css'
 
 const PAGE_SIZE = 20
+const ACTIVITY_LISTING_SCHEMA = {
+  page: { type: 'number', default: 1, min: 1 },
+  search: { type: 'string', default: '' },
+  entity: { type: 'string', default: 'all' },
+  action: { type: 'string', default: 'all' },
+  project: { type: 'string', default: 'all' },
+  actor: { type: 'string', default: 'all' },
+  fromDate: { type: 'string', default: '' },
+  toDate: { type: 'string', default: '' },
+}
+
 
 export function ActivityHistoryPage({ currentUser, onNavigate }) {
   const canViewAll = hasPermission(currentUser, 'activity.viewAll')
@@ -24,15 +36,53 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
   const userRole = canViewAll ? 'admin' : 'data_entry'
   const isAdmin = canViewAll
 
-  const [searchInput, setSearchInput] = useState('')
-  const [appliedSearch, setAppliedSearch] = useState('')
-  const [entityType, setEntityType] = useState('all')
-  const [actionType, setActionType] = useState('all')
-  const [projectId, setProjectId] = useState('all')
-  const [actorId, setActorId] = useState('all')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
-  const [page, setPage] = useState(1)
+  const { values, setValue, resetAll, clampPage } = useListingState(ACTIVITY_LISTING_SCHEMA, {
+    routeKey: 'activity',
+  })
+
+  const page = values.page
+  const entityType = values.entity
+  const actionType = values.action
+  const projectId = values.project
+  const actorId = values.actor
+  const fromDate = values.fromDate
+  const toDate = values.toDate
+
+  const [searchInput, setSearchInput] = useState(values.search)
+  const [appliedSearch, setAppliedSearch] = useState(values.search)
+
+  useEffect(() => {
+    setSearchInput(values.search)
+    setAppliedSearch(values.search)
+  }, [values.search])
+
+  const setPage = useCallback((p) => {
+    setValue('page', p, { push: true })
+  }, [setValue])
+
+  const setEntityType = useCallback((val) => {
+    setValue('entity', val, { resetPage: true })
+  }, [setValue])
+
+  const setActionType = useCallback((val) => {
+    setValue('action', val, { resetPage: true })
+  }, [setValue])
+
+  const setProjectId = useCallback((val) => {
+    setValue('project', val, { resetPage: true })
+  }, [setValue])
+
+  const setActorId = useCallback((val) => {
+    setValue('actor', val, { resetPage: true })
+  }, [setValue])
+
+  const setFromDate = useCallback((val) => {
+    setValue('fromDate', val, { resetPage: true })
+  }, [setValue])
+
+  const setToDate = useCallback((val) => {
+    setValue('toDate', val, { resetPage: true })
+  }, [setValue])
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
 
   const [projectOptions, setProjectOptions] = useState([
@@ -372,31 +422,35 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
         </div>
       ) : null}
 
-      <label className="sts-act-field">
+      <div className="sts-act-field">
         <span className="sts-act-field__label">From Date</span>
-        <input
-          type="date"
-          className="sts-act-field__date"
+        <DatePicker
           value={fromDate}
-          onChange={(e) => {
-            setFromDate(e.target.value)
+          onChange={(val) => {
+            setFromDate(val)
             setPage(1)
           }}
+          maxDate={toDate || undefined}
+          variant="filter"
+          ariaLabel="Filter from activity date"
+          placeholder="From"
         />
-      </label>
+      </div>
 
-      <label className="sts-act-field">
+      <div className="sts-act-field">
         <span className="sts-act-field__label">To Date</span>
-        <input
-          type="date"
-          className="sts-act-field__date"
+        <DatePicker
           value={toDate}
-          onChange={(e) => {
-            setToDate(e.target.value)
+          onChange={(val) => {
+            setToDate(val)
             setPage(1)
           }}
+          minDate={fromDate || undefined}
+          variant="filter"
+          ariaLabel="Filter to activity date"
+          placeholder="To"
         />
-      </label>
+      </div>
     </>
   )
 

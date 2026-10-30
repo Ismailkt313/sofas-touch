@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Dropdown } from '../../../components/common'
+import { Dropdown, DatePicker } from '../../../components/common'
 import {
   findDuplicateExpenseCategory,
   formatExpenseCurrency,
@@ -443,22 +443,21 @@ export function ExpenseFormModal({
               ) : null}
 
               <div className="exp-form-row-2">
-                <label className="exp-field">
+                <div className="exp-field">
                   <span className="exp-field__label">
                     Expense Date<span className="exp-field__req">*</span>
                   </span>
-                  <input
-                    type="date"
-                    className={`exp-input ${
-                      fieldErrors.expenseDate ? 'exp-input--error' : ''
-                    }`}
+                  <DatePicker
                     value={expenseDate}
-                    onChange={(e) => {
-                      setExpenseDate(e.target.value)
+                    onChange={(val) => {
+                      setExpenseDate(val)
                       if (fieldErrors.expenseDate) {
                         setFieldErrors((prev) => ({ ...prev, expenseDate: '' }))
                       }
                     }}
+                    error={Boolean(fieldErrors.expenseDate)}
+                    variant="form"
+                    placeholder="Select expense date"
                     required
                   />
                   {fieldErrors.expenseDate ? (
@@ -466,7 +465,7 @@ export function ExpenseFormModal({
                       {fieldErrors.expenseDate}
                     </span>
                   ) : null}
-                </label>
+                </div>
 
                 <label className="exp-field">
                   <span className="exp-field__label">

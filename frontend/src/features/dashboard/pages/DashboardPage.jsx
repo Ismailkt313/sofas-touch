@@ -10,7 +10,6 @@ import { DashboardKpiGrid } from '../components/DashboardKpiGrid'
 import { MonthlyExpenseSection } from '../components/MonthlyExpenseSection'
 import { OperationalDashboardView } from '../components/OperationalDashboardView'
 import { PendingApprovalsCard } from '../components/PendingApprovalsCard'
-import { ProjectProfitabilitySection } from '../components/ProjectProfitabilitySection'
 import { RecentTransactionsCard } from '../components/RecentTransactionsCard'
 import { StockAlertsCard } from '../components/StockAlertsCard'
 import {
@@ -81,7 +80,7 @@ export function DashboardPage({ currentUser, onNavigate }) {
       projectSearch: appliedSearch,
       projectSortBy,
       projectSortOrder,
-      recentLimit: 8,
+      recentLimit: 6,
     }
     if (periodPreset === 'custom') {
       if (customFromDate) query.expenseFromDate = customFromDate
@@ -212,51 +211,26 @@ export function DashboardPage({ currentUser, onNavigate }) {
               ? 'Soft Touch Sofas \u2022 Data Entry Workspace'
               : 'Soft Touch Sofas \u2022 Executive Overview'}
           </span>
-          <h1 className="sts-dash-hero__title">
-            {isOperationalView ? 'Operations Desk' : 'Business Dashboard'}
-          </h1>
-          <p className="sts-dash-hero__sub">
-            {isOperationalView
-              ? 'Daily material purchase vouchers, workshop expenses, active project codes, and stock lookup.'
-              : 'Real-time project contract performance, monthly procurement & expense trends, raw material stock alerts, and recent vouchers.'}
-          </p>
-        </div>
-
-        <div className="sts-dash-hero__actions">
-          <button
-            type="button"
-            className="sts-dash-btn sts-dash-btn--ghost"
-            onClick={() => loadDashboard({ silent: Boolean(overview) })}
-            disabled={loading || refreshing}
-          >
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
-          {canCreatePurchase ? (
+          <div className="sts-dash-hero__title-row">
+            <h1 className="sts-dash-hero__title">
+              {isOperationalView ? 'Operations Desk' : 'Business Dashboard'}
+            </h1>
             <button
               type="button"
-              className="sts-dash-btn sts-dash-btn--secondary"
-              onClick={() => onNavigate?.('/purchases/new')}
+              className={`sts-dash-refresh-btn${refreshing ? ' sts-dash-refresh-btn--spinning' : ''}`}
+              onClick={() => loadDashboard({ silent: Boolean(overview) })}
+              disabled={loading || refreshing}
+              aria-label="Refresh dashboard data"
+              title="Refresh dashboard"
             >
-              + Purchase Voucher
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M13.65 2.35A8 8 0 1 0 16 8h-2a6 6 0 1 1-1.76-4.24l-2.24 2.24H16V0l-2.35 2.35z"
+                  fill="currentColor"
+                />
+              </svg>
             </button>
-          ) : canCreateExpense ? (
-            <button
-              type="button"
-              className="sts-dash-btn sts-dash-btn--secondary"
-              onClick={() => onNavigate?.('/expenses')}
-            >
-              + Record Expense
-            </button>
-          ) : null}
-          {canViewProjects ? (
-            <button
-              type="button"
-              className="sts-dash-btn sts-dash-btn--primary"
-              onClick={() => onNavigate?.('/projects')}
-            >
-              View Projects
-            </button>
-          ) : null}
+          </div>
         </div>
       </header>
 
@@ -267,7 +241,7 @@ export function DashboardPage({ currentUser, onNavigate }) {
           aria-label="Loading dashboard metrics"
         >
           <div className="sts-dash-kpi-grid">
-            <div className="sts-dash-skeleton sts-dash-skeleton--kpi" />
+            <div className="sts-dash-skeleton sts-dash-skeleton--kpi sts-dash-kpi-card--projects" />
             <div className="sts-dash-skeleton sts-dash-skeleton--kpi" />
             <div className="sts-dash-skeleton sts-dash-skeleton--kpi" />
             <div className="sts-dash-skeleton sts-dash-skeleton--kpi" />
@@ -326,23 +300,7 @@ export function DashboardPage({ currentUser, onNavigate }) {
                 onNavigate={onNavigate}
               />
 
-              <ProjectProfitabilitySection
-                items={overview.projectPerformance?.items || []}
-                totalMatching={overview.projectPerformance?.totalMatching || 0}
-                searchInput={searchInput}
-                projectStatus={projectStatus}
-                projectSortBy={projectSortBy}
-                projectSortOrder={projectSortOrder}
-                isAdmin={canViewReports}
-                onSearchChange={setSearchInput}
-                onStatusChange={setProjectStatus}
-                onSortChange={(nextField, nextOrd) => {
-                  setProjectSortBy(nextField)
-                  setProjectSortOrder(nextOrd)
-                }}
-                onResetFilters={handleResetProjectFilters}
-                onNavigate={onNavigate}
-              />
+  
 
               <MonthlyExpenseSection
                 monthlyExpenses={effectiveMonthly}

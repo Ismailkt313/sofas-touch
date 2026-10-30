@@ -1,3 +1,4 @@
+import { useListingState } from '../../../services/navigationState'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import { fetchProjects } from '../../projects'
@@ -13,6 +14,15 @@ import {
 import '../styles/purchases.css'
 
 const PAGE_LIMIT = 10
+const PURCHASES_LISTING_SCHEMA = {
+  page: { type: 'number', default: 1, min: 1 },
+  search: { type: 'string', default: '' },
+  project: { type: 'string', default: 'all' },
+  fromDate: { type: 'string', default: '' },
+  toDate: { type: 'string', default: '' },
+  status: { type: 'string', default: 'active' },
+}
+
 
 export function PurchasesPage({ currentUser, onNavigate }) {
   const canCreateVoucher = hasPermission(currentUser, 'purchases.create')
@@ -21,10 +31,24 @@ export function PurchasesPage({ currentUser, onNavigate }) {
   const canViewProjects = hasPermission(currentUser, 'projects.view')
   const [authRequired, setAuthRequired] = useState(() => !hasActiveAuthToken())
 
+  const { values, setValue, resetAll, clampPage } = useListingState(PURCHASES_LISTING_SCHEMA, {
+    routeKey: 'purchases',
+  })
+
   const [vouchers, setVouchers] = useState([])
   const [totalVouchers, setTotalVouchers] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
-  const [currentPage, setCurrentPage] = useState(1)
+  const currentPage = values.page
+  const projectFilter = values.project
+  const fromDate = values.fromDate
+  const toDate = values.toDate
+  const statusFilter = values.status
+
+  const setCurrentPage = useCallback(
+    (pageNumber) => setValue('page', pageNumber, { push: true }),
+    [setValue],
+  )
+
   const [summary, setSummary] = useState({
     activeCount: 0,
     cancelledCount: 0,
@@ -33,12 +57,13 @@ export function PurchasesPage({ currentUser, onNavigate }) {
   })
 
   const [projects, setProjects] = useState([])
-  const [searchInput, setSearchInput] = useState('')
-  const [appliedSearch, setAppliedSearch] = useState('')
-  const [projectFilter, setProjectFilter] = useState('all')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
-  const [statusFilter, setStatusFilter] = useState('active')
+  const [searchInput, setSearchInput] = useState(values.search)
+  const [appliedSearch, setAppliedSearch] = useState(values.search)
+
+  useEffect(() => {
+    setSearchInput(values.search)
+    setAppliedSearch(values.search)
+  }, [values.search])
 
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -48,17 +73,15 @@ export function PurchasesPage({ currentUser, onNavigate }) {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setAppliedSearch((prev) => {
-        const next = searchInput.trim()
-        if (prev !== next) {
-          setCurrentPage(1)
-        }
-        return next
-      })
+      const next = searchInput.trim()
+      setAppliedSearch(next)
+      if (next !== values.search) {
+        setValue('search', next, { resetPage: true })
+      }
     }, 280)
 
     return () => window.clearTimeout(timer)
-  }, [searchInput])
+  }, [searchInput, values.search, setValue])
 
   useEffect(() => {
     if (!hasActiveAuthToken() || !canViewProjects) {
@@ -237,7 +260,8 @@ export function PurchasesPage({ currentUser, onNavigate }) {
                   strokeLinecap="round"
                 />
               </svg>
-              <span>New Purchase Voucher</span>
+              <span className="pv-header__btn-label pv-header__btn-label--full">New Purchase Voucher</span>
+              <span className="pv-header__btn-label pv-header__btn-label--short">New Voucher</span>
             </button>
           </div>
         ) : null}

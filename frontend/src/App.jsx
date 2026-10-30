@@ -78,12 +78,28 @@ function App() {
     Boolean(getStoredSession()?.token),
   )
 
-  const navigate = useCallback((nextPath) => {
+  const navigate = useCallback((nextPath, options) => {
     const currentFull = `${window.location.pathname}${window.location.search}`
     if (currentFull !== nextPath) {
-      window.history.pushState({}, '', nextPath)
+      try {
+        sessionStorage.setItem(`sts:scroll:${currentFull}`, String(window.scrollY))
+        sessionStorage.setItem(`sts:scroll:${window.location.pathname}`, String(window.scrollY))
+      } catch {}
+
+      const stateObj = {
+        ...(options?.state || {}),
+        from: currentFull,
+      }
+
+      if (options?.replace) {
+        window.history.replaceState(stateObj, '', nextPath)
+      } else {
+        window.history.pushState(stateObj, '', nextPath)
+      }
       window.dispatchEvent(new Event(ROUTE_CHANGE_EVENT))
-      window.scrollTo({ top: 0, behavior: 'auto' })
+      if (!options?.preserveScroll) {
+        window.scrollTo({ top: 0, behavior: 'auto' })
+      }
     }
   }, [])
 

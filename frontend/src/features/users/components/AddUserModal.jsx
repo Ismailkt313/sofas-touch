@@ -144,10 +144,7 @@ export function AddUserModal({ isOpen, onClose, onSubmit }) {
             <h2 id="add-user-modal-title" className="admin-modal__title">
               Add New User
             </h2>
-            <p className="admin-modal__subtitle">
-              Provision a Soft Touch Sofas workspace account with approved role
-              permissions.
-            </p>
+
           </div>
           <button
             type="button"

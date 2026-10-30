@@ -5,87 +5,83 @@ import {
 
 export function ExpensesTable({
   expenses,
-  isAdmin,
-  canEdit,
-  canCancel,
   onViewExpense,
-  onEditExpense,
-  onCancelExpense,
-  onPreviewReceipt,
   onViewProject,
 }) {
-  const allowEdit = canEdit ?? isAdmin
-  const allowCancel = canCancel ?? isAdmin
   return (
     <div className="exp-table-wrap">
       <table className="exp-table">
         <thead>
           <tr>
-            <th scope="col">Voucher</th>
-            <th scope="col">Date</th>
-            <th scope="col">Category</th>
-            <th scope="col">Description</th>
-            <th scope="col">Project</th>
-            <th scope="col" className="exp-table__num-col">
+            <th scope="col" className="exp-table__th-expense">
+              Expense
+            </th>
+            <th scope="col" className="exp-table__th-category">
+              Category
+            </th>
+            <th scope="col" className="exp-table__th-project">
+              Project
+            </th>
+            <th scope="col" className="exp-table__th-amount">
               Amount
             </th>
-            <th scope="col">Receipt</th>
-            <th scope="col">Status</th>
-            <th scope="col" className="exp-table__actions-col">
-              Actions
+            <th scope="col" className="exp-table__th-date">
+              Date
+            </th>
+            <th scope="col" className="exp-table__th-action">
+              Action
             </th>
           </tr>
         </thead>
         <tbody>
           {expenses.map((expense) => {
             const isCancelled = expense.status === 'cancelled'
-            const primaryReceipt = expense.attachments?.[0] || null
 
             return (
               <tr
                 key={expense.id}
                 className={isCancelled ? 'exp-table__row--cancelled' : ''}
               >
-                <td>
-                  <button
-                    type="button"
-                    className="exp-code-btn"
-                    onClick={() => onViewExpense(expense)}
-                  >
-                    {expense.voucherNumber}
-                  </button>
-                </td>
-
-                <td style={{ whiteSpace: 'nowrap' }}>
-                  {formatExpenseDate(expense.expenseDate)}
-                </td>
-
-                <td>
-                  <span className="exp-category-pill">
-                    {expense.categoryName}
-                  </span>
-                </td>
-
-                <td>
-                  <div className="exp-desc-cell">
-                    <span className="exp-desc-cell__text">
-                      {expense.description}
-                    </span>
-                    <span className="exp-desc-cell__sub">
-                      By {expense.createdByName || 'Staff'}
-                    </span>
+                {/* 1. Expense: Voucher number + short description underneath */}
+                <td className="exp-table__td-expense">
+                  <div className="exp-expense-cell">
+                    <button
+                      type="button"
+                      className="exp-code-btn"
+                      onClick={() => onViewExpense(expense)}
+                      title={`View details for expense ${expense.voucherNumber}`}
+                    >
+                      {expense.voucherNumber}
+                    </button>
+                    {expense.description ? (
+                      <span
+                        className="exp-expense-cell__desc"
+                        title={expense.description}
+                      >
+                        {expense.description}
+                      </span>
+                    ) : null}
                   </div>
                 </td>
 
-                <td>
+                {/* 2. Category badge */}
+                <td className="exp-table__td-category">
+                  <span className="exp-category-pill">
+                    {expense.categoryName || 'General'}
+                  </span>
+                </td>
+
+                {/* 3. Project name / identifier or General Workshop */}
+                <td className="exp-table__td-project">
                   {expense.projectRecordId ? (
                     <button
                       type="button"
                       className="exp-project-link"
-                      onClick={() => onViewProject(expense.projectRecordId)}
+                      onClick={() => onViewProject?.(expense.projectRecordId)}
+                      title={`View project ${expense.projectName || ''}`}
                     >
                       {expense.projectCode
-                        ? `${expense.projectCode} — ${expense.projectName || ''}`
+                        ? `${expense.projectCode} • ${expense.projectName || ''}`
                         : expense.projectName || 'Linked Project'}
                     </button>
                   ) : (
@@ -95,7 +91,8 @@ export function ExpensesTable({
                   )}
                 </td>
 
-                <td className="exp-table__num-col">
+                {/* 4. Amount right-aligned */}
+                <td className="exp-table__td-amount">
                   <span
                     className={`exp-amount ${
                       isCancelled ? 'exp-amount--cancelled' : ''
@@ -105,72 +102,32 @@ export function ExpensesTable({
                   </span>
                 </td>
 
-                <td>
-                  {primaryReceipt ? (
-                    <button
-                      type="button"
-                      className="exp-receipt-chip"
-                      onClick={() => onPreviewReceipt(expense, 0)}
-                    >
-                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                        <path
-                          d="M6.5 10.5L11.8 5.2a2.5 2.5 0 113.54 3.54l-6.72 6.72a4 4 0 01-5.66-5.66l6.36-6.36"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      {expense.attachmentCount > 1
-                        ? `Preview (${expense.attachmentCount})`
-                        : 'Preview'}
-                    </button>
-                  ) : (
-                    <span className="exp-receipt-none">None</span>
-                  )}
-                </td>
-
-                <td>
-                  <span
-                    className={`exp-status-badge ${
-                      isCancelled
-                        ? 'exp-status-badge--cancelled'
-                        : 'exp-status-badge--active'
-                    }`}
-                  >
-                    {isCancelled ? 'Cancelled' : 'Active'}
+                {/* 5. Date */}
+                <td className="exp-table__td-date">
+                  <span className="exp-date-val">
+                    {formatExpenseDate(expense.expenseDate)}
                   </span>
                 </td>
 
-                <td className="exp-table__actions-col">
-                  <div className="exp-row-actions">
-                    <button
-                      type="button"
-                      className="exp-btn exp-btn--ghost exp-btn--sm"
-                      onClick={() => onViewExpense(expense)}
-                    >
-                      View
-                    </button>
-                    {!isCancelled && allowEdit ? (
-                      <button
-                        type="button"
-                        className="exp-btn exp-btn--secondary exp-btn--sm"
-                        onClick={() => onEditExpense(expense)}
-                      >
-                        Edit
-                      </button>
-                    ) : null}
-                    {!isCancelled && allowCancel ? (
-                      <button
-                        type="button"
-                        className="exp-btn exp-btn--ghost exp-btn--sm"
-                        style={{ color: '#9e3324' }}
-                        onClick={() => onCancelExpense(expense)}
-                      >
-                        Void
-                      </button>
-                    ) : null}
-                  </div>
+                {/* 6. Action: single compact View button */}
+                <td className="exp-table__td-action">
+                  <button
+                    type="button"
+                    className="exp-btn-view"
+                    onClick={() => onViewExpense(expense)}
+                    aria-label={`View details for expense ${expense.voucherNumber}`}
+                  >
+                    <span>View</span>
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path
+                        d="M3.5 8H12.5M12.5 8L8.75 4.25M12.5 8L8.75 11.75"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
                 </td>
               </tr>
             )

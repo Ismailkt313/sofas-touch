@@ -1,0 +1,447 @@
+/* Soft Touch Sofas — Reusable Luxury DatePicker / Calendar Styles */
+
+.sts-datepicker {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  font-family: var(--sts-font-sans);
+}
+
+.sts-datepicker--filter {
+  width: auto;
+  min-width: 135px;
+}
+
+/* Trigger Button */
+.sts-datepicker__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background-color: #ffffff;
+  border: 1px solid #d8cbbd;
+  color: var(--sts-charcoal);
+  font-family: var(--sts-font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 10px;
+  padding: 0 0.8rem;
+  height: 42px;
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  box-sizing: border-box;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.sts-datepicker__trigger--filter {
+  height: 38px;
+  padding: 0 0.72rem;
+  font-size: 0.84375rem;
+  background-color: #ffffff;
+  border-radius: 8px;
+}
+
+.sts-datepicker__trigger--form {
+  height: 42px;
+  background-color: var(--sts-ivory-input, #fdfbf8);
+  border-color: #d5c6b5;
+  font-size: 0.875rem;
+  font-weight: 400;
+  padding: 0 0.82rem;
+  border-radius: 10px;
+}
+
+.sts-datepicker__trigger:hover:not(:disabled) {
+  border-color: #bfa892;
+  background-color: #ffffff;
+}
+
+.sts-datepicker__trigger--open,
+.sts-datepicker__trigger:focus-visible {
+  outline: none;
+  border-color: var(--sts-walnut, #4a3525);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(74, 53, 37, 0.14);
+}
+
+.sts-datepicker__trigger--error {
+  border-color: var(--sts-error-accent, #a63a2a) !important;
+  background-color: #fffafa !important;
+}
+
+.sts-datepicker__trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: #f7f5f2;
+}
+
+/* Value & Content */
+.sts-datepicker__content {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sts-datepicker__prefix {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--sts-taupe, #7d6d5f);
+  background-color: var(--sts-sand-light, #f2ebe1);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.sts-datepicker__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--sts-charcoal, #2b2623);
+  font-weight: 500;
+}
+
+.sts-datepicker__trigger--placeholder .sts-datepicker__value {
+  color: #8c827a;
+  font-weight: 400;
+}
+
+.sts-datepicker__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.sts-datepicker__clear-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #9c9187;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.sts-datepicker__clear-btn:hover {
+  background-color: #ebe0d3;
+  color: var(--sts-charcoal, #2b2623);
+}
+
+.sts-datepicker__icon {
+  width: 16px;
+  height: 16px;
+  color: #7a6e65;
+  flex-shrink: 0;
+  transition: color 0.16s ease;
+}
+
+.sts-datepicker__trigger--open .sts-datepicker__icon {
+  color: var(--sts-walnut, #4a3525);
+}
+
+/* Calendar Popover / Dropdown Panel */
+.sts-calendar-popover {
+  position: fixed;
+  z-index: 99999;
+  background-color: #ffffff;
+  border: 1px solid #d5c4af;
+  border-radius: 12px;
+  box-shadow:
+    0 16px 36px -6px rgba(36, 24, 16, 0.22),
+    0 6px 14px -3px rgba(36, 24, 16, 0.12);
+  box-sizing: border-box;
+  width: 290px;
+  max-width: calc(100vw - 16px);
+  user-select: none;
+  overflow: hidden;
+  animation: sts-calendar-appear 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes sts-calendar-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Inline Calendar Mode */
+.sts-calendar-inline {
+  width: 290px;
+  max-width: 100%;
+  background-color: #ffffff;
+  border: 1px solid #dfd3c3;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(36, 24, 16, 0.06);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Calendar Card Internal Structure */
+.sts-calendar {
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+/* Header */
+.sts-calendar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid #f0e8de;
+}
+
+.sts-calendar__title-btn {
+  background: none;
+  border: none;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  font-family: var(--sts-font-display, serif);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--sts-charcoal, #2b2623);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.sts-calendar__title-btn:hover {
+  background-color: var(--sts-sand-light, #f2ebe1);
+  color: var(--sts-walnut, #4a3525);
+}
+
+.sts-calendar__nav-group {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.sts-calendar__nav-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sts-charcoal-muted, #574e46);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.sts-calendar__nav-btn:hover:not(:disabled) {
+  background-color: var(--sts-sand-light, #f2ebe1);
+  color: var(--sts-walnut, #4a3525);
+}
+
+.sts-calendar__nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Days of Week Row */
+.sts-calendar__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+
+.sts-calendar__weekday {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--sts-taupe, #7d6d5f);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0;
+}
+
+/* Days Grid */
+.sts-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.sts-calendar__day {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-family: var(--sts-font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--sts-charcoal, #2b2623);
+  cursor: pointer;
+  position: relative;
+  padding: 0;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease,
+    transform 0.08s ease;
+}
+
+.sts-calendar__day:hover:not(:disabled):not(.sts-calendar__day--selected) {
+  background-color: var(--sts-sand-light, #f2ebe1);
+  color: var(--sts-walnut, #4a3525);
+}
+
+.sts-calendar__day:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+/* Day State Modifiers */
+.sts-calendar__day--outside {
+  color: #b5a99e;
+  font-weight: 400;
+}
+
+.sts-calendar__day--today {
+  border-color: #c9b49e;
+  font-weight: 700;
+}
+
+.sts-calendar__day--today::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--sts-walnut, #4a3525);
+}
+
+.sts-calendar__day--selected {
+  background-color: var(--sts-walnut, #4a3525) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  border-color: var(--sts-walnut, #4a3525);
+  box-shadow: 0 2px 6px rgba(74, 53, 37, 0.24);
+}
+
+.sts-calendar__day--selected.sts-calendar__day--today::after {
+  background-color: #ffffff;
+}
+
+.sts-calendar__day--disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+/* Quick Month & Year Picker Overlays */
+.sts-calendar__picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 0.25rem 0;
+  max-height: 215px;
+  overflow-y: auto;
+}
+
+.sts-calendar__picker-item {
+  padding: 0.55rem 0.3rem;
+  background-color: #fcfaf7;
+  border: 1px solid #ebe2d6;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--sts-charcoal, #2b2623);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.12s ease;
+}
+
+.sts-calendar__picker-item:hover {
+  background-color: var(--sts-sand-light, #f2ebe1);
+  border-color: #c8b7a2;
+  color: var(--sts-walnut, #4a3525);
+}
+
+.sts-calendar__picker-item--active {
+  background-color: var(--sts-walnut, #4a3525);
+  border-color: var(--sts-walnut, #4a3525);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Footer Actions */
+.sts-calendar__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid #f0e8de;
+}
+
+.sts-calendar__btn-text {
+  background: none;
+  border: none;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--sts-walnut, #4a3525);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.sts-calendar__btn-text:hover {
+  background-color: var(--sts-sand-light, #f2ebe1);
+}
+
+.sts-calendar__btn-text--muted {
+  color: var(--sts-charcoal-muted, #574e46);
+  font-weight: 500;
+}
+
+.sts-calendar__btn-primary {
+  background-color: var(--sts-walnut, #4a3525);
+  border: none;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #ffffff;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.sts-calendar__btn-primary:hover {
+  background-color: var(--sts-walnut-hover, #3b291c);
+}
+
