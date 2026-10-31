@@ -1,4 +1,6 @@
 import { useListingState } from '../../../services/navigationState'
+import { calculatePreservedPage } from '../../../components/common/paginationUtils'
+import { Toast } from '../../../components/common'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import { fetchProjects } from '../../projects'
@@ -8,7 +10,7 @@ import { ExpenseFormModal } from '../components/ExpenseFormModal'
 import { ExpenseReceiptModal } from '../components/ExpenseReceiptModal'
 import { ExpensesFiltersBar } from '../components/ExpensesFiltersBar'
 import { ExpensesMobileList } from '../components/ExpensesMobileList'
-import { ExpensesPagination } from '../components/ExpensesPagination'
+import { Pagination } from '../../../components/common/Pagination'
 import { ExpensesSummaryStrip } from '../components/ExpensesSummaryStrip'
 import { ExpensesTable } from '../components/ExpensesTable'
 import {
@@ -27,6 +29,7 @@ import '../styles/expenses.css'
 const PAGE_LIMIT = 10
 const EXPENSES_LISTING_SCHEMA = {
   page: { type: 'number', default: 1, min: 1 },
+  limit: { type: 'number', default: 10, min: 1 },
   search: { type: 'string', default: '' },
   category: { type: 'string', default: 'all' },
   project: { type: 'string', default: 'all' },
@@ -44,7 +47,7 @@ export function ExpensesPage({ currentUser, onNavigate }) {
   const canViewProjects = hasPermission(currentUser, 'projects.view')
   const [authRequired, setAuthRequired] = useState(() => !hasActiveAuthToken())
 
-  const { values, setValue, resetAll, clampPage } = useListingState(EXPENSES_LISTING_SCHEMA, {
+  const { values, setValue, setValues, resetAll, clampPage } = useListingState(EXPENSES_LISTING_SCHEMA, {
     routeKey: 'expenses',
   })
 
@@ -57,6 +60,7 @@ export function ExpensesPage({ currentUser, onNavigate }) {
   const fromDate = values.fromDate
   const toDate = values.toDate
   const statusFilter = values.status
+  const pageSize = values.limit || PAGE_LIMIT
 
   const setCurrentPage = useCallback(
     (pageNumber) => setValue('page', pageNumber, { push: true }),
@@ -192,7 +196,7 @@ export function ExpensesPage({ currentUser, onNavigate }) {
 
     fetchExpenses({
       page: currentPage,
-      limit: PAGE_LIMIT,
+      limit: pageSize,
       search: appliedSearch,
       categoryId: categoryFilter,
       projectId: projectFilter,
@@ -207,6 +211,9 @@ export function ExpensesPage({ currentUser, onNavigate }) {
         setExpenses(result.expenses)
         setTotalExpenses(result.total)
         setTotalPages(result.totalPages)
+        if (result.totalPages >= 1 && currentPage > result.totalPages) {
+          clampPage(result.totalPages)
+        }
         setSummary(result.summary)
         setError('')
         setIsLoading(false)
@@ -309,6 +316,20 @@ export function ExpensesPage({ currentUser, onNavigate }) {
       setValue('page', nextPage, { push: true })
     },
     [markRefreshing, setValue],
+  )
+
+  const handlePageSizeChange = useCallback(
+    (nextLimit) => {
+      markRefreshing()
+      const newPage = calculatePreservedPage(
+        currentPage,
+        pageSize,
+        nextLimit,
+        totalExpenses,
+      )
+      setValues({ page: newPage, limit: nextLimit })
+    },
+    [currentPage, markRefreshing, pageSize, setValues, totalExpenses],
   )
 
   const handleResetFilters = useCallback(() => {
@@ -550,16 +571,11 @@ export function ExpensesPage({ currentUser, onNavigate }) {
       />
 
       {toastMessage ? (
-        <div className="exp-banner exp-banner--success" role="status">
-          <span>{toastMessage}</span>
-          <button
-            type="button"
-            className="exp-banner__dismiss"
-            onClick={() => setToastMessage('')}
-          >
-            Dismiss
-          </button>
-        </div>
+        <Toast
+          message={toastMessage}
+          tone="success"
+          onClose={() => setToastMessage('')}
+        />
       ) : null}
 
       {error ? (
@@ -680,12 +696,15 @@ export function ExpensesPage({ currentUser, onNavigate }) {
               onViewProject={handleNavigateProject}
             />
 
-            <ExpensesPagination
+            <Pagination
               page={currentPage}
               totalPages={totalPages}
               totalItems={totalExpenses}
-              limit={PAGE_LIMIT}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50]}
               onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              itemName="expense"
             />
           </>
         )}

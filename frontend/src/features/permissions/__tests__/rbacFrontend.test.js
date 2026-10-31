@@ -20,9 +20,9 @@ import {
   togglePermissionWithDependencies,
 } from '../constants/permissionsCatalog.js'
 
-test('permissionsCatalog defines all 26 canonical keys and safe role defaults', () => {
-  assert.equal(ALL_PERMISSION_KEYS.length, 26)
-  assert.equal(DEFAULT_ADMIN_PERMISSIONS.length, 26)
+test('permissionsCatalog defines all 25 canonical keys and safe role defaults', () => {
+  assert.equal(ALL_PERMISSION_KEYS.length, 25)
+  assert.equal(DEFAULT_ADMIN_PERMISSIONS.length, 25)
 
   for (const reserved of ADMIN_RESERVED_PERMISSIONS) {
     assert.equal(
@@ -115,9 +115,8 @@ test('navigationConfig prevents flash before load and separates Admin vs Data En
   const adminItems = getVisibleNavItems(adminUser)
   assert.equal(adminItems.length, ADMIN_NAV_ITEMS.length)
   assert.ok(adminItems.some((item) => item.path === '/permissions'))
-  assert.ok(adminItems.some((item) => item.path === '/settings'))
   assert.ok(adminItems.some((item) => item.path === '/users'))
-  assert.ok(adminItems.some((item) => item.path === '/user-approvals'))
+  // /user-approvals is accessed via header notifications/dashboard, not in sidebar nav
   assert.ok(adminItems.some((item) => item.path === '/reports'))
 
   const adminGroups = getGroupedVisibleNavItems(adminUser)
@@ -160,12 +159,13 @@ test('evaluateRouteAccess blocks unauthorized routes for 403 rendering and allow
     true,
   )
   assert.equal(evaluateRouteAccess('/profile', operatorUser).allowed, true)
+  assert.equal(evaluateRouteAccess('/settings', operatorUser).allowed, false)
+  assert.equal(evaluateRouteAccess('/settings', adminUser).allowed, false)
 
   for (const restrictedPath of [
     '/users',
     '/user-approvals',
     '/permissions',
-    '/settings',
     '/reports',
     '/projects/PRJ-2026-0001/report',
   ]) {

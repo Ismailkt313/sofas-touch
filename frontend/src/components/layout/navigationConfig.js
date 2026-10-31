@@ -78,6 +78,7 @@ export const WORKSPACE_NAV_ITEMS = [
     requiredPermissions: ['activity.viewAll', 'activity.viewOwn'],
     mode: 'any',
   },
+
   {
     id: 'users',
     key: 'users',
@@ -87,15 +88,6 @@ export const WORKSPACE_NAV_ITEMS = [
     requiredPermissions: ['users.view'],
     mode: 'all',
   },
-  // {
-  //   id: 'user-approvals',
-  //   key: 'user-approvals',
-  //   label: 'User Approvals',
-  //   path: '/user-approvals',
-  //   group: 'administration',
-  //   requiredPermissions: ['users.approve'],
-  //   mode: 'all',
-  // },
   {
     id: 'permissions',
     key: 'permissions',
@@ -103,15 +95,6 @@ export const WORKSPACE_NAV_ITEMS = [
     path: '/permissions',
     group: 'administration',
     requiredPermissions: ['permissions.manage'],
-    mode: 'all',
-  },
-  {
-    id: 'settings',
-    key: 'settings',
-    label: 'Settings',
-    path: '/settings',
-    group: 'administration',
-    requiredPermissions: ['settings.manage'],
     mode: 'all',
   },
 ]
@@ -181,6 +164,15 @@ export function getGroupedVisibleNavItems(user) {
 export function isNavItemActive(pathname = '/', itemPath = '/') {
   const normalizedPath = pathname.replace(/\/+$/, '') || '/'
   const normalizedItem = itemPath.replace(/\/+$/, '') || '/'
+
+  if (normalizedItem === '/user-approvals') {
+    return (
+      normalizedPath === '/user-approvals' ||
+      normalizedPath.startsWith('/user-approvals/') ||
+      normalizedPath === '/approvals' ||
+      normalizedPath.startsWith('/approvals/')
+    )
+  }
 
   if (normalizedItem === '/dashboard') {
     return normalizedPath === '/' || normalizedPath === '/dashboard'

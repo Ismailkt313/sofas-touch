@@ -1,4 +1,5 @@
 import { useListingState } from '../../../services/navigationState'
+import { calculatePreservedPage } from '../../../components/common/paginationUtils'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import {
@@ -16,6 +17,7 @@ import {
 const DEFAULT_PAGE_SIZE = 10
 const PROJECTS_LISTING_SCHEMA = {
   page: { type: 'number', default: 1, min: 1 },
+  limit: { type: 'number', default: 10, min: 1 },
   search: { type: 'string', default: '' },
   status: { type: 'string', default: 'all' },
   category: { type: 'string', default: 'all' },
@@ -32,7 +34,7 @@ export function useProjectsList({ currentUser }) {
   )
   const initialHasToken = hasActiveAuthToken()
 
-  const { values, setValue, resetAll, clampPage } = useListingState(PROJECTS_LISTING_SCHEMA, {
+  const { values, setValue, setValues, resetAll, clampPage } = useListingState(PROJECTS_LISTING_SCHEMA, {
     routeKey: 'projects',
   })
 
@@ -42,6 +44,7 @@ export function useProjectsList({ currentUser }) {
   const currentPage = values.page
   const statusFilter = values.status
   const categoryFilter = values.category
+  const pageSize = values.limit || DEFAULT_PAGE_SIZE
 
   const setCurrentPage = useCallback(
     (pageNumber) => setValue('page', pageNumber, { push: true }),
@@ -146,7 +149,7 @@ export function useProjectsList({ currentUser }) {
         ] = await Promise.all([
           fetchProjects({
             page: currentPage,
-            limit: DEFAULT_PAGE_SIZE,
+            limit: pageSize,
             search: debouncedSearch,
             status: statusFilter,
             category: categoryFilter,
@@ -203,6 +206,7 @@ export function useProjectsList({ currentUser }) {
     }
   }, [
     currentPage,
+    pageSize,
     debouncedSearch,
     statusFilter,
     categoryFilter,
@@ -310,28 +314,26 @@ export function useProjectsList({ currentUser }) {
   }, [])
 
   const handleStatusFilterChange = useCallback((value) => {
-    setStatusFilter(value)
-    setCurrentPage(1)
-  }, [])
+    setValue('status', value, { resetPage: true })
+  }, [setValue])
 
   const handleCategoryFilterChange = useCallback((value) => {
-    setCategoryFilter(value)
-    setCurrentPage(1)
-  }, [])
+    setValue('category', value, { resetPage: true })
+  }, [setValue])
 
   const handleApplyFilters = useCallback((nextStatus, nextCategory) => {
-    setStatusFilter(nextStatus || 'all')
-    setCategoryFilter(nextCategory || 'all')
-    setCurrentPage(1)
-  }, [])
+    setValues({
+      status: nextStatus || 'all',
+      category: nextCategory || 'all',
+      page: 1,
+    })
+  }, [setValues])
 
   const resetFilters = useCallback(() => {
     setSearchInput('')
     setDebouncedSearch('')
-    setStatusFilter('all')
-    setCategoryFilter('all')
-    setCurrentPage(1)
-  }, [])
+    resetAll()
+  }, [resetAll])
 
   const reloadProjects = useCallback(() => {
     setRefreshTick((prev) => prev + 1)
@@ -509,15 +511,30 @@ export function useProjectsList({ currentUser }) {
   }, [automationState.activityWarnings])
 
   const rangeStart =
-    totalProjects === 0 ? 0 : (currentPage - 1) * DEFAULT_PAGE_SIZE + 1
-  const rangeEnd = Math.min(currentPage * DEFAULT_PAGE_SIZE, totalProjects)
+    totalProjects === 0 ? 0 : (currentPage - 1) * pageSize + 1
+  const rangeEnd = Math.min(currentPage * pageSize, totalProjects)
+
+  const handlePageSizeChange = useCallback(
+    (nextLimit) => {
+      const newPage = calculatePreservedPage(
+        currentPage,
+        pageSize,
+        nextLimit,
+        totalProjects,
+      )
+      setValues({ page: newPage, limit: nextLimit })
+    },
+    [currentPage, pageSize, totalProjects, setValues],
+  )
 
   return {
     projects,
     totalProjects,
     totalPages,
     currentPage,
-    pageSize: DEFAULT_PAGE_SIZE,
+    pageSize,
+    handlePageSizeChange,
+    setPageSize: handlePageSizeChange,
     rangeStart,
     rangeEnd,
     setCurrentPage,

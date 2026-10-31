@@ -35,6 +35,7 @@ import {
   BillAttachmentNotFoundError,
   LocalProtectedBillStorageService,
 } from '../storage/bill-storage.service';
+import { AdaptiveBillAttachmentStorageService } from '../storage/cloudinary-storage.service';
 import {
   BillStorageProvider,
   CreatePurchaseVoucherDto,
@@ -240,7 +241,7 @@ export class PurchaseVoucherService {
     private readonly rawMaterialsService: RawMaterialsService,
     private readonly projectRepository: IProjectRepository,
     private readonly projectService: IProjectService,
-    private readonly billStorage: IBillAttachmentStorage = new LocalProtectedBillStorageService(),
+    private readonly billStorage: IBillAttachmentStorage = new AdaptiveBillAttachmentStorageService(),
   ) {}
 
   toSafeAttachment(
@@ -260,8 +261,10 @@ export class PurchaseVoucherService {
       uploadedBy: attachment.uploadedBy,
       uploadedByName: attachment.uploadedByName,
       uploadedAt: attachment.uploadedAt,
-      viewUrl: baseUrl,
-      downloadUrl: `${baseUrl}?download=1`,
+      viewUrl: attachment.secureUrl || baseUrl,
+      downloadUrl: attachment.secureUrl || `${baseUrl}?download=1`,
+      secureUrl: attachment.secureUrl || null,
+      publicId: attachment.publicId || null,
     };
   }
 

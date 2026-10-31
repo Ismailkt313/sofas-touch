@@ -35,8 +35,11 @@ export async function fetchRecentActivities(limit = 50) {
 
 export async function fetchActivityHistory(filters = {}) {
   const params = {}
-  if (filters.page) params.page = filters.page
-  if (filters.limit) params.limit = filters.limit
+  const safePage = Math.max(1, parseInt(filters.page, 10) || 1)
+  const safeLimit = Math.max(1, Math.min(100, parseInt(filters.limit, 10) || 10))
+  params.page = safePage
+  params.limit = safeLimit
+
   if (filters.entityType && filters.entityType !== 'all') {
     params.entityType = filters.entityType
   }
@@ -64,8 +67,15 @@ export async function fetchActivityHistory(filters = {}) {
   return {
     items,
     total: Number(data.total) || 0,
-    page: Number(data.page) || 1,
-    limit: Number(data.limit) || 25,
+    page: Number(data.page) || safePage,
+    limit: Number(data.limit) || safeLimit,
     totalPages: Math.max(1, Number(data.totalPages) || 1),
+    summary: data.summary || {
+      total: Number(data.total) || 0,
+      today: 0,
+      projects: 0,
+      financial: 0,
+    },
+    filterOptions: data.filterOptions || null,
   }
 }

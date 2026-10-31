@@ -46,6 +46,30 @@ export function RecentActivityDock({ pathname, currentUser, onNavigate }) {
   }, [])
 
   useEffect(() => {
+    if (isActivityPage) return
+    loadRecent({ silent: false })
+  }, [loadRecent, isActivityPage])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || isActivityPage) return undefined
+
+    const handleActivityUpdate = () => {
+      loadRecent({ silent: true })
+    }
+
+    window.addEventListener(ACTIVITY_UPDATED_EVENT, handleActivityUpdate)
+    return () => {
+      window.removeEventListener(ACTIVITY_UPDATED_EVENT, handleActivityUpdate)
+    }
+  }, [loadRecent, isActivityPage])
+
+  useEffect(() => {
+    if (isExpanded && !isActivityPage && activities.length === 0 && !loading) {
+      loadRecent({ silent: false })
+    }
+  }, [isExpanded, isActivityPage, activities.length, loading, loadRecent])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return undefined
     const mql = window.matchMedia('(max-width: 767px)')
     const handleChange = (e) => {
@@ -140,7 +164,7 @@ export function RecentActivityDock({ pathname, currentUser, onNavigate }) {
           <ActivityFeedItem
             key={entry.id}
             item={entry}
-            userRole={currentUser || userRole}
+            userRole={userRole}
             compact
             onNavigate={onNavigate}
             onAfterNavigate={() => setIsExpanded(false)}

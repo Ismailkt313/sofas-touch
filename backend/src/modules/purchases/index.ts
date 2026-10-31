@@ -17,10 +17,10 @@ import {
   PurchaseVoucherService,
   PurchaseVoucherTotalsProvider,
 } from './service/purchase-voucher.service';
-import { LocalProtectedBillStorageService } from './storage/bill-storage.service';
+import { defaultAdaptiveBillStorage } from './storage/cloudinary-storage.service';
 
 export const purchaseVoucherRepository = new PurchaseVoucherRepository();
-export const billAttachmentStorage = new LocalProtectedBillStorageService();
+export const billAttachmentStorage = defaultAdaptiveBillStorage;
 export const purchaseVoucherTotalsProvider = new PurchaseVoucherTotalsProvider(
   purchaseVoucherRepository,
 );
@@ -121,6 +121,7 @@ export {
   sanitizeAttachmentFileName,
   validateAndInspectBillFile,
 } from './storage/bill-storage.service';
+export * from './storage/cloudinary-storage.service';
 export * from './models/purchase-counter.model';
 export * from './models/purchase-voucher.model';
 export * from './models/purchase-stock-movement.model';

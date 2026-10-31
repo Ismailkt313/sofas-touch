@@ -1,11 +1,12 @@
 import { hasPermission } from '../../permissions/constants/permissionsCatalog'
+import { Toast } from '../../../components/common'
 import { AddUserModal } from '../components/AddUserModal'
 import { ConfirmUserStatusModal } from '../components/ConfirmUserStatusModal'
 import { EditUserModal } from '../components/EditUserModal'
 import { UserDetailsModal } from '../components/UserDetailsModal'
 import { UserFiltersBar } from '../components/UserFiltersBar'
 import { UsersMobileList } from '../components/UsersMobileList'
-import { UsersPagination } from '../components/UsersPagination'
+import { Pagination } from '../../../components/common/Pagination'
 import { UsersTable } from '../components/UsersTable'
 import { useUsersManagement } from '../hooks/useUsersManagement'
 import '../styles/users.css'
@@ -37,6 +38,8 @@ export function UserManagementPage({ currentUser, onNavigate }) {
     rangeStart,
     rangeEnd,
     setCurrentPage,
+    pageSize,
+    handlePageSizeChange,
 
     isSelfUser,
     reloadUsers,
@@ -125,27 +128,11 @@ export function UserManagementPage({ currentUser, onNavigate }) {
       ) : null}
 
       {feedbackBanner ? (
-        <div
-          className={`users-feedback users-feedback--${feedbackBanner.tone}`}
-          role="status"
-        >
-          <span>{feedbackBanner.text}</span>
-          <button
-            type="button"
-            className="users-feedback__dismiss"
-            onClick={clearFeedbackBanner}
-            aria-label="Dismiss notification"
-          >
-            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path
-                d="M5.5 5.5L14.5 14.5M14.5 5.5L5.5 14.5"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </div>
+        <Toast
+          message={feedbackBanner.text || feedbackBanner}
+          tone={feedbackBanner.tone || 'success'}
+          onClose={clearFeedbackBanner}
+        />
       ) : null}
 
       <section className="users-surface" aria-label="Users directory">
@@ -306,13 +293,15 @@ export function UserManagementPage({ currentUser, onNavigate }) {
               onToggleStatus={requestStatusToggle}
             />
 
-            <UsersPagination
-              activePage={activePage}
+            <Pagination
+              page={activePage}
               totalPages={totalPages}
-              totalFiltered={totalFiltered}
-              rangeStart={rangeStart}
-              rangeEnd={rangeEnd}
+              totalItems={totalFiltered}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50]}
               onPageChange={setCurrentPage}
+              onPageSizeChange={handlePageSizeChange}
+              itemName="user"
             />
           </>
         )}

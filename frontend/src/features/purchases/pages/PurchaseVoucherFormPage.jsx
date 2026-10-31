@@ -1429,7 +1429,7 @@ export function PurchaseVoucherFormPage({
       setConfirmLeaveTarget(destinationPath)
       return
     }
-    onNavigate?.(destinationPath)
+    navigateBackOrFallback(onNavigate, destinationPath)
   }
 
   const validateClientForm = () => {
@@ -2126,7 +2126,7 @@ export function PurchaseVoucherFormPage({
                 onClick={() => {
                   const target = confirmLeaveTarget
                   setConfirmLeaveTarget('')
-                  onNavigate?.(target)
+                  navigateBackOrFallback(onNavigate, target)
                 }}
               >
                 Discard

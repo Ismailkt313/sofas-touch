@@ -7,6 +7,7 @@ import { validateRejectUserDto } from '../dto/reject-user.dto';
 import { validateCreateUserDto } from '../dto/create-user.dto';
 import { validateUpdateUserDto } from '../dto/update-user.dto';
 import { validateUpdateStatusDto } from '../dto/update-status.dto';
+import { cloudinaryService } from '../../../services/cloudinary.service';
 import { IUserController, IUserService } from '../types';
 import {
   InvalidOperationError,
@@ -470,6 +471,78 @@ export class UserController implements IUserController {
         return;
       }
 
+      next(error);
+    }
+  };
+
+  uploadAvatar = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const rawId = Array.isArray(req.params.id)
+        ? req.params.id[0]
+        : req.params.id;
+      const id = String(rawId || '').trim();
+      const callerId = req.user?.id || '';
+      const callerRole = req.user?.role || '';
+      const callerPermissions = req.user?.permissions || [];
+      const hasManage =
+        callerRole === 'admin' || callerPermissions.includes('users.manage');
+
+      if (id !== callerId && !hasManage) {
+        res.status(403).json({
+          error: 'Forbidden',
+          message: 'You are not authorized to update this user avatar.',
+        });
+        return;
+      }
+
+      const file = req.file;
+      if (!file || !file.buffer || file.buffer.length === 0) {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: 'No image file was uploaded.',
+        });
+        return;
+      }
+
+      let imageUrl: string;
+      if (cloudinaryService.isConfigured()) {
+        const uploadResult = await cloudinaryService.uploadImage(
+          file.buffer,
+          file.originalname || 'avatar.jpg',
+          {
+            folder: 'softtouch/avatars',
+            transformation: [{ width: 256, height: 256, crop: 'fill', gravity: 'face' }],
+          },
+        );
+        imageUrl = uploadResult.secureUrl;
+      } else {
+        const mime = file.mimetype || 'image/jpeg';
+        imageUrl = `data:${mime};base64,${file.buffer.toString('base64')}`;
+      }
+
+      const user = await this.userService.updateUser(
+        id,
+        { image: imageUrl },
+        callerId,
+      );
+
+      res.status(200).json({
+        message: 'Avatar updated successfully.',
+        imageUrl,
+        user,
+      });
+    } catch (error) {
+      if (error instanceof UserNotFoundError) {
+        res.status(404).json({
+          error: 'Not Found',
+          message: error.message,
+        });
+        return;
+      }
       next(error);
     }
   };

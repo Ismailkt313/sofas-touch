@@ -31,7 +31,7 @@ import {
 } from './features/purchases'
 import { RawMaterialsPage } from './features/raw-materials'
 import { ProjectReportPage, ReportsPage } from './features/reports'
-import { ProfilePage, SettingsPage } from './features/settings'
+import { ProfilePage } from './features/profile'
 import { UserManagementPage } from './features/users'
 
 const ROUTE_CHANGE_EVENT = 'sts:routechange'
@@ -184,9 +184,10 @@ function App() {
     pathname === '/dashboard' || (pathname === '/' && hasSession)
   const isActivityRoute = isNavItemActive(pathname, '/activity')
   const isUsersRoute = isNavItemActive(pathname, '/users')
-  const isUserApprovalsRoute = isNavItemActive(pathname, '/user-approvals')
+  const isUserApprovalsRoute =
+    isNavItemActive(pathname, '/user-approvals') ||
+    isNavItemActive(pathname, '/approvals')
   const isPermissionsRoute = isNavItemActive(pathname, '/permissions')
-  const isSettingsRoute = isNavItemActive(pathname, '/settings')
   const isProfileRoute = pathname === '/profile'
   const isProjectsListRoute = pathname === '/projects'
   const projectReportMatch =
@@ -227,7 +228,6 @@ function App() {
       isUserApprovalsRoute ||
       isUsersRoute ||
       isPermissionsRoute ||
-      isSettingsRoute ||
       isProfileRoute ||
       Boolean(projectReportIdentifier) ||
       isReportsListRoute ||
@@ -252,8 +252,6 @@ function App() {
       document.title = 'Soft Touch Sofas — Dashboard'
     } else if (isPermissionsRoute) {
       document.title = 'Soft Touch Sofas — Roles & Permissions'
-    } else if (isSettingsRoute) {
-      document.title = 'Soft Touch Sofas — Application Settings'
     } else if (isProfileRoute) {
       document.title = 'Soft Touch Sofas — My Profile'
     } else if (isActivityRoute) {
@@ -290,7 +288,6 @@ function App() {
   }, [
     isDashboardRoute,
     isPermissionsRoute,
-    isSettingsRoute,
     isProfileRoute,
     isActivityRoute,
     isUserApprovalsRoute,
@@ -358,8 +355,6 @@ function App() {
                 />
               ) : isPermissionsRoute ? (
                 <RolesPermissionsPage />
-              ) : isSettingsRoute ? (
-                <SettingsPage />
               ) : isProfileRoute ? (
                 <ProfilePage
                   currentUser={currentUser}

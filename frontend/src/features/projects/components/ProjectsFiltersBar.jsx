@@ -125,7 +125,7 @@ export function ProjectsFiltersBar({
                 d="M13.25 13.25L17 17"
                 stroke="currentColor"
                 strokeWidth="1.5"
-                strokeLinecap="round"
+                strokeLinecap="round" 
               />
             </svg>
           </span>

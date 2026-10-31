@@ -2,11 +2,10 @@ import { useState } from 'react'
 import {
   getEffectivePermissions,
   normalizeRoleKey,
-  PERMISSION_LABELS,
 } from '../../permissions/constants/permissionsCatalog'
 import { usePermissions } from '../../permissions/context/permissionsContextRef'
 import '../../permissions/styles/permissions.css'
-import { updateSelfProfile } from '../services/settingsService'
+import { updateSelfProfile } from '../services/profileService'
 
 export function ProfilePage({ currentUser, onLogout }) {
   const { refreshPermissions } = usePermissions()
@@ -18,10 +17,6 @@ export function ProfilePage({ currentUser, onLogout }) {
   const roleKey = normalizeRoleKey(currentUser?.role)
   const roleLabel =
     roleKey === 'admin' ? 'Administrator' : 'Data Entry Operator'
-  const effectivePermissions = getEffectivePermissions(currentUser)
-  const assignedProjects = Array.isArray(currentUser?.assignedProjectIds)
-    ? currentUser.assignedProjectIds
-    : null
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -137,33 +132,7 @@ export function ProfilePage({ currentUser, onLogout }) {
           </button>
         </div>
       </form>
-
-      <section className="rbac-surface">
-        <div className="rbac-preview-strip__top" style={{ marginBottom: '12px' }}>
-          <span className="rbac-preview-strip__label">
-            Active Capabilities ({effectivePermissions.length})
-          </span>
-          {assignedProjects ? (
-            <span className="rbac-preview-strip__meta">
-              Assigned Projects:{' '}
-              {assignedProjects.length > 0
-                ? assignedProjects.join(', ')
-                : 'None assigned'}
-            </span>
-          ) : (
-            <span className="rbac-preview-strip__meta">
-              Project Scope: All Active Studio Projects
-            </span>
-          )}
-        </div>
-        <div className="rbac-pill-list">
-          {effectivePermissions.map((perm) => (
-            <span key={perm} className="rbac-pill">
-              {PERMISSION_LABELS[perm] || perm}
-            </span>
-          ))}
-        </div>
-      </section>
     </div>
   )
 }
+

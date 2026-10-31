@@ -117,13 +117,6 @@ export function normalizeProject(raw = {}) {
         80,
     ) || 80
 
-  const siteLocationValue =
-    typeof raw.siteLocation === 'string'
-      ? raw.siteLocation.trim()
-      : typeof raw.location === 'string'
-        ? raw.location.trim()
-        : ''
-
   const clientContactValue =
     typeof raw.clientContact === 'string'
       ? raw.clientContact.trim()
@@ -143,10 +136,7 @@ export function normalizeProject(raw = {}) {
       raw.clientContact !== undefined ||
       raw.clientPhone !== undefined ||
       raw.clientEmail !== undefined,
-    siteLocation: siteLocationValue,
-    hasSiteLocationField:
-      raw.siteLocation !== undefined || raw.location !== undefined,
-    category: PROJECT_CATEGORY_OPTIONS.includes(raw.category)
+category: PROJECT_CATEGORY_OPTIONS.includes(raw.category)
       ? raw.category
       : 'Modular Sofa',
     status: PROJECT_STATUS_OPTIONS.includes(raw.status)

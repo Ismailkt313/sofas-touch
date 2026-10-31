@@ -1,0 +1,307 @@
+/* ==========================================================================
+   Shared Standardized Pagination Component — Soft Touch Sofas
+   ========================================================================== */
+
+.sts-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--sts-border, #e3ddd3);
+  background: transparent;
+  width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+}
+
+/* Metadata & Rows per page */
+.sts-pagination__meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sts-pagination__summary {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--sts-text-secondary, #675f57);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.sts-pagination__summary strong {
+  font-weight: 600;
+  color: var(--sts-text-primary, #231e19);
+}
+
+.sts-pagination__size-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--sts-text-secondary, #675f57);
+}
+
+.sts-pagination__size-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--sts-text-secondary, #675f57);
+  white-space: nowrap;
+}
+
+.sts-pagination__size-select {
+  appearance: auto;
+  background-color: #ffffff;
+  border: 1px solid var(--sts-border, #d9d1c5);
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--sts-text-primary, #231e19);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sts-pagination__size-select:hover:not(:disabled) {
+  border-color: #bcae9c;
+}
+
+.sts-pagination__size-select:focus {
+  border-color: var(--sts-accent, #6b4f3b);
+  box-shadow: 0 0 0 2px rgba(107, 79, 59, 0.15);
+}
+
+.sts-pagination__size-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #f7f4ee;
+}
+
+/* Controls & Buttons */
+.sts-pagination__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.sts-pagination__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 11px;
+  min-height: 34px;
+  border: 1px solid var(--sts-border, #ded6c9);
+  border-radius: 7px;
+  background: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--sts-text-primary, #2b2520);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sts-pagination__btn:hover:not(:disabled) {
+  background: #f7f3ec;
+  border-color: #c9bea9;
+  color: #1a1612;
+}
+
+.sts-pagination__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #fbf9f6;
+  border-color: #e8e3dc;
+  color: #a39c94;
+}
+
+.sts-pagination__btn-text {
+  display: inline;
+}
+
+/* Page Numbers Group */
+.sts-pagination__pages {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sts-pagination__page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
+  border: 1px solid var(--sts-border, #ded6c9);
+  border-radius: 7px;
+  background: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--sts-text-primary, #2b2520);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+}
+
+.sts-pagination__page:hover:not(:disabled):not(.sts-pagination__page--active) {
+  background: #f7f3ec;
+  border-color: #c9bea9;
+}
+
+.sts-pagination__page--active {
+  background: var(--sts-accent, #6b4f3b) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+  font-weight: 700 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  cursor: default;
+}
+
+.sts-pagination__ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 34px;
+  color: #8c8278;
+  font-weight: 600;
+  font-size: 0.88rem;
+  user-select: none;
+}
+
+/* Mobile indicator hidden on desktop */
+.sts-pagination__mobile-indicator {
+  display: none;
+}
+
+/* ==========================================================================
+   Responsive Adaptations
+   ========================================================================== */
+
+/* Tablet & Intermediate (< 768px) */
+@media (max-width: 768px) {
+  .sts-pagination {
+    padding: 12px 14px;
+    gap: 12px;
+  }
+
+  .sts-pagination__btn--edge .sts-pagination__btn-text {
+    display: none;
+  }
+}
+
+/* Mobile Screens (<= 640px: 320px, 360px, 375px, 390px, 430px) */
+@media (max-width: 640px) {
+  .sts-pagination {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 12px 14px;
+  }
+
+  /* Row 1: Summary + Rows per page */
+  .sts-pagination__meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .sts-pagination__summary {
+    font-size: 0.8rem;
+    white-space: normal;
+  }
+
+  .sts-pagination__size-selector {
+    gap: 6px;
+  }
+
+  .sts-pagination__size-label {
+    font-size: 0.78rem;
+  }
+
+  .sts-pagination__size-select {
+    padding: 4px 6px;
+    font-size: 0.78rem;
+  }
+
+  /* Row 2: Controls */
+  .sts-pagination__controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 8px;
+  }
+
+  /* Hide individual numbered buttons & edge buttons on narrow mobile to prevent horizontal overflow */
+  .sts-pagination__pages {
+    display: none !important;
+  }
+
+  .sts-pagination__btn--edge {
+    display: none !important;
+  }
+
+  /* Show mobile page indicator (e.g. Page 7 of 9) */
+  .sts-pagination__mobile-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    color: var(--sts-text-secondary, #675f57);
+    font-weight: 500;
+    white-space: nowrap;
+    text-align: center;
+    flex: 1 1 auto;
+  }
+
+  .sts-pagination__mobile-indicator strong {
+    color: var(--sts-text-primary, #231e19);
+    font-weight: 700;
+    margin: 0 2px;
+  }
+
+  /* Previous & Next buttons expand nicely on mobile for comfortable touch targets */
+  .sts-pagination__btn--nav {
+    flex: 0 0 auto;
+    min-width: 86px;
+    min-height: 38px;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+}
+
+/* Extra small mobile (< 380px, e.g. 320px, 360px) */
+@media (max-width: 380px) {
+  .sts-pagination__meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .sts-pagination__size-selector {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .sts-pagination__btn--nav {
+    min-width: 76px;
+    padding: 6px 8px;
+    font-size: 0.78rem;
+  }
+
+  .sts-pagination__mobile-indicator {
+    font-size: 0.78rem;
+  }
+}
+

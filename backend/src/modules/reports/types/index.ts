@@ -90,8 +90,7 @@ export interface ProjectProfitabilityRowDto {
   projectId: string;
   name: string;
   clientName: string;
-  siteLocation: string | null;
-  category: ProjectCategory;
+category: ProjectCategory;
   status: ProjectStatus;
   contractValue: number;
   materialPurchaseCosts: number;
@@ -126,8 +125,7 @@ export interface ProjectReportListResponseDto {
   limit: number;
   totalPages: number;
   schemaNotes: {
-    siteLocationPersisted: boolean;
-    clientContactPersisted: boolean;
+clientContactPersisted: boolean;
   };
 }
 
@@ -201,8 +199,7 @@ export interface IndividualProjectReportResponseDto {
     name: string;
     clientName: string;
     clientContact: string | null;
-    siteLocation: string | null;
-    category: ProjectCategory;
+category: ProjectCategory;
     status: ProjectStatus;
     description: string;
     contractValue: number;
@@ -258,8 +255,7 @@ export interface IndividualProjectReportResponseDto {
   };
   dateWiseCostHistory: DateWiseCostBucketDto[];
   schemaNotes: {
-    siteLocationPersisted: boolean;
-    clientContactPersisted: boolean;
+clientContactPersisted: boolean;
   };
 }
 

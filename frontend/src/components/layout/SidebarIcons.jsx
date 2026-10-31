@@ -141,13 +141,6 @@ export function SidebarNavIcon({ id, className = '' }) {
           <path d="M7.65 10.1L9.25 11.7L12.6 8.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
-    case 'settings':
-      return (
-        <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-          <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M10 3.25V4.85M10 15.15V16.75M3.25 10H4.85M15.15 10H16.75M5.22 5.22L6.35 6.35M13.65 13.65L14.78 14.78M14.78 5.22L13.65 6.35M6.35 13.65L5.22 14.78" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-      )
     case 'profile':
       return (
         <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden="true">

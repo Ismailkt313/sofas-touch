@@ -1,10 +1,11 @@
 import { useListingState } from '../../../services/navigationState'
+import { calculatePreservedPage } from '../../../components/common/paginationUtils'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import { fetchProjects } from '../../projects'
 import { PurchasesFiltersBar } from '../components/PurchasesFiltersBar'
 import { PurchasesMobileList } from '../components/PurchasesMobileList'
-import { PurchasesPagination } from '../components/PurchasesPagination'
+import { Pagination } from '../../../components/common/Pagination'
 import { PurchasesSummaryStrip } from '../components/PurchasesSummaryStrip'
 import { PurchasesTable } from '../components/PurchasesTable'
 import {
@@ -13,9 +14,10 @@ import {
 } from '../services/purchaseService'
 import '../styles/purchases.css'
 
-const PAGE_LIMIT = 10
+const DEFAULT_PAGE_SIZE = 10
 const PURCHASES_LISTING_SCHEMA = {
   page: { type: 'number', default: 1, min: 1 },
+  limit: { type: 'number', default: 10, min: 1 },
   search: { type: 'string', default: '' },
   project: { type: 'string', default: 'all' },
   fromDate: { type: 'string', default: '' },
@@ -31,7 +33,7 @@ export function PurchasesPage({ currentUser, onNavigate }) {
   const canViewProjects = hasPermission(currentUser, 'projects.view')
   const [authRequired, setAuthRequired] = useState(() => !hasActiveAuthToken())
 
-  const { values, setValue, resetAll, clampPage } = useListingState(PURCHASES_LISTING_SCHEMA, {
+  const { values, setValue, setValues, resetAll, clampPage } = useListingState(PURCHASES_LISTING_SCHEMA, {
     routeKey: 'purchases',
   })
 
@@ -43,6 +45,7 @@ export function PurchasesPage({ currentUser, onNavigate }) {
   const fromDate = values.fromDate
   const toDate = values.toDate
   const statusFilter = values.status
+  const pageSize = values.limit || DEFAULT_PAGE_SIZE
 
   const setCurrentPage = useCallback(
     (pageNumber) => setValue('page', pageNumber, { push: true }),
@@ -112,7 +115,7 @@ export function PurchasesPage({ currentUser, onNavigate }) {
 
     fetchPurchaseVouchers({
       page: currentPage,
-      limit: PAGE_LIMIT,
+      limit: pageSize,
       search: appliedSearch,
       projectId: projectFilter,
       fromDate,
@@ -126,6 +129,9 @@ export function PurchasesPage({ currentUser, onNavigate }) {
         setVouchers(result.vouchers)
         setTotalVouchers(result.total)
         setTotalPages(result.totalPages)
+        if (result.totalPages >= 1 && currentPage > result.totalPages) {
+          clampPage(result.totalPages)
+        }
         setSummary(result.summary)
         setError('')
         setIsLoading(false)
@@ -147,6 +153,7 @@ export function PurchasesPage({ currentUser, onNavigate }) {
     }
   }, [
     currentPage,
+    pageSize,
     appliedSearch,
     projectFilter,
     fromDate,
@@ -166,55 +173,48 @@ export function PurchasesPage({ currentUser, onNavigate }) {
   const handleProjectFilterChange = useCallback(
     (val) => {
       triggerRefreshState()
-      setProjectFilter(val)
-      setCurrentPage(1)
+      setValue('project', val, { resetPage: true })
     },
-    [triggerRefreshState],
+    [triggerRefreshState, setValue],
   )
 
   const handleFromDateChange = useCallback(
     (val) => {
       triggerRefreshState()
-      setFromDate(val)
-      setCurrentPage(1)
+      setValue('fromDate', val, { resetPage: true })
     },
-    [triggerRefreshState],
+    [triggerRefreshState, setValue],
   )
 
   const handleToDateChange = useCallback(
     (val) => {
       triggerRefreshState()
-      setToDate(val)
-      setCurrentPage(1)
+      setValue('toDate', val, { resetPage: true })
     },
-    [triggerRefreshState],
+    [triggerRefreshState, setValue],
   )
 
   const handleStatusFilterChange = useCallback(
     (val) => {
       triggerRefreshState()
-      setStatusFilter(val)
-      setCurrentPage(1)
+      setValue('status', val, { resetPage: true })
     },
-    [triggerRefreshState],
+    [triggerRefreshState, setValue],
   )
 
   const handleApplySearch = useCallback(() => {
     triggerRefreshState()
-    setAppliedSearch(searchInput.trim())
-    setCurrentPage(1)
-  }, [searchInput, triggerRefreshState])
+    const clean = searchInput.trim()
+    setAppliedSearch(clean)
+    setValue('search', clean, { resetPage: true })
+  }, [searchInput, triggerRefreshState, setValue])
 
   const resetFilters = useCallback(() => {
     triggerRefreshState()
     setSearchInput('')
     setAppliedSearch('')
-    setProjectFilter('all')
-    setFromDate('')
-    setToDate('')
-    setStatusFilter('active')
-    setCurrentPage(1)
-  }, [triggerRefreshState])
+    resetAll()
+  }, [triggerRefreshState, resetAll])
 
   const reloadVouchers = useCallback(() => {
     triggerRefreshState()
@@ -234,8 +234,19 @@ export function PurchasesPage({ currentUser, onNavigate }) {
   }, [appliedSearch, searchInput, projectFilter, fromDate, toDate, statusFilter])
 
   const rangeStart =
-    totalVouchers === 0 ? 0 : (currentPage - 1) * PAGE_LIMIT + 1
-  const rangeEnd = Math.min(totalVouchers, currentPage * PAGE_LIMIT)
+    totalVouchers === 0 ? 0 : (currentPage - 1) * pageSize + 1
+  const rangeEnd = Math.min(totalVouchers, currentPage * pageSize)
+
+  const handlePageSizeChange = (nextLimit) => {
+    const newPage = calculatePreservedPage(
+      currentPage,
+      pageSize,
+      nextLimit,
+      totalVouchers,
+    )
+    triggerRefreshState()
+    setValues({ page: newPage, limit: nextLimit })
+  }
 
   return (
     <div className="pv-page">
@@ -429,16 +440,19 @@ export function PurchasesPage({ currentUser, onNavigate }) {
                   }
                 />
 
-                <PurchasesPagination
-                  activePage={currentPage}
+                <Pagination
+                  page={currentPage}
                   totalPages={totalPages}
-                  totalMatching={totalVouchers}
-                  rangeStart={rangeStart}
-                  rangeEnd={rangeEnd}
+                  totalItems={totalVouchers}
+                  pageSize={pageSize}
+                  pageSizeOptions={[10, 20, 50]}
                   onPageChange={(nextPage) => {
                     triggerRefreshState()
                     setCurrentPage(nextPage)
                   }}
+                  onPageSizeChange={handlePageSizeChange}
+                  itemName="purchase voucher"
+                  itemsName="purchase vouchers"
                 />
               </>
             )}

@@ -1,8 +1,9 @@
+import { Toast } from '../../../components/common'
 import { ProjectAutomationBanners } from '../components/ProjectAutomationBanners'
 import { ProjectFormModal } from '../components/ProjectFormModal'
 import { ProjectsFiltersBar } from '../components/ProjectsFiltersBar'
 import { ProjectsMobileList } from '../components/ProjectsMobileList'
-import { ProjectsPagination } from '../components/ProjectsPagination'
+import { Pagination } from '../../../components/common/Pagination'
 import { ProjectsSummaryStrip } from '../components/ProjectsSummaryStrip'
 import { ProjectsTable } from '../components/ProjectsTable'
 import { useProjectsList } from '../hooks/useProjectsList'
@@ -14,6 +15,8 @@ export function ProjectsPage({ currentUser, onNavigate }) {
     totalProjects,
     totalPages,
     currentPage,
+    pageSize,
+    handlePageSizeChange,
     rangeStart,
     rangeEnd,
     setCurrentPage,
@@ -73,9 +76,7 @@ export function ProjectsPage({ currentUser, onNavigate }) {
       <header className="projects-header">
         <div className="projects-header__text">
           <h1 className="projects-header__title">Projects</h1>
-          <p className="projects-header__subtitle">
-            Manage manufacturing projects, contract values, and project costs.
-          </p>
+
         </div>
 
         {!authRequired && canCreateProject ? (
@@ -100,38 +101,19 @@ export function ProjectsPage({ currentUser, onNavigate }) {
       </header>
 
       {feedbackBanner ? (
-        <div
-          className={`projects-feedback projects-feedback--${feedbackBanner.tone}`}
-          role="status"
-        >
-          <div className="projects-feedback__content">
-            <span>{feedbackBanner.text}</span>
-            {feedbackBanner.projectId ? (
-              <button
-                type="button"
-                className="projects-feedback__link"
-                onClick={() => handleViewProject(feedbackBanner.projectId)}
-              >
-                Open project details
-              </button>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            className="projects-feedback__dismiss"
-            onClick={clearFeedbackBanner}
-            aria-label="Dismiss notification"
-          >
-            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path
-                d="M5.5 5.5L14.5 14.5M14.5 5.5L5.5 14.5"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </div>
+        <Toast
+          message={feedbackBanner.text || feedbackBanner}
+          tone={feedbackBanner.tone || 'success'}
+          action={
+            feedbackBanner.projectId
+              ? {
+                  label: 'Open project details',
+                  onClick: () => handleViewProject(feedbackBanner.projectId),
+                }
+              : undefined
+          }
+          onClose={clearFeedbackBanner}
+        />
       ) : null}
 
       {authRequired ? (
@@ -348,13 +330,15 @@ export function ProjectsPage({ currentUser, onNavigate }) {
                   onStatusChange={canEditProject ? handleStatusSubmit : null}
                 />
 
-                <ProjectsPagination
-                  activePage={currentPage}
+                <Pagination
+                  page={currentPage}
                   totalPages={totalPages}
-                  totalMatching={totalProjects}
-                  rangeStart={rangeStart}
-                  rangeEnd={rangeEnd}
+                  totalItems={totalProjects}
+                  pageSize={pageSize}
+                  pageSizeOptions={[10, 20, 50]}
                   onPageChange={setCurrentPage}
+                  onPageSizeChange={handlePageSizeChange}
+                  itemName="project"
                 />
               </>
             )}

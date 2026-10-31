@@ -260,7 +260,7 @@ export function ExpenseFormModal({
 
   return createPortal(
     <div
-      className="exp-modal-backdrop"
+      className="exp-modal-backdrop admin-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-labelledby={`${formId}-title`}
@@ -270,7 +270,7 @@ export function ExpenseFormModal({
         }
       }}
     >
-      <div className="exp-modal">
+      <div className="exp-modal admin-modal">
         <div className="exp-modal__header">
           <div>
             <h2 id={`${formId}-title`} className="exp-modal__title">

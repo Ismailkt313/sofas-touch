@@ -61,22 +61,22 @@ export function validateListActivitiesQuery(
   const errors: Record<string, string> = {};
 
   let page = 1;
-  if (query.page !== undefined && query.page !== '') {
+  if (query.page !== undefined && query.page !== null && query.page !== '') {
     const parsed = Number(query.page);
-    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 10000) {
-      errors.page = 'Page must be a positive integer.';
+    if (Number.isFinite(parsed) && Number.isInteger(parsed) && parsed >= 1) {
+      page = Math.min(parsed, 10000);
     } else {
-      page = parsed;
+      page = 1;
     }
   }
 
-  let limit = 25;
-  if (query.limit !== undefined && query.limit !== '') {
+  let limit = 10;
+  if (query.limit !== undefined && query.limit !== null && query.limit !== '') {
     const parsed = Number(query.limit);
-    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
-      errors.limit = 'Limit must be an integer between 1 and 100.';
+    if (Number.isFinite(parsed) && Number.isInteger(parsed) && parsed >= 1) {
+      limit = Math.min(Math.max(parsed, 1), 100);
     } else {
-      limit = parsed;
+      limit = 10;
     }
   }
 

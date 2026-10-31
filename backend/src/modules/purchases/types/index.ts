@@ -64,6 +64,10 @@ export interface IPurchaseBillAttachment {
   uploadedBy: string;
   uploadedByName: string;
   uploadedAt: Date;
+  secureUrl?: string;
+  publicId?: string;
+  resourceType?: string;
+  format?: string;
 }
 
 export interface IPurchaseAppliedStockLine {
@@ -146,6 +150,10 @@ export interface StoredBillMetadata {
   storageProvider: BillStorageProvider;
   storageKey: string;
   checksum: string;
+  secureUrl?: string;
+  publicId?: string;
+  resourceType?: string;
+  format?: string;
 }
 
 export interface IBillAttachmentStorage {
@@ -223,6 +231,8 @@ export interface PurchaseBillAttachmentResponseDto {
   uploadedAt: Date;
   viewUrl: string;
   downloadUrl: string;
+  secureUrl?: string | null;
+  publicId?: string | null;
 }
 
 export interface PurchaseStockMovementResponseDto {

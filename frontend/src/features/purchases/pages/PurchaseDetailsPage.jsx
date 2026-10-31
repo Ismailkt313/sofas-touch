@@ -1,3 +1,4 @@
+import { Toast } from '../../../components/common'
 import { navigateBackOrFallback } from '../../../services/navigationState'
 import { useCallback, useEffect, useState } from 'react'
 import { hasPermission } from '../../permissions/constants/permissionsCatalog'
@@ -148,9 +149,11 @@ export function PurchaseDetailsPage({
       </div>
 
       {feedbackBanner ? (
-        <div className="pv-alert pv-alert--success" role="status">
-          <span>{feedbackBanner}</span>
-        </div>
+        <Toast
+          message={feedbackBanner.text || feedbackBanner}
+          tone={feedbackBanner.tone || 'success'}
+          onClose={() => setFeedbackBanner(null)}
+        />
       ) : null}
 
       {isLoading ? (

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { requirePermission, verifyToken } from '../../middleware/auth';
 import { UserModel } from '../auth/models/user.model';
 import { UserRepository, IUserRepository } from './repository/user.repository';
@@ -25,6 +26,11 @@ import { UpdateStatusDto, validateUpdateStatusDto } from './dto/update-status.dt
 const userRepository: IUserRepository = new UserRepository(UserModel);
 const userService: IUserService = new UserService(userRepository);
 const userController: IUserController = new UserController(userService);
+
+const uploadAvatarMiddleware = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+}).single('avatar');
 
 const userRouter = Router();
 
@@ -57,6 +63,11 @@ userRouter.patch(
   '/:id',
   requirePermission('users.manage'),
   userController.update,
+);
+userRouter.post(
+  '/:id/avatar',
+  uploadAvatarMiddleware,
+  userController.uploadAvatar,
 );
 
 export {

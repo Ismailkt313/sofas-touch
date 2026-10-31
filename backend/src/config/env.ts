@@ -67,7 +67,21 @@ export const env = {
     process.env.PROJECT_INACTIVITY_THRESHOLD_DAYS,
     14,
   ),
+
+  CLOUDINARY: {
+    CLOUD_NAME: (process.env.CLOUDINARY_CLOUD_NAME || '').trim(),
+    API_KEY: (process.env.CLOUDINARY_API_KEY || '').trim(),
+    API_SECRET: (process.env.CLOUDINARY_API_SECRET || '').trim(),
+  },
 };
+
+export function isCloudinaryConfigured(): boolean {
+  return Boolean(
+    env.CLOUDINARY.CLOUD_NAME &&
+    env.CLOUDINARY.API_KEY &&
+    env.CLOUDINARY.API_SECRET,
+  );
+}
 
 if (env.NODE_ENV === 'production') {
   if (

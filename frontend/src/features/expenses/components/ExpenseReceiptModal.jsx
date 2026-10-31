@@ -136,7 +136,7 @@ export function ExpenseReceiptModal({
 
   return createPortal(
     <div
-      className="exp-modal-backdrop"
+      className="exp-modal-backdrop admin-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -144,7 +144,7 @@ export function ExpenseReceiptModal({
         if (e.target === e.currentTarget) onClose?.()
       }}
     >
-      <div className="exp-modal exp-modal--preview">
+      <div className="exp-modal exp-modal--preview admin-modal">
         <div className="exp-modal__header">
           <div>
             <h2 className="exp-modal__title">{title}</h2>

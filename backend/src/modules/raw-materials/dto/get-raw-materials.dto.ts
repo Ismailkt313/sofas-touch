@@ -17,7 +17,7 @@ export interface GetRawMaterialsDto {
 }
 
 export const DEFAULT_RAW_MATERIALS_PAGE = 1;
-export const DEFAULT_RAW_MATERIALS_LIMIT = 20;
+export const DEFAULT_RAW_MATERIALS_LIMIT = 10;
 export const MAX_RAW_MATERIALS_LIMIT = 100;
 
 function extractFirstQueryString(value: unknown): string | undefined {

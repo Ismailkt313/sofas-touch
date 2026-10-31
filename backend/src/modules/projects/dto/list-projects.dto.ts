@@ -54,7 +54,7 @@ function parsePagination(
     }
   }
 
-  let limit = 20;
+  let limit = 10;
   if (query.limit !== undefined && query.limit !== null && query.limit !== '') {
     const parsedLimit = Number(query.limit);
     if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {

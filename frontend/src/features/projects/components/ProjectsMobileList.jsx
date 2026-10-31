@@ -42,9 +42,6 @@ export function ProjectsMobileList({
         const isWarning =
           canViewProfitability &&
           Boolean(project.costThresholdState?.warningCrossed)
-        const hasLocation = Boolean(
-          project.siteLocation && String(project.siteLocation).trim(),
-        )
 
         let cardModifier = ''
         if (isOverrun) {
@@ -120,13 +117,7 @@ export function ProjectsMobileList({
                   </dd>
                 </div>
               ) : null}
-              {hasLocation ? (
-                <div className="project-mobile-card__meta-item project-mobile-card__meta-item--full">
-                  <dt>Site</dt>
-                  <dd>{project.siteLocation}</dd>
-                </div>
-              ) : null}
-            </dl>
+              </dl>
 
             <div className="project-mobile-card__bottom">
               <button

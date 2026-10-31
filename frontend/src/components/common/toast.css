@@ -1,0 +1,324 @@
+/* ==========================================================================
+   Soft Touch Sofas — Luxury Toast Notification System
+   Responsive, accessible floating toasts with timer countdown & proper theme
+   ========================================================================== */
+
+.sts-toast-portal {
+  position: fixed;
+  top: 74px;
+  right: 24px;
+  z-index: 9999;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: 440px;
+  width: 100%;
+}
+
+.sts-toast {
+  pointer-events: auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.95rem 0.85rem;
+  min-width: 280px;
+  max-width: 100%;
+  background-color: #ffffff;
+  border-radius: 12px;
+  border: 1px solid var(--sts-sand, #e4dbd0);
+  box-shadow:
+    0 12px 32px -4px rgba(36, 24, 16, 0.16),
+    0 4px 12px rgba(36, 24, 16, 0.06);
+  color: var(--sts-charcoal, #241810);
+  font-family: var(--sts-font-sans, system-ui, -apple-system, sans-serif);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Animations */
+.sts-toast--enter {
+  animation: sts-toast-slide-right 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.sts-toast--exit {
+  animation: sts-toast-exit-right 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes sts-toast-slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(36px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes sts-toast-exit-right {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(28px) scale(0.94);
+  }
+}
+
+/* Icons */
+.sts-toast__icon-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sts-toast__icon-wrap svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Content */
+.sts-toast__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.sts-toast__title {
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--sts-charcoal, #241810);
+  line-height: 1.25;
+}
+
+.sts-toast__message {
+  margin: 0;
+  font-size: 0.835rem;
+  font-weight: 500;
+  color: var(--sts-charcoal, #241810);
+  line-height: 1.38;
+  word-break: break-word;
+}
+
+.sts-toast__action {
+  align-self: flex-start;
+  margin-top: 0.28rem;
+  padding: 0.22rem 0.55rem;
+  border: 1px solid var(--sts-sand-strong, #cdbba5);
+  border-radius: 6px;
+  background-color: var(--sts-ivory, #fbf8f4);
+  color: var(--sts-walnut, #3a2719);
+  font-family: var(--sts-font-sans);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sts-toast__action:hover {
+  background-color: var(--sts-walnut, #3a2719);
+  border-color: var(--sts-walnut, #3a2719);
+  color: #ffffff;
+}
+
+/* Close Button */
+.sts-toast__close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background-color: transparent;
+  color: var(--sts-taupe, #7a6a58);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.sts-toast__close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sts-toast__close:hover {
+  background-color: rgba(36, 24, 16, 0.07);
+  color: var(--sts-charcoal, #241810);
+}
+
+.sts-toast__close:focus-visible {
+  outline: 2px solid var(--sts-walnut, #473222);
+  outline-offset: 1px;
+}
+
+/* Countdown Progress Bar */
+.sts-toast__progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  width: 100%;
+  background-color: currentColor;
+  transform-origin: left;
+  animation: sts-toast-deplete linear forwards;
+}
+
+.sts-toast__progress-bar--paused {
+  animation-play-state: paused;
+}
+
+@keyframes sts-toast-deplete {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* Themes / Tones */
+/* 1. Success */
+.sts-toast--success {
+  border-color: #b7dfc6;
+  background: linear-gradient(135deg, #ffffff 0%, #fbfdfc 100%);
+}
+
+.sts-toast--success .sts-toast__icon-wrap {
+  background-color: #eef8f2;
+  color: #1c633a;
+}
+
+.sts-toast--success .sts-toast__progress-bar {
+  background-color: #24814c;
+}
+
+/* 2. Error */
+.sts-toast--error {
+  border-color: #f6c8c4;
+  background: linear-gradient(135deg, #ffffff 0%, #fdfcfc 100%);
+}
+
+.sts-toast--error .sts-toast__icon-wrap {
+  background-color: #fdf2f1;
+  color: #a12b20;
+}
+
+.sts-toast--error .sts-toast__progress-bar {
+  background-color: #a12b20;
+}
+
+/* 3. Warning */
+.sts-toast--warning {
+  border-color: #f5e1b5;
+  background: linear-gradient(135deg, #ffffff 0%, #fdfcf7 100%);
+}
+
+.sts-toast--warning .sts-toast__icon-wrap {
+  background-color: #fef8eb;
+  color: #8c6014;
+}
+
+.sts-toast--warning .sts-toast__progress-bar {
+  background-color: #b8821d;
+}
+
+/* 4. Info */
+.sts-toast--info {
+  border-color: #dfd4c5;
+  background: linear-gradient(135deg, #ffffff 0%, #faf8f5 100%);
+}
+
+.sts-toast--info .sts-toast__icon-wrap {
+  background-color: #f5efe6;
+  color: #4e3827;
+}
+
+.sts-toast--info .sts-toast__progress-bar {
+  background-color: #745239;
+}
+
+/* ==========================================================================
+   Mobile-First Responsiveness (Native App Feeling)
+   ========================================================================== */
+@media (max-width: 640px) {
+  .sts-toast-portal {
+    top: max(12px, env(safe-area-inset-top));
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: 100%;
+    align-items: stretch;
+  }
+
+  .sts-toast {
+    min-width: 0;
+    width: 100%;
+    padding: 0.68rem 0.85rem 0.78rem;
+    gap: 0.65rem;
+    box-shadow:
+      0 8px 24px -2px rgba(36, 24, 16, 0.2),
+      0 2px 6px rgba(36, 24, 16, 0.08);
+  }
+
+  .sts-toast--enter {
+    animation: sts-toast-slide-down 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .sts-toast--exit {
+    animation: sts-toast-exit-up 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+  }
+
+  @keyframes sts-toast-slide-down {
+    from {
+      opacity: 0;
+      transform: translateY(-24px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes sts-toast-exit-up {
+    from {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-20px) scale(0.96);
+    }
+  }
+
+  .sts-toast__icon-wrap {
+    width: 28px;
+    height: 28px;
+  }
+
+  .sts-toast__icon-wrap svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .sts-toast__message {
+    font-size: 0.8125rem;
+    line-height: 1.35;
+  }
+
+  .sts-toast__close {
+    width: 32px;
+    height: 32px;
+  }
+}

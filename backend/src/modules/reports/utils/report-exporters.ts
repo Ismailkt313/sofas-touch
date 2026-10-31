@@ -109,8 +109,7 @@ export function buildProjectSummariesCsv(params: {
     'Project ID',
     'Project Name',
     'Client Name',
-    'Site Location',
-    'Project Status',
+     'Project Status',
     'Reporting Period',
     'Contract Value (INR)',
     'Material Purchase Costs (INR)',
@@ -135,8 +134,7 @@ export function buildProjectSummariesCsv(params: {
         escapeCsvCell(row.projectId),
         escapeCsvCell(row.name),
         escapeCsvCell(row.clientName),
-        escapeCsvCell(row.siteLocation || 'Not persisted'),
-        escapeCsvCell(row.status),
+escapeCsvCell(row.status),
         escapeCsvCell(periodLabel),
         escapeCsvCell(formatFixedAmount(row.contractValue), true),
         escapeCsvCell(formatFixedAmount(row.materialPurchaseCosts), true),
@@ -330,10 +328,6 @@ export function buildIndividualProjectReportPdf(
     `${report.project.projectId} - ${truncateText(report.project.name, 48)}`,
   );
   drawKeyValueRow('Client Name', truncateText(report.project.clientName, 52));
-  drawKeyValueRow(
-    'Site Location',
-    report.project.siteLocation || 'Not persisted in Project schema',
-  );
   drawKeyValueRow(
     'Category & Status',
     `${report.project.category} | ${report.project.status}`,

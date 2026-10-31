@@ -70,6 +70,26 @@ const ExpenseReceiptAttachmentSchema = new Schema<IExpenseReceiptAttachment>(
       required: true,
       default: Date.now,
     },
+    secureUrl: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    publicId: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    resourceType: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    format: {
+      type: String,
+      trim: true,
+      default: null,
+    },
   },
   {
     _id: false,

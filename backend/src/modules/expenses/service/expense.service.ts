@@ -9,6 +9,7 @@ import {
   BillAttachmentNotFoundError,
   IBillAttachmentStorage,
   LocalProtectedBillStorageService,
+  AdaptiveBillAttachmentStorageService,
 } from '../../purchases';
 import {
   roundExpenseMoney,
@@ -143,7 +144,7 @@ export class ExpenseService {
     private readonly repository: IExpenseRepository = new ExpenseRepository(),
     private readonly projectRepository: IProjectRepository,
     private readonly projectService: IProjectService,
-    private readonly receiptStorage: IBillAttachmentStorage = new LocalProtectedBillStorageService(),
+    private readonly receiptStorage: IBillAttachmentStorage = new AdaptiveBillAttachmentStorageService(),
   ) {}
 
   private assertPermission(
@@ -192,8 +193,10 @@ export class ExpenseService {
       uploadedBy: attachment.uploadedBy,
       uploadedByName: attachment.uploadedByName || '',
       uploadedAt: attachment.uploadedAt,
-      viewUrl: baseUrl,
-      downloadUrl: `${baseUrl}?download=1`,
+      viewUrl: attachment.secureUrl || baseUrl,
+      downloadUrl: attachment.secureUrl || `${baseUrl}?download=1`,
+      secureUrl: attachment.secureUrl || null,
+      publicId: attachment.publicId || null,
     };
   }
 

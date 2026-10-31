@@ -116,17 +116,6 @@ export function determineProjectHealthStatus(params: {
   return 'neutral';
 }
 
-function extractOptionalSiteLocation(project: IProject): string | null {
-  const raw = project as unknown as Record<string, unknown>;
-  if (typeof raw.siteLocation === 'string' && raw.siteLocation.trim()) {
-    return raw.siteLocation.trim();
-  }
-  if (typeof raw.location === 'string' && raw.location.trim()) {
-    return raw.location.trim();
-  }
-  return null;
-}
-
 function extractOptionalClientContact(project: IProject): string | null {
   const raw = project as unknown as Record<string, unknown>;
   if (typeof raw.clientContact === 'string' && raw.clientContact.trim()) {
@@ -387,7 +376,6 @@ export class ReportsService {
         projectId: proj.projectId,
         name: proj.name,
         clientName: proj.clientName,
-        siteLocation: extractOptionalSiteLocation(proj),
         category: proj.category,
         status: proj.status,
         contractValue: activeMetrics.contractValue,
@@ -499,8 +487,7 @@ export class ReportsService {
         limit: query.limit,
         totalPages,
         schemaNotes: {
-          siteLocationPersisted: false,
-          clientContactPersisted: false,
+clientContactPersisted: false,
         },
       };
     }
@@ -514,8 +501,7 @@ export class ReportsService {
       limit: query.limit,
       totalPages,
       schemaNotes: {
-        siteLocationPersisted: false,
-        clientContactPersisted: false,
+clientContactPersisted: false,
       },
     };
   }
@@ -895,7 +881,6 @@ export class ReportsService {
         name: project.name,
         clientName: project.clientName,
         clientContact: extractOptionalClientContact(project),
-        siteLocation: extractOptionalSiteLocation(project),
         category: project.category,
         status: project.status,
         description: project.description || '',
@@ -960,8 +945,7 @@ export class ReportsService {
       },
       dateWiseCostHistory,
       schemaNotes: {
-        siteLocationPersisted: false,
-        clientContactPersisted: false,
+clientContactPersisted: false,
       },
     };
 

@@ -56,9 +56,6 @@ function resolveAuthorizedTargetPath(
   if (p.startsWith('/permissions')) {
     return perms.has('permissions.manage') ? p : null;
   }
-  if (p.startsWith('/settings')) {
-    return perms.has('settings.manage') ? p : null;
-  }
   if (p.startsWith('/reports') || /^\/projects\/[^/]+\/report$/.test(p)) {
     return perms.has('reports.view') && perms.has('reports.viewProfitability')
       ? p
@@ -225,6 +222,12 @@ export class ActivityService {
       limit: query.limit,
       totalPages,
       scope: canViewAll ? 'all' : 'own',
+      summary: result.summary || {
+        total: result.total,
+        today: 0,
+        projects: 0,
+        financial: 0,
+      },
       filterOptions: {
         actors: result.actors,
         actionTypes: allowedActionTypes,

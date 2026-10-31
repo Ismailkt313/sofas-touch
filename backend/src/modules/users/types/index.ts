@@ -27,6 +27,7 @@ export interface IUserController {
   updateStatus(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
   approveUser(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
   rejectUser(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
+  uploadAvatar(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void>;
 }
 
 export interface IUserService {

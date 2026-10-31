@@ -1,3 +1,5 @@
+import { Toast } from '../../../components/common'
+import { navigateBackOrFallback } from '../../../services/navigationState'
 import { ProjectFormModal } from '../components/ProjectFormModal'
 import {
   ProjectCostThresholdBadge,
@@ -49,7 +51,7 @@ export function ProjectDetailsPage({
   } = useProjectDetails({ projectIdentifier, currentUser })
 
   const handleBackToList = () => {
-    onNavigate?.('/projects')
+    navigateBackOrFallback(onNavigate, '/projects')
   }
 
   if (authRequired) {
@@ -284,12 +286,7 @@ export function ProjectDetailsPage({
           <h1 className="project-detail-header__title">{project.name}</h1>
           <p className="project-detail-header__client">
             Client: <strong>{project.clientName}</strong>
-            {project.siteLocation ? (
-              <>
-                {' '}
-                &bull; Site: <strong>{project.siteLocation}</strong>
-              </>
-            ) : null}
+            
           </p>
         </div>
 
@@ -318,27 +315,11 @@ export function ProjectDetailsPage({
       </header>
 
       {feedbackBanner ? (
-        <div
-          className={`projects-feedback projects-feedback--${feedbackBanner.tone}`}
-          role="status"
-        >
-          <span>{feedbackBanner.text}</span>
-          <button
-            type="button"
-            className="projects-feedback__dismiss"
-            onClick={clearFeedbackBanner}
-            aria-label="Dismiss notification"
-          >
-            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path
-                d="M5.5 5.5L14.5 14.5M14.5 5.5L5.5 14.5"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </div>
+        <Toast
+          message={feedbackBanner.text || feedbackBanner}
+          tone={feedbackBanner.tone || 'success'}
+          onClose={clearFeedbackBanner}
+        />
       ) : null}
 
       {canViewProfitability && isCriticalOverrun ? (
@@ -666,15 +647,7 @@ export function ProjectDetailsPage({
                   'Not supported in current Project model'}
               </dd>
             </div>
-            <div className="project-specs-list__item">
-              <dt>Site Location</dt>
-              <dd
-                className={project.siteLocation ? '' : 'projects-cell-muted'}
-              >
-                {project.siteLocation ||
-                  'Not persisted in current Project schema'}
-              </dd>
-            </div>
+            
             <div className="project-specs-list__item">
               <dt>Last Recorded Activity</dt>
               <dd>

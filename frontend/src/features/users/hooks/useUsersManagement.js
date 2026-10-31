@@ -1,5 +1,6 @@
 import { useListingState } from '../../../services/navigationState'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { calculatePreservedPage } from '../../../components/common/paginationUtils'
 import {
   createManagedUser,
   fetchManagedUsers,
@@ -8,9 +9,10 @@ import {
   updateManagedUser,
 } from '../services/userManagementService'
 
-const DEFAULT_PAGE_SIZE = 5
+const DEFAULT_PAGE_SIZE = 10
 const USER_LISTING_SCHEMA = {
   page: { type: 'number', default: 1, min: 1 },
+  limit: { type: 'number', default: 10, min: 1 },
   search: { type: 'string', default: '' },
   role: { type: 'string', default: 'all' },
   status: { type: 'string', default: 'all' },
@@ -27,13 +29,14 @@ export function useUsersManagement({ currentUser }) {
   const [feedbackBanner, setFeedbackBanner] = useState(null)
 
   // Search & Filter states synced with URL
-  const { values, setValue, resetAll, clampPage } = useListingState(USER_LISTING_SCHEMA, {
+  const { values, setValue, setValues, resetAll, clampPage } = useListingState(USER_LISTING_SCHEMA, {
     routeKey: 'users',
   })
   const searchQuery = values.search
   const roleFilter = values.role
   const statusFilter = values.status
   const currentPage = values.page
+  const pageSize = values.limit || DEFAULT_PAGE_SIZE
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -176,17 +179,30 @@ export function useUsersManagement({ currentUser }) {
   }, [users, searchQuery, roleFilter, statusFilter])
 
   const totalFiltered = filteredUsers.length
-  const totalPages = Math.max(1, Math.ceil(totalFiltered / DEFAULT_PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize))
   const activePage = Math.min(Math.max(1, currentPage), totalPages)
 
   const paginatedUsers = useMemo(() => {
-    const startIndex = (activePage - 1) * DEFAULT_PAGE_SIZE
-    return filteredUsers.slice(startIndex, startIndex + DEFAULT_PAGE_SIZE)
-  }, [filteredUsers, activePage])
+    const startIndex = (activePage - 1) * pageSize
+    return filteredUsers.slice(startIndex, startIndex + pageSize)
+  }, [filteredUsers, activePage, pageSize])
 
   const rangeStart =
-    totalFiltered === 0 ? 0 : (activePage - 1) * DEFAULT_PAGE_SIZE + 1
-  const rangeEnd = Math.min(activePage * DEFAULT_PAGE_SIZE, totalFiltered)
+    totalFiltered === 0 ? 0 : (activePage - 1) * pageSize + 1
+  const rangeEnd = Math.min(activePage * pageSize, totalFiltered)
+
+  const handlePageSizeChange = useCallback(
+    (nextLimit) => {
+      const newPage = calculatePreservedPage(
+        activePage,
+        pageSize,
+        nextLimit,
+        totalFiltered,
+      )
+      setValues({ page: newPage, limit: nextLimit })
+    },
+    [activePage, pageSize, totalFiltered, setValues],
+  )
 
   const handleUserCreated = async (formData) => {
     const createdUser = await createManagedUser(formData)
@@ -313,10 +329,10 @@ export function useUsersManagement({ currentUser }) {
   }, [values.view, users])
 
   useEffect(() => {
-    if (totalPages >= 1 && currentPage > totalPages) {
+    if (!isLoading && users.length > 0 && totalPages >= 1 && currentPage > totalPages) {
       clampPage(totalPages)
     }
-  }, [totalPages, currentPage, clampPage])
+  }, [isLoading, users.length, totalPages, currentPage, clampPage])
 
   return {
     users,
@@ -346,6 +362,9 @@ export function useUsersManagement({ currentUser }) {
     rangeStart,
     rangeEnd,
     setCurrentPage,
+    pageSize,
+    handlePageSizeChange,
+    setPageSize: handlePageSizeChange,
 
     // Helpers & actions
     isSelfUser,

@@ -99,7 +99,7 @@ export function ExpenseCategoriesModal({
 
   return createPortal(
     <div
-      className="exp-modal-backdrop"
+      className="exp-modal-backdrop admin-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-label="Manage Expense Categories"
@@ -107,7 +107,7 @@ export function ExpenseCategoriesModal({
         if (e.target === e.currentTarget) onClose?.()
       }}
     >
-      <div className="exp-modal exp-modal--compact">
+      <div className="exp-modal exp-modal--compact admin-modal admin-modal--compact">
         <div className="exp-modal__header">
           <div>
             <h2 className="exp-modal__title">Expense Categories</h2>

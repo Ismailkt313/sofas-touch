@@ -24,7 +24,6 @@ export const PERMISSION_KEYS = [
   'activity.viewOwn',
   'activity.viewAll',
   'permissions.manage',
-  'settings.manage',
 ]
 
 export const ALL_PERMISSION_KEYS = PERMISSION_KEYS
@@ -36,7 +35,6 @@ export const ADMIN_RESERVED_PERMISSIONS = new Set([
   'users.manage',
   'users.approve',
   'permissions.manage',
-  'settings.manage',
 ])
 
 export const DEFAULT_DATA_ENTRY_PERMISSIONS = [
@@ -72,33 +70,227 @@ export const PERMISSION_DEPENDENCIES = {
 }
 
 export const PERMISSION_LABELS = {
-  'dashboard.view': 'View Dashboard',
+  'dashboard.view': 'Open Dashboard',
   'projects.view': 'View Projects',
-  'projects.create': 'Create Projects',
-  'projects.edit': 'Edit Projects & Status',
+  'projects.create': 'Add Projects',
+  'projects.edit': 'Edit Projects',
   'projects.delete': 'Delete Projects',
-  'purchases.view': 'View Purchase Vouchers',
-  'purchases.create': 'Record Purchase Vouchers',
-  'purchases.edit': 'Edit Purchase Vouchers & Bills',
-  'purchases.delete': 'Void / Cancel Purchases',
+  'purchases.view': 'View Purchases',
+  'purchases.create': 'Add Purchases',
+  'purchases.edit': 'Edit Purchases',
+  'purchases.delete': 'Delete Purchases',
   'expenses.view': 'View Expenses',
-  'expenses.create': 'Record Expenses',
-  'expenses.edit': 'Edit Expenses & Categories',
-  'expenses.delete': 'Void / Cancel Expenses',
-  'materials.view': 'View Raw Materials & Stock',
-  'materials.create': 'Create Raw Materials',
-  'materials.edit': 'Edit Materials & Thresholds',
-  'materials.manageStock': 'Adjust Stock Manually',
-  'reports.view': 'Access Project Reports',
-  'reports.viewProfitability': 'View Contract Value & Profitability',
-  'users.view': 'View Users',
-  'users.manage': 'Create & Manage Users',
-  'users.approve': 'Approve / Reject Registrations',
-  'activity.viewOwn': 'View Own Activity Log',
-  'activity.viewAll': 'View Platform-Wide Audit History',
-  'permissions.manage': 'Manage Roles & Permissions',
-  'settings.manage': 'Manage Application Settings',
+  'expenses.create': 'Add Expenses',
+  'expenses.edit': 'Edit Expenses',
+  'expenses.delete': 'Delete Expenses',
+  'materials.view': 'View Materials and Stock',
+  'materials.create': 'Add Materials',
+  'materials.edit': 'Edit Materials',
+  'materials.manageStock': 'Update Stock',
+  'reports.view': 'View Project Reports',
+  'reports.viewProfitability': 'View Project Profit',
+  'users.view': 'View Employees',
+  'users.manage': 'Manage Employees',
+  'users.approve': 'Approve Registrations',
+  'activity.viewOwn': 'View My Activity',
+  'activity.viewAll': 'View All Activity',
+  'permissions.manage': 'Manage Access',
 }
+
+export const PERMISSION_MODULE_DEFINITIONS = [
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    description: 'Workspace summary, daily metrics, and operational alerts.',
+    permissions: [
+      {
+        key: 'dashboard.view',
+        label: 'Open Dashboard',
+        description: 'View the operational home dashboard.',
+      },
+    ],
+  },
+  {
+    id: 'projects',
+    label: 'Projects',
+    description: 'Sofa and curtain manufacturing projects and custom client orders.',
+    permissions: [
+      {
+        key: 'projects.view',
+        label: 'View Projects',
+        description: 'Browse client sofa and curtain project lists.',
+      },
+      {
+        key: 'projects.create',
+        label: 'Add Projects',
+        description: 'Create new manufacturing projects and orders.',
+      },
+      {
+        key: 'projects.edit',
+        label: 'Edit Projects',
+        description: 'Update project stages, dimensions, and specifications.',
+      },
+      {
+        key: 'projects.delete',
+        label: 'Delete Projects',
+        description: 'Delete empty projects without linked vouchers.',
+      },
+    ],
+  },
+  {
+    id: 'purchases',
+    label: 'Purchases',
+    description: 'Raw material procurement vouchers and supplier invoices.',
+    permissions: [
+      {
+        key: 'purchases.view',
+        label: 'View Purchases',
+        description: 'Look up purchase vouchers and attached bills.',
+      },
+      {
+        key: 'purchases.create',
+        label: 'Add Purchases',
+        description: 'Record new material procurement and supplier bills.',
+      },
+      {
+        key: 'purchases.edit',
+        label: 'Edit Purchases',
+        description: 'Modify purchase vouchers and update bill documents.',
+      },
+      {
+        key: 'purchases.delete',
+        label: 'Delete Purchases',
+        description: 'Void or cancel recorded purchase vouchers.',
+      },
+    ],
+  },
+  {
+    id: 'expenses',
+    label: 'Expenses',
+    description: 'Daily workshop overhead, transport, labour, and project expenses.',
+    permissions: [
+      {
+        key: 'expenses.view',
+        label: 'View Expenses',
+        description: 'Browse daily expenses and payment receipts.',
+      },
+      {
+        key: 'expenses.create',
+        label: 'Add Expenses',
+        description: 'Record new operational, transport, or labour expenses.',
+      },
+      {
+        key: 'expenses.edit',
+        label: 'Edit Expenses',
+        description: 'Update expense descriptions, amounts, and categories.',
+      },
+      {
+        key: 'expenses.delete',
+        label: 'Delete Expenses',
+        description: 'Void or cancel incorrect expense entries.',
+      },
+    ],
+  },
+  {
+    id: 'materials',
+    label: 'Materials and Stock',
+    description: 'Fabrics, foam, timber inventory, and stock on hand.',
+    permissions: [
+      {
+        key: 'materials.view',
+        label: 'View Materials and Stock',
+        description: 'Inspect catalog items, current stock, and unit prices.',
+      },
+      {
+        key: 'materials.create',
+        label: 'Add Materials',
+        description: 'Register new fabric, foam, or timber items in catalog.',
+      },
+      {
+        key: 'materials.edit',
+        label: 'Edit Materials',
+        description: 'Update material specifications and minimum stock thresholds.',
+      },
+      {
+        key: 'materials.manageStock',
+        label: 'Update Stock',
+        description: 'Make manual physical inventory count adjustments.',
+      },
+    ],
+  },
+  {
+    id: 'reports',
+    label: 'Project Reports',
+    description: 'Project financial statements, material costs, and margin analysis.',
+    permissions: [
+      {
+        key: 'reports.view',
+        label: 'View Project Reports',
+        description: 'Access project financial summaries and cost reports.',
+      },
+      {
+        key: 'reports.viewProfitability',
+        label: 'View Project Profit',
+        description: 'View confidential contract values and profit margins.',
+      },
+    ],
+  },
+  {
+    id: 'users',
+    label: 'Employee Management',
+    description: 'Employee accounts, roles, and signup requests.',
+    permissions: [
+      {
+        key: 'users.view',
+        label: 'View Employees',
+        description: 'View employee accounts and status.',
+        adminOnly: true,
+      },
+      {
+        key: 'users.manage',
+        label: 'Manage Employees',
+        description: 'Create, edit, or deactivate employee accounts.',
+        adminOnly: true,
+      },
+      {
+        key: 'users.approve',
+        label: 'Approve Registrations',
+        description: 'Approve or reject pending registration requests.',
+        adminOnly: true,
+      },
+    ],
+  },
+  {
+    id: 'activity',
+    label: 'Activity History',
+    description: 'Operational audit trail and recent action logs.',
+    permissions: [
+      {
+        key: 'activity.viewOwn',
+        label: 'View My Activity',
+        description: 'Review logs of actions taken by the logged-in user.',
+      },
+      {
+        key: 'activity.viewAll',
+        label: 'View All Activity',
+        description: 'Inspect platform-wide audit log across all staff members.',
+      },
+    ],
+  },
+  {
+    id: 'permissions',
+    label: 'Access Control',
+    description: 'Role access management and individual employee permissions.',
+    permissions: [
+      {
+        key: 'permissions.manage',
+        label: 'Manage Access',
+        description: 'Configure default roles and individual operator overrides.',
+        adminOnly: true,
+      },
+    ],
+  },
+]
 
 export function normalizeRoleKey(role) {
   if (!role) return ''
@@ -440,19 +632,6 @@ export function evaluateRouteAccess(pathname, user) {
       reason: ok
         ? ''
         : 'Role and permission configuration is restricted to workspace Administrators.',
-      fallbackPath,
-    }
-  }
-
-  if (normalized === '/settings' || normalized.startsWith('/settings/')) {
-    const ok = hasPermission(user, 'settings.manage')
-    return {
-      allowed: ok,
-      requiredKeys: ['settings.manage'],
-      moduleTitle: 'Application Settings',
-      reason: ok
-        ? ''
-        : 'Application settings are restricted to workspace Administrators.',
       fallbackPath,
     }
   }

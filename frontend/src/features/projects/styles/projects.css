@@ -798,10 +798,6 @@
   color: var(--sts-charcoal-muted);
 }
 
-.projects-cell-location {
-  color: var(--sts-charcoal);
-}
-
 .projects-cell-muted {
   color: var(--sts-taupe-light);
 }

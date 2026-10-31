@@ -1,6 +1,6 @@
 import mongoose, { Model } from 'mongoose';
 import { env } from '../../../config/env';
-import { UpdateAppSettingsDto } from '../dto/app-settings.dto';
+type UpdateAppSettingsDto = Partial<IAppSettings>;
 import {
   AppSettingsModel,
   IAppSettings,

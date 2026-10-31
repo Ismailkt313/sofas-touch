@@ -1,9 +1,10 @@
+import { Toast } from '../../../components/common'
 import { ConfirmMaterialStatusModal } from '../components/ConfirmMaterialStatusModal'
 import { RawMaterialDetailsModal } from '../components/RawMaterialDetailsModal'
 import { RawMaterialFormModal } from '../components/RawMaterialFormModal'
 import { RawMaterialsFiltersBar } from '../components/RawMaterialsFiltersBar'
 import { RawMaterialsMobileList } from '../components/RawMaterialsMobileList'
-import { RawMaterialsPagination } from '../components/RawMaterialsPagination'
+import { Pagination } from '../../../components/common/Pagination'
 import { RawMaterialsSummaryStrip } from '../components/RawMaterialsSummaryStrip'
 import { RawMaterialsTable } from '../components/RawMaterialsTable'
 import { useRawMaterialsManagement } from '../hooks/useRawMaterialsManagement'
@@ -17,6 +18,8 @@ export function RawMaterialsPage({ currentUser, onNavigate }) {
     totalMaterials,
     totalPages,
     currentPage,
+    pageSize,
+    handlePageSizeChange,
     rangeStart,
     rangeEnd,
     setCurrentPage,
@@ -90,27 +93,11 @@ export function RawMaterialsPage({ currentUser, onNavigate }) {
       </header>
 
       {feedbackBanner ? (
-        <div
-          className={`rm-feedback rm-feedback--${feedbackBanner.tone}`}
-          role="status"
-        >
-          <span>{feedbackBanner.text}</span>
-          <button
-            type="button"
-            className="rm-feedback__dismiss"
-            onClick={clearFeedbackBanner}
-            aria-label="Dismiss notification"
-          >
-            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path
-                d="M5.5 5.5L14.5 14.5M14.5 5.5L5.5 14.5"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </div>
+        <Toast
+          message={feedbackBanner.text || feedbackBanner}
+          tone={feedbackBanner.tone || 'success'}
+          onClose={clearFeedbackBanner}
+        />
       ) : null}
 
       {authRequired ? (
@@ -312,13 +299,15 @@ export function RawMaterialsPage({ currentUser, onNavigate }) {
                   onToggleStatus={requestStatusToggle}
                 />
 
-                <RawMaterialsPagination
-                  activePage={currentPage}
+                <Pagination
+                  page={currentPage}
                   totalPages={totalPages}
-                  totalMatching={totalMaterials}
-                  rangeStart={rangeStart}
-                  rangeEnd={rangeEnd}
+                  totalItems={totalMaterials}
+                  pageSize={pageSize}
+                  pageSizeOptions={[10, 20, 50]}
                   onPageChange={setCurrentPage}
+                  onPageSizeChange={handlePageSizeChange}
+                  itemName="material"
                 />
               </>
             )}

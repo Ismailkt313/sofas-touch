@@ -25,7 +25,6 @@ export function ProjectsTable({
             <th scope="col">Project ID</th>
             <th scope="col">Project Name</th>
             <th scope="col">Client</th>
-            <th scope="col">Site Location</th>
             {canViewProfitability ? (
               <th scope="col" className="projects-table__col-numeric">
                 Contract Value
@@ -114,23 +113,6 @@ export function ProjectsTable({
                       </span>
                     ) : null}
                   </div>
-                </td>
-
-                <td>
-                  <span
-                    className={
-                      project.siteLocation
-                        ? 'projects-cell-location'
-                        : 'projects-cell-muted'
-                    }
-                    title={
-                      project.siteLocation
-                        ? project.siteLocation
-                        : 'Site location is not persisted in the current backend Project schema'
-                    }
-                  >
-                    {project.siteLocation || '—'}
-                  </span>
                 </td>
 
                 {canViewProfitability ? (

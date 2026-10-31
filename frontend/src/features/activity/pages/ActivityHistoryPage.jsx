@@ -1,24 +1,31 @@
-import { useListingState } from '../../../services/navigationState'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Dropdown, DatePicker } from '../../../components/common'
+import { DatePicker, Dropdown, Pagination, calculatePreservedPage } from '../../../components/common'
 import {
   ActiveFilterChips,
   MobileFilterButton,
   MobileFilterSheet,
 } from '../../../components/responsive'
 import api, { ACTIVITY_UPDATED_EVENT } from '../../../services/api'
+import {
+  navigateBackOrFallback,
+  useListingState,
+} from '../../../services/navigationState'
 import { hasPermission } from '../../permissions/constants/permissionsCatalog'
+import { ActivityDetailsDrawer } from '../components/ActivityDetailsDrawer'
 import { ActivityFeedItem } from '../components/ActivityFeedItem'
 import { fetchActivityHistory } from '../services/activityService'
 import {
   getActivityActionOptions,
   getActivityEntityOptions,
+  groupActivitiesByDate,
 } from '../utils/activityFormatters'
 import '../styles/activity-page.css'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
+
 const ACTIVITY_LISTING_SCHEMA = {
   page: { type: 'number', default: 1, min: 1 },
+  limit: { type: 'number', default: 10, min: 1 },
   search: { type: 'string', default: '' },
   entity: { type: 'string', default: 'all' },
   action: { type: 'string', default: 'all' },
@@ -28,7 +35,6 @@ const ACTIVITY_LISTING_SCHEMA = {
   toDate: { type: 'string', default: '' },
 }
 
-
 export function ActivityHistoryPage({ currentUser, onNavigate }) {
   const canViewAll = hasPermission(currentUser, 'activity.viewAll')
   const canViewProjects = hasPermission(currentUser, 'projects.view')
@@ -36,66 +42,99 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
   const userRole = canViewAll ? 'admin' : 'data_entry'
   const isAdmin = canViewAll
 
-  const { values, setValue, resetAll, clampPage } = useListingState(ACTIVITY_LISTING_SCHEMA, {
-    routeKey: 'activity',
-  })
+  const { values, setValue, setValues, resetAll, clampPage } = useListingState(
+    ACTIVITY_LISTING_SCHEMA,
+    { routeKey: 'activity' },
+  )
 
-  const page = values.page
-  const entityType = values.entity
-  const actionType = values.action
-  const projectId = values.project
-  const actorId = values.actor
-  const fromDate = values.fromDate
-  const toDate = values.toDate
+  const page = Math.max(1, parseInt(values.page, 10) || 1)
+  const entityType = values.entity || 'all'
+  const actionType = values.action || 'all'
+  const projectId = values.project || 'all'
+  const actorId = values.actor || 'all'
+  const fromDate = values.fromDate || ''
+  const toDate = values.toDate || ''
+  const pageSize = parseInt(values.limit, 10) || PAGE_SIZE
 
-  const [searchInput, setSearchInput] = useState(values.search)
-  const [appliedSearch, setAppliedSearch] = useState(values.search)
+  const [searchInput, setSearchInput] = useState(values.search || '')
+  const [appliedSearch, setAppliedSearch] = useState(values.search || '')
 
   useEffect(() => {
-    setSearchInput(values.search)
-    setAppliedSearch(values.search)
+    setSearchInput(values.search || '')
+    setAppliedSearch(values.search || '')
   }, [values.search])
 
-  const setPage = useCallback((p) => {
-    setValue('page', p, { push: true })
-  }, [setValue])
+  const setPage = useCallback(
+    (p) => {
+      const targetPage = typeof p === 'function' ? p(page) : p
+      setValue('page', Math.max(1, targetPage), { push: true })
+    },
+    [page, setValue],
+  )
 
-  const setEntityType = useCallback((val) => {
-    setValue('entity', val, { resetPage: true })
-  }, [setValue])
+  const setEntityType = useCallback(
+    (val) => {
+      setValue('entity', val, { resetPage: true })
+    },
+    [setValue],
+  )
 
-  const setActionType = useCallback((val) => {
-    setValue('action', val, { resetPage: true })
-  }, [setValue])
+  const setActionType = useCallback(
+    (val) => {
+      setValue('action', val, { resetPage: true })
+    },
+    [setValue],
+  )
 
-  const setProjectId = useCallback((val) => {
-    setValue('project', val, { resetPage: true })
-  }, [setValue])
+  const setProjectId = useCallback(
+    (val) => {
+      setValue('project', val, { resetPage: true })
+    },
+    [setValue],
+  )
 
-  const setActorId = useCallback((val) => {
-    setValue('actor', val, { resetPage: true })
-  }, [setValue])
+  const setActorId = useCallback(
+    (val) => {
+      setValue('actor', val, { resetPage: true })
+    },
+    [setValue],
+  )
 
-  const setFromDate = useCallback((val) => {
-    setValue('fromDate', val, { resetPage: true })
-  }, [setValue])
+  const setFromDate = useCallback(
+    (val) => {
+      setValue('fromDate', val, { resetPage: true })
+    },
+    [setValue],
+  )
 
-  const setToDate = useCallback((val) => {
-    setValue('toDate', val, { resetPage: true })
-  }, [setValue])
+  const setToDate = useCallback(
+    (val) => {
+      setValue('toDate', val, { resetPage: true })
+    },
+    [setValue],
+  )
+
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
+  const [selectedActivity, setSelectedActivity] = useState(null)
 
   const [projectOptions, setProjectOptions] = useState([
     { value: 'all', label: 'All Projects' },
   ])
   const [actorOptions, setActorOptions] = useState([
-    { value: 'all', label: 'All Actors' },
+    { value: 'all', label: 'All Employees' },
   ])
 
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
+  const [summaryMetrics, setSummaryMetrics] = useState({
+    total: 0,
+    today: 0,
+    projects: 0,
+    financial: 0,
+  })
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
   const entityOptions = useMemo(
@@ -114,9 +153,9 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
     return ''
   }, [fromDate, toDate])
 
+  // Fetch project options for filters
   useEffect(() => {
     let active = true
-
     if (canViewProjects) {
       api
         .get('/api/projects', { params: { page: 1, limit: 100 } })
@@ -135,7 +174,14 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
         })
         .catch(() => {})
     }
+    return () => {
+      active = false
+    }
+  }, [canViewProjects])
 
+  // Fetch actor options for filters
+  useEffect(() => {
+    let active = true
     if (isAdmin && canViewUsers) {
       api
         .get('/api/users', { params: { page: 1, limit: 100 } })
@@ -146,306 +192,291 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
             value: String(u.id || u._id),
             label: `${u.name} (${u.role === 'admin' ? 'Admin' : 'Data Entry'})`,
           }))
-          setActorOptions([{ value: 'all', label: 'All Actors' }, ...mapped])
+          setActorOptions([{ value: 'all', label: 'All Employees' }, ...mapped])
         })
         .catch(() => {})
     }
-
     return () => {
       active = false
     }
-  }, [isAdmin, canViewProjects, canViewUsers])
+  }, [isAdmin, canViewUsers])
 
+  // Debounced Search
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setAppliedSearch(searchInput.trim())
-      setPage(1)
+      const clean = searchInput.trim()
+      if (clean !== appliedSearch) {
+        setAppliedSearch(clean)
+        setValue('search', clean, { resetPage: true })
+      }
     }, 280)
     return () => window.clearTimeout(timer)
-  }, [searchInput])
+  }, [searchInput, appliedSearch, setValue])
 
-  const loadActivities = useCallback(async () => {
-    if (dateRangeError) return
+  // Core Data Fetcher
+  const loadActivities = useCallback(
+    async (isManualRefresh = false) => {
+      if (dateRangeError) return
 
-    setLoading(true)
-    setErrorMessage('')
+      if (isManualRefresh) {
+        setIsRefreshing(true)
+      } else {
+        setLoading(true)
+      }
+      setErrorMessage('')
 
-    try {
-      const result = await fetchActivityHistory({
-        page,
-        limit: PAGE_SIZE,
-        entityType,
-        actionType,
-        projectId,
-        actorId,
-        fromDate,
-        toDate,
-        search: appliedSearch,
-      })
-      setItems(result.items)
-      setTotal(result.total)
-      setTotalPages(result.totalPages)
-    } catch (error) {
-      setErrorMessage(
-        error?.response?.data?.message ||
-          'Unable to load activity history. Please try again.',
-      )
-    } finally {
-      setLoading(false)
-    }
-  }, [
-    dateRangeError,
-    page,
-    entityType,
-    actionType,
-    projectId,
-    actorId,
-    fromDate,
-    toDate,
-    appliedSearch,
-  ])
+      try {
+        const result = await fetchActivityHistory({
+          page,
+          limit: pageSize,
+          entityType,
+          actionType,
+          projectId,
+          actorId,
+          fromDate,
+          toDate,
+          search: appliedSearch,
+        })
 
-  useEffect(() => {
-    let active = true
-    if (dateRangeError) {
-      return undefined
-    }
-
-    fetchActivityHistory({
+        setItems(result.items)
+        setTotal(result.total)
+        setTotalPages(result.totalPages)
+        if (result.summary) {
+          setSummaryMetrics(result.summary)
+        }
+        clampPage(result.totalPages)
+      } catch (error) {
+        setErrorMessage(
+          error?.response?.data?.message ||
+            error?.message ||
+            'Unable to load activity history. Please try again.',
+        )
+      } finally {
+        setLoading(false)
+        setIsRefreshing(false)
+      }
+    },
+    [
+      dateRangeError,
       page,
-      limit: PAGE_SIZE,
+      pageSize,
       entityType,
       actionType,
       projectId,
       actorId,
       fromDate,
       toDate,
-      search: appliedSearch,
-    })
-      .then((result) => {
-        if (!active) return
-        setItems(result.items)
-        setTotal(result.total)
-        setTotalPages(result.totalPages)
-        setErrorMessage('')
-        setLoading(false)
-      })
-      .catch((error) => {
-        if (!active) return
-        setErrorMessage(
-          error?.response?.data?.message ||
-            'Unable to load activity history. Please try again.',
-        )
-        setLoading(false)
-      })
+      appliedSearch,
+      clampPage,
+    ],
+  )
 
-    return () => {
-      active = false
-    }
-  }, [
-    dateRangeError,
-    page,
-    entityType,
-    actionType,
-    projectId,
-    actorId,
-    fromDate,
-    toDate,
-    appliedSearch,
-  ])
+  useEffect(() => {
+    loadActivities()
+  }, [loadActivities])
 
+  // Listen for broadcasted activity updates from other tabs / actions
   useEffect(() => {
     const handleBroadcast = () => {
       loadActivities()
     }
     window.addEventListener(ACTIVITY_UPDATED_EVENT, handleBroadcast)
-    return () =>
+    return () => {
       window.removeEventListener(ACTIVITY_UPDATED_EVENT, handleBroadcast)
+    }
   }, [loadActivities])
 
   const handleResetFilters = useCallback(() => {
     setSearchInput('')
     setAppliedSearch('')
-    setEntityType('all')
-    setActionType('all')
-    setProjectId('all')
-    setActorId('all')
-    setFromDate('')
-    setToDate('')
-    setPage(1)
-  }, [])
+    resetAll()
+  }, [resetAll])
 
-  const activeChips = useMemo(() => {
-    const chips = []
-
-    if (entityType !== 'all') {
-      const opt = entityOptions.find((o) => o.value === entityType)
-      chips.push({
-        key: 'entityType',
-        label: `Module: ${opt?.label || entityType}`,
-        onRemove: () => {
-          setEntityType('all')
-          setPage(1)
-        },
-      })
-    }
-
-    if (actionType !== 'all') {
-      const opt = actionOptions.find((o) => o.value === actionType)
-      chips.push({
-        key: 'actionType',
-        label: `Action: ${opt?.label || actionType}`,
-        onRemove: () => {
-          setActionType('all')
-          setPage(1)
-        },
-      })
-    }
-
-    if (projectId !== 'all') {
-      chips.push({
-        key: 'projectId',
-        label: `Project: ${projectId}`,
-        onRemove: () => {
-          setProjectId('all')
-          setPage(1)
-        },
-      })
-    }
-
-    if (actorId !== 'all') {
-      const opt = actorOptions.find((o) => o.value === actorId)
-      chips.push({
-        key: 'actorId',
-        label: `Actor: ${opt?.label || 'Selected User'}`,
-        onRemove: () => {
-          setActorId('all')
-          setPage(1)
-        },
-      })
-    }
-
-    if (fromDate) {
-      chips.push({
-        key: 'fromDate',
-        label: `From: ${fromDate}`,
-        onRemove: () => {
-          setFromDate('')
-          setPage(1)
-        },
-      })
-    }
-
-    if (toDate) {
-      chips.push({
-        key: 'toDate',
-        label: `To: ${toDate}`,
-        onRemove: () => {
-          setToDate('')
-          setPage(1)
-        },
-      })
-    }
-
-    return chips
+  const hasAnyFilter = useMemo(() => {
+    return (
+      Boolean(appliedSearch) ||
+      entityType !== 'all' ||
+      actionType !== 'all' ||
+      projectId !== 'all' ||
+      actorId !== 'all' ||
+      Boolean(fromDate) ||
+      Boolean(toDate)
+    )
   }, [
+    appliedSearch,
     entityType,
-    entityOptions,
     actionType,
-    actionOptions,
     projectId,
     actorId,
-    actorOptions,
     fromDate,
     toDate,
   ])
 
-  const hasAnyFilter = Boolean(appliedSearch || activeChips.length > 0)
+  // Active filter chips
+  const activeChips = useMemo(() => {
+    const chips = []
+    if (appliedSearch) {
+      chips.push({
+        id: 'search',
+        label: `Search: "${appliedSearch}"`,
+        onRemove: () => {
+          setSearchInput('')
+          setAppliedSearch('')
+          setValue('search', '', { resetPage: true })
+        },
+      })
+    }
+    if (entityType !== 'all') {
+      const match = entityOptions.find((o) => o.value === entityType)
+      chips.push({
+        id: 'entity',
+        label: `Module: ${match?.label || entityType}`,
+        onRemove: () => setEntityType('all'),
+      })
+    }
+    if (actionType !== 'all') {
+      const match = actionOptions.find((o) => o.value === actionType)
+      chips.push({
+        id: 'action',
+        label: `Action: ${match?.label || actionType}`,
+        onRemove: () => setActionType('all'),
+      })
+    }
+    if (projectId !== 'all') {
+      const match = projectOptions.find((o) => o.value === projectId)
+      chips.push({
+        id: 'project',
+        label: `Project: ${match?.label || projectId}`,
+        onRemove: () => setProjectId('all'),
+      })
+    }
+    if (actorId !== 'all') {
+      const match = actorOptions.find((o) => o.value === actorId)
+      chips.push({
+        id: 'actor',
+        label: `Employee: ${match?.label || actorId}`,
+        onRemove: () => setActorId('all'),
+      })
+    }
+    if (fromDate) {
+      chips.push({
+        id: 'fromDate',
+        label: `From: ${fromDate}`,
+        onRemove: () => setFromDate(''),
+      })
+    }
+    if (toDate) {
+      chips.push({
+        id: 'toDate',
+        label: `To: ${toDate}`,
+        onRemove: () => setToDate(''),
+      })
+    }
+    return chips
+  }, [
+    appliedSearch,
+    entityType,
+    actionType,
+    projectId,
+    actorId,
+    fromDate,
+    toDate,
+    entityOptions,
+    actionOptions,
+    projectOptions,
+    actorOptions,
+    setValue,
+    setEntityType,
+    setActionType,
+    setProjectId,
+    setActorId,
+    setFromDate,
+    setToDate,
+  ])
+
+  // Group items by date (Today, Yesterday, 30 Oct 2026, etc.)
+  const groupedItems = useMemo(() => {
+    return groupActivitiesByDate(items)
+  }, [items])
 
   const renderFilterFields = () => (
     <>
-      <div className="sts-act-field">
-        <span className="sts-act-field__label">Module</span>
+      <div className="sts-act-filter-field">
+        <label className="sts-act-filter-label" htmlFor="sts-act-module-filter">
+          Module
+        </label>
         <Dropdown
+          id="sts-act-module-filter"
           value={entityType}
+          onChange={setEntityType}
           options={entityOptions}
-          onChange={(val) => {
-            setEntityType(val)
-            setPage(1)
-          }}
-          placeholder="All Modules"
+          variant="filter"
           ariaLabel="Filter by module"
         />
       </div>
 
-      <div className="sts-act-field">
-        <span className="sts-act-field__label">Action Type</span>
+      <div className="sts-act-filter-field">
+        <label className="sts-act-filter-label" htmlFor="sts-act-action-filter">
+          Activity Type
+        </label>
         <Dropdown
+          id="sts-act-action-filter"
           value={actionType}
+          onChange={setActionType}
           options={actionOptions}
-          onChange={(val) => {
-            setActionType(val)
-            setPage(1)
-          }}
-          placeholder="All Actions"
-          ariaLabel="Filter by action type"
-        />
-      </div>
-
-      <div className="sts-act-field">
-        <span className="sts-act-field__label">Project</span>
-        <Dropdown
-          value={projectId}
-          options={projectOptions}
-          onChange={(val) => {
-            setProjectId(val)
-            setPage(1)
-          }}
-          placeholder="All Projects"
-          ariaLabel="Filter by project"
+          variant="filter"
+          ariaLabel="Filter by activity type"
         />
       </div>
 
       {isAdmin ? (
-        <div className="sts-act-field">
-          <span className="sts-act-field__label">Actor</span>
+        <div className="sts-act-filter-field">
+          <label className="sts-act-filter-label" htmlFor="sts-act-actor-filter">
+            Employee
+          </label>
           <Dropdown
+            id="sts-act-actor-filter"
             value={actorId}
+            onChange={setActorId}
             options={actorOptions}
-            onChange={(val) => {
-              setActorId(val)
-              setPage(1)
-            }}
-            placeholder="All Actors"
-            ariaLabel="Filter by actor"
+            variant="filter"
+            ariaLabel="Filter by employee"
           />
         </div>
       ) : null}
 
-      <div className="sts-act-field">
-        <span className="sts-act-field__label">From Date</span>
+      {canViewProjects ? (
+        <div className="sts-act-filter-field">
+          <label className="sts-act-filter-label" htmlFor="sts-act-project-filter">
+            Project
+          </label>
+          <Dropdown
+            id="sts-act-project-filter"
+            value={projectId}
+            onChange={setProjectId}
+            options={projectOptions}
+            variant="filter"
+            ariaLabel="Filter by project"
+          />
+        </div>
+      ) : null}
+
+      <div className="sts-act-filter-field">
+        <label className="sts-act-filter-label">From Date</label>
         <DatePicker
           value={fromDate}
-          onChange={(val) => {
-            setFromDate(val)
-            setPage(1)
-          }}
-          maxDate={toDate || undefined}
+          onChange={setFromDate}
           variant="filter"
           ariaLabel="Filter from activity date"
           placeholder="From"
         />
       </div>
 
-      <div className="sts-act-field">
-        <span className="sts-act-field__label">To Date</span>
+      <div className="sts-act-filter-field">
+        <label className="sts-act-filter-label">To Date</label>
         <DatePicker
           value={toDate}
-          onChange={(val) => {
-            setToDate(val)
-            setPage(1)
-          }}
-          minDate={fromDate || undefined}
+          onChange={setToDate}
           variant="filter"
           ariaLabel="Filter to activity date"
           placeholder="To"
@@ -454,20 +485,24 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
     </>
   )
 
+  const startRecordNum = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const endRecordNum = Math.min(total, page * pageSize)
+
+  const handlePageSizeChange = (nextLimit) => {
+    const newPage = calculatePreservedPage(page, pageSize, nextLimit, total)
+    setValues({ page: newPage, limit: nextLimit })
+  }
+
   return (
     <section className="sts-act-page" aria-labelledby="sts-act-page-heading">
+      {/* 1. Header */}
       <header className="sts-act-page__header">
         <div>
-          <span className="sts-act-page__eyebrow">
-            {isAdmin ? 'Operational Audit Trail' : 'Personal Entry Log'}
-          </span>
           <h1 id="sts-act-page-heading" className="sts-act-page__title">
             {isAdmin ? 'Activity History' : 'My Activity History'}
           </h1>
           <p className="sts-act-page__desc">
-            {isAdmin
-              ? 'Chronological log of verified actions across projects, purchases, expenses, raw materials, permissions, and user accounts.'
-              : 'Chronological log of verified vouchers and updates recorded under your operator account.'}
+            Track important changes and actions performed across your workspace.
           </p>
         </div>
 
@@ -475,21 +510,126 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
           <button
             type="button"
             className="sts-act-page__btn sts-act-page__btn--ghost"
-            onClick={() => onNavigate?.('/dashboard')}
+            onClick={() => navigateBackOrFallback(onNavigate, '/dashboard')}
           >
             Back to Dashboard
           </button>
           <button
             type="button"
-            className="sts-act-page__btn sts-act-page__btn--primary"
-            onClick={loadActivities}
-            disabled={loading}
+            className="sts-act-page__btn sts-act-page__btn--primary sts-act-refresh-btn"
+            onClick={() => loadActivities(true)}
+            disabled={loading || isRefreshing}
+            aria-label="Refresh activity history"
           >
-            Refresh Log
+            <svg
+              className={`sts-act-refresh-icon${
+                isRefreshing || loading ? ' sts-act-refresh-icon--spinning' : ''
+              }`}
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fillRule="evenodd"
+                d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
           </button>
         </div>
       </header>
 
+      {/* 2. Summary Cards */}
+      <section
+        className="sts-act-summary-grid"
+        aria-label="Activity statistics summary"
+      >
+        <div className="sts-act-summary-card">
+          <div className="sts-act-summary-card__top">
+            <span className="sts-act-summary-card__label">Total Activities</span>
+            <span className="sts-act-summary-card__icon sts-act-summary-card__icon--neutral">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                <path
+                  fillRule="evenodd"
+                  d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </span>
+          </div>
+          <div className="sts-act-summary-card__value">
+            {summaryMetrics.total.toLocaleString('en-IN')}
+          </div>
+          <span className="sts-act-summary-card__hint">
+            All-time workspace audit records
+          </span>
+        </div>
+
+        <div className="sts-act-summary-card">
+          <div className="sts-act-summary-card__top">
+            <span className="sts-act-summary-card__label">Today's Actions</span>
+            <span className="sts-act-summary-card__icon sts-act-summary-card__icon--success">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </span>
+          </div>
+          <div className="sts-act-summary-card__value">
+            {summaryMetrics.today.toLocaleString('en-IN')}
+          </div>
+          <span className="sts-act-summary-card__hint">
+            Actions logged since midnight
+          </span>
+        </div>
+
+        <div className="sts-act-summary-card">
+          <div className="sts-act-summary-card__top">
+            <span className="sts-act-summary-card__label">Project Activities</span>
+            <span className="sts-act-summary-card__icon sts-act-summary-card__icon--info">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+              </svg>
+            </span>
+          </div>
+          <div className="sts-act-summary-card__value">
+            {summaryMetrics.projects.toLocaleString('en-IN')}
+          </div>
+          <span className="sts-act-summary-card__hint">
+            Project setups &amp; milestones
+          </span>
+        </div>
+
+        <div className="sts-act-summary-card">
+          <div className="sts-act-summary-card__top">
+            <span className="sts-act-summary-card__label">
+              Procurement &amp; Expenses
+            </span>
+            <span className="sts-act-summary-card__icon sts-act-summary-card__icon--warning">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fillRule="evenodd"
+                  d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </span>
+          </div>
+          <div className="sts-act-summary-card__value">
+            {summaryMetrics.financial.toLocaleString('en-IN')}
+          </div>
+          <span className="sts-act-summary-card__hint">
+            Purchases, bills &amp; expense vouchers
+          </span>
+        </div>
+      </section>
+
+      {/* 3. Search and Filters */}
       <div className="sts-act-surface sts-act-filters">
         <div className="sts-act-filters__top">
           <div className="sts-act-search">
@@ -516,12 +656,9 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
             <input
               type="search"
               className="sts-act-search__input"
-              placeholder="Search by description, actor name, voucher, or project..."
+              placeholder="Search by activity, employee, voucher or project..."
               value={searchInput}
-              onChange={(e) => {
-                setSearchInput(e.target.value)
-                setLoading(true)
-              }}
+              onChange={(e) => setSearchInput(e.target.value)}
               aria-label="Search activity history"
             />
           </div>
@@ -554,6 +691,7 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
         ) : null}
       </div>
 
+      {/* Mobile Filter Sheet */}
       <MobileFilterSheet
         isOpen={isMobileSheetOpen}
         title="Filter Activity History"
@@ -566,13 +704,24 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
         <div className="sts-act-mobile-sheet-grid">{renderFilterFields()}</div>
       </MobileFilterSheet>
 
+      {/* 4. Activity Timeline Feed */}
       <div className="sts-act-surface sts-act-feed-card">
         <div className="sts-act-feed-card__meta">
-          <span>
-            {loading
-              ? 'Loading activity records...'
-              : `${total.toLocaleString('en-IN')} recorded ${total === 1 ? 'event' : 'events'}`}
+          <span className="sts-act-feed-card__count">
+            {loading ? (
+              'Loading activity records...'
+            ) : total > 0 ? (
+              <>
+                Showing <strong>{startRecordNum}</strong>&ndash;
+                <strong>{endRecordNum}</strong> of{' '}
+                <strong>{total.toLocaleString('en-IN')}</strong> matching{' '}
+                {total === 1 ? 'event' : 'events'}
+              </>
+            ) : (
+              '0 matching events'
+            )}
           </span>
+
           {hasAnyFilter ? (
             <button
               type="button"
@@ -586,10 +735,10 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
 
         {loading ? (
           <div className="sts-act-feed-card__state" role="status">
-            <div className="sts-activity-dock__skeleton" />
-            <div className="sts-activity-dock__skeleton" />
-            <div className="sts-activity-dock__skeleton" />
-            <div className="sts-activity-dock__skeleton" />
+            <div className="sts-act-skeleton-row" />
+            <div className="sts-act-skeleton-row" />
+            <div className="sts-act-skeleton-row" />
+            <div className="sts-act-skeleton-row" />
           </div>
         ) : errorMessage ? (
           <div className="sts-act-feed-card__state" role="alert">
@@ -600,7 +749,7 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
             <button
               type="button"
               className="sts-act-page__btn sts-act-page__btn--primary"
-              onClick={loadActivities}
+              onClick={() => loadActivities()}
             >
               Retry
             </button>
@@ -614,50 +763,65 @@ export function ActivityHistoryPage({ currentUser, onNavigate }) {
             </p>
             <p className="sts-act-feed-card__state-sub">
               {hasAnyFilter
-                ? 'Try broadening your search terms, actor, project, or date range filters.'
+                ? 'Try broadening your search terms, employee, project, or date range filters.'
                 : 'Completed operations across projects, purchases, expenses, and materials will be logged here.'}
             </p>
           </div>
         ) : (
-          <ul className="sts-act-feed-list" aria-label="Activity history list">
-            {items.map((item) => (
-              <ActivityFeedItem
-                key={item.id}
-                item={item}
-                userRole={currentUser || userRole}
-                onNavigate={onNavigate}
-              />
+          <div className="sts-act-timeline">
+            {groupedItems.map((group) => (
+              <div key={group.label} className="sts-act-date-group">
+                <div className="sts-act-date-group__header">
+                  <span className="sts-act-date-group__label">
+                    {group.label}
+                  </span>
+                  <span className="sts-act-date-group__line" aria-hidden="true" />
+                </div>
+
+                <ul
+                  className="sts-act-feed-list"
+                  aria-label={`Activities for ${group.label}`}
+                >
+                  {group.items.map((item) => (
+                    <ActivityFeedItem
+                      key={item.id}
+                      item={item}
+                      userRole={userRole}
+                      onNavigate={onNavigate}
+                      onSelect={(selected) => setSelectedActivity(selected)}
+                    />
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
 
-        {!loading && !errorMessage && totalPages > 1 ? (
-          <nav
-            className="sts-act-pagination"
-            aria-label="Activity history pagination"
-          >
-            <button
-              type="button"
-              className="sts-act-page__btn sts-act-page__btn--ghost"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </button>
-            <span className="sts-act-pagination__info">
-              Page <strong>{page}</strong> of <strong>{totalPages}</strong>
-            </span>
-            <button
-              type="button"
-              className="sts-act-page__btn sts-act-page__btn--ghost"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              Next
-            </button>
-          </nav>
+        {/* 5. Pagination */}
+        {!loading && !errorMessage && total > 0 ? (
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalItems={total}
+            pageSize={pageSize}
+            pageSizeOptions={[10, 20, 50]}
+            onPageChange={setPage}
+            onPageSizeChange={handlePageSizeChange}
+            itemName="activity"
+            itemsName="activities"
+          />
         ) : null}
       </div>
+
+      {/* 6. Activity Details Drawer */}
+      <ActivityDetailsDrawer
+        item={selectedActivity}
+        userRole={userRole}
+        onClose={() => setSelectedActivity(null)}
+        onNavigate={onNavigate}
+      />
     </section>
   )
 }
+
+export default ActivityHistoryPage

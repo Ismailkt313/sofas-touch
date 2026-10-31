@@ -176,7 +176,7 @@ export function formatActivityTimestamp(value, nowMs = Date.now()) {
 
 export function resolvePermittedActivityPath(item, userRole = 'data_entry') {
   const rawPath = typeof item?.targetPath === 'string' ? item.targetPath.trim() : ''
-  if (!rawPath || !rawPath.startsWith('/')) {
+  if (!rawPath || !rawPath.startsWith('/') || rawPath.startsWith('/settings')) {
     return null
   }
   if (userRole === 'admin') {
@@ -191,4 +191,255 @@ export function resolvePermittedActivityPath(item, userRole = 'data_entry') {
     return null
   }
   return rawPath
+}
+
+
+export function getDateGroupLabel(timestamp) {
+  if (!timestamp) return 'Earlier'
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return 'Earlier'
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  const targetDate = new Date(date)
+  targetDate.setHours(0, 0, 0, 0)
+
+  if (targetDate.getTime() === today.getTime()) {
+    return 'Today'
+  }
+  if (targetDate.getTime() === yesterday.getTime()) {
+    return 'Yesterday'
+  }
+
+  return new Intl.DateTimeFormat('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(date)
+}
+
+export function groupActivitiesByDate(items = []) {
+  const groups = []
+  let currentGroup = null
+
+  for (const item of items) {
+    const groupLabel = getDateGroupLabel(item.timestamp)
+    if (!currentGroup || currentGroup.label !== groupLabel) {
+      currentGroup = {
+        label: groupLabel,
+        items: [item],
+      }
+      groups.push(currentGroup)
+    } else {
+      currentGroup.items.push(item)
+    }
+  }
+
+  return groups
+}
+
+export function formatHumanReadableActivity(item = {}) {
+  const actionType = String(item.actionType || '')
+  const entityType = String(item.entityType || '')
+  const rawDesc = String(item.description || '').trim()
+  const label = String(item.entityLabel || '').trim()
+  const projectInfo = item.projectName
+    ? `${item.projectCode ? item.projectCode + ' • ' : ''}${item.projectName}`
+    : item.projectCode || ''
+
+  let title = 'Activity Recorded'
+  let description = rawDesc
+  let iconCategory = 'general'
+  let tone = 'neutral'
+
+  // Determine icon category and base tone
+  if (entityType === 'project' || actionType.startsWith('project.')) {
+    iconCategory = 'project'
+    tone = 'info'
+  } else if (entityType === 'purchase' || actionType.startsWith('purchase.')) {
+    iconCategory = 'purchase'
+    tone = 'success'
+  } else if (entityType === 'expense' || actionType.startsWith('expense.')) {
+    iconCategory = 'expense'
+    tone = 'warning'
+  } else if (
+    entityType === 'material' ||
+    entityType === 'raw_material' ||
+    actionType.startsWith('material.')
+  ) {
+    iconCategory = 'material'
+    tone = 'accent'
+  } else if (entityType === 'user' || actionType.startsWith('user.')) {
+    iconCategory = 'user'
+    tone = 'info'
+  } else if (entityType === 'permission' || actionType.startsWith('permissions.')) {
+    iconCategory = 'permission'
+    tone = 'accent'
+  } else if (entityType === 'settings' || actionType.startsWith('settings.')) {
+    iconCategory = 'settings'
+    tone = 'neutral'
+  }
+
+  // Adjust tone for destructive or special actions
+  if (
+    actionType.endsWith('.cancelled') ||
+    actionType.endsWith('.deleted') ||
+    actionType.endsWith('.rejected')
+  ) {
+    tone = 'danger'
+  } else if (actionType.endsWith('.approved')) {
+    tone = 'success'
+  }
+
+  // Action Titles and Humanized Descriptions
+  switch (actionType) {
+    case 'project.created':
+      title = 'Project Created'
+      description = label ? `Created project: ${label}` : rawDesc
+      break
+    case 'project.updated':
+      title = 'Project Details Updated'
+      description = label ? `Updated project details: ${label}` : rawDesc
+      break
+    case 'project.status_changed':
+      title = 'Project Status Changed'
+      description = rawDesc
+      break
+    case 'project.deleted':
+      title = 'Project Deleted'
+      description = label ? `Deleted project: ${label}` : rawDesc
+      break
+    case 'purchase.created':
+      title = 'Purchase Voucher Added'
+      description = label ? `Added purchase voucher ${label}` : rawDesc
+      break
+    case 'purchase.updated':
+      title = 'Purchase Voucher Updated'
+      description = label ? `Updated purchase voucher ${label}` : rawDesc
+      break
+    case 'purchase.attachment_added':
+      title = 'Supplier Bill Attached'
+      description = label ? `Attached supplier invoice to ${label}` : rawDesc
+      break
+    case 'purchase.cancelled':
+      title = 'Purchase Voucher Cancelled'
+      description = label ? `Voided purchase voucher ${label}` : rawDesc
+      break
+    case 'expense.created':
+      title = 'Expense Voucher Added'
+      description = label ? `Added expense ${label}` : rawDesc
+      break
+    case 'expense.updated':
+      title = 'Expense Updated'
+      description = label ? `Updated expense ${label}` : rawDesc
+      break
+    case 'expense.cancelled':
+      title = 'Expense Cancelled'
+      description = label ? `Voided expense ${label}` : rawDesc
+      break
+    case 'expense.category_created':
+      title = 'Expense Category Created'
+      description = label ? `Added expense category: ${label}` : rawDesc
+      break
+    case 'expense.category_updated':
+      title = 'Expense Category Updated'
+      description = label ? `Updated expense category: ${label}` : rawDesc
+      break
+    case 'material.created':
+      title = 'Material Added'
+      description = label ? `Added material: ${label}` : rawDesc
+      break
+    case 'material.updated':
+      title = 'Material Updated'
+      description = label ? `Updated material details: ${label}` : rawDesc
+      break
+    case 'material.status_changed':
+      title = 'Material Status Updated'
+      description = rawDesc
+      break
+    case 'material.stock_adjusted':
+      title = 'Stock Quantity Adjusted'
+      description = label ? `Updated stock quantity: ${label}` : rawDesc
+      break
+    case 'user.registered':
+      title = 'Employee Registration Submitted'
+      description = label ? `Submitted registration for ${label}` : rawDesc
+      break
+    case 'user.created':
+      title = 'Employee Account Created'
+      description = label ? `Created employee account: ${label}` : rawDesc
+      break
+    case 'user.updated':
+      title = 'Employee Account Updated'
+      description = label ? `Updated employee details: ${label}` : rawDesc
+      break
+    case 'user.status_changed':
+      title = 'Employee Status Changed'
+      description = rawDesc
+      break
+    case 'user.approved':
+      title = 'Employee Account Approved'
+      description = label ? `Approved employee account: ${label}` : rawDesc
+      break
+    case 'user.rejected':
+      title = 'Employee Registration Rejected'
+      description = label ? `Rejected employee signup: ${label}` : rawDesc
+      break
+    case 'permissions.updated':
+      title = 'Default Employee Access Updated'
+      description = rawDesc.includes('role baseline')
+        ? 'Updated default employee access'
+        : rawDesc
+      break
+    case 'permissions.reset':
+      title = 'Default Employee Access Restored'
+      description = 'Restored default employee access to recommended baseline'
+      break
+    case 'permissions.user_overridden':
+      title = 'Employee Access Customized'
+      description = label ? `Updated access for ${label}` : rawDesc
+      break
+    case 'settings.updated':
+      title = 'Workspace Settings Updated'
+      description = 'Updated application workspace settings'
+      break
+    default:
+      if (rawDesc.includes('role baseline')) {
+        title = 'Default Employee Access Updated'
+        description = 'Updated default employee access'
+      } else {
+        title = label || 'Activity Event'
+        description = rawDesc
+      }
+      break
+  }
+
+  // Fallback cleanup if description still contains technical "Data Entry Operator role baseline"
+  if (description.includes('Data Entry Operator role baseline')) {
+    description = description.replace(
+      /Updated Data Entry Operator role baseline/gi,
+      'Updated default employee access',
+    )
+  }
+
+  // Secondary text (related project or entity identifier)
+  let secondaryText = ''
+  if (projectInfo) {
+    secondaryText = projectInfo
+  } else if (label && !description.includes(label)) {
+    secondaryText = label
+  }
+
+  return {
+    title,
+    description,
+    secondaryText,
+    moduleBadge: getEntityBadgeLabel(entityType),
+    iconCategory,
+    tone,
+  }
 }

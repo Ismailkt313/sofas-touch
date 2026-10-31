@@ -10,7 +10,6 @@ import {
   ReportsRepository,
   reportsRepository,
 } from '../../reports';
-import { appSettingsRepository } from '../../settings';
 import { IUserService, userService } from '../../users';
 import { DashboardRepository } from '../repository/dashboard.repository';
 import {
@@ -26,6 +25,9 @@ import {
   DashboardValidationAlertDto,
   MonthlyExpenseBucketDto,
 } from '../types';
+
+const CENTRAL_OPERATOR_GUIDANCE_NOTE =
+  'Attach supplier invoices on purchase vouchers and link expenses to the active project code whenever applicable.';
 
 const SHORT_MONTH_NAMES = [
   'Jan',
@@ -272,7 +274,7 @@ export class DashboardService {
     const assignedProjectIds = isAdmin ? null : caller.assignedProjectIds;
 
     if (!canViewProfitability) {
-      const [candidateProjects, recentTransactions, stockAlerts, settings] =
+      const [candidateProjects, recentTransactions, stockAlerts] =
         await Promise.all([
           canViewProjects
             ? this.reportsRepo.findCandidateProjects({ status: 'all' })
@@ -285,7 +287,6 @@ export class DashboardService {
           canViewMaterials
             ? this.repository.findStockAlerts()
             : Promise.resolve(null),
-          appSettingsRepository.getSettings(),
         ]);
 
       const accessibleProjects = candidateProjects.filter((p) =>
@@ -403,7 +404,7 @@ export class DashboardService {
         stockAlerts,
         pendingApprovals: null,
         operational: {
-          guidanceNote: settings.operatorGuidanceBanner,
+          guidanceNote: CENTRAL_OPERATOR_GUIDANCE_NOTE,
           quickActions: buildQuickActions(perms),
           projectSummary: canViewProjects
             ? {

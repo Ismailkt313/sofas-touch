@@ -1,4 +1,5 @@
 import { useListingState } from '../../../services/navigationState'
+import { calculatePreservedPage } from '../../../components/common/paginationUtils'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { hasPermission } from '../../permissions/constants/permissionsCatalog'
 import {
@@ -15,6 +16,7 @@ import {
 const DEFAULT_PAGE_SIZE = 10
 const RAW_MATERIALS_LISTING_SCHEMA = {
   page: { type: 'number', default: 1, min: 1 },
+  limit: { type: 'number', default: 10, min: 1 },
   search: { type: 'string', default: '' },
   category: { type: 'string', default: 'all' },
   status: { type: 'string', default: 'all' },
@@ -27,7 +29,7 @@ export function useRawMaterialsManagement({ currentUser }) {
   const adminAccess = canEditMaterial
   const initialHasToken = hasActiveAuthToken()
 
-  const { values, setValue, resetAll, clampPage } = useListingState(RAW_MATERIALS_LISTING_SCHEMA, {
+  const { values, setValue, setValues, resetAll, clampPage } = useListingState(RAW_MATERIALS_LISTING_SCHEMA, {
     routeKey: 'raw-materials',
   })
 
@@ -37,6 +39,7 @@ export function useRawMaterialsManagement({ currentUser }) {
   const currentPage = values.page
   const categoryFilter = values.category
   const statusFilter = values.status
+  const pageSize = values.limit || DEFAULT_PAGE_SIZE
 
   const setCurrentPage = useCallback(
     (pageNumber) => setValue('page', pageNumber, { push: true }),
@@ -199,7 +202,7 @@ export function useRawMaterialsManagement({ currentUser }) {
           const [listRes, allRes, activeRes, inactiveRes] = await Promise.all([
             fetchRawMaterials({
               page: currentPage,
-              limit: DEFAULT_PAGE_SIZE,
+              limit: pageSize,
               search: debouncedSearch,
               category: categoryFilter,
               status: effectiveStatusFilter,
@@ -246,7 +249,7 @@ export function useRawMaterialsManagement({ currentUser }) {
           const [listRes, activeTotalRes] = await Promise.all([
             fetchRawMaterials({
               page: currentPage,
-              limit: DEFAULT_PAGE_SIZE,
+              limit: pageSize,
               search: debouncedSearch,
               category: categoryFilter,
               status: 'active',
@@ -307,6 +310,7 @@ export function useRawMaterialsManagement({ currentUser }) {
   }, [
     adminAccess,
     currentPage,
+    pageSize,
     debouncedSearch,
     categoryFilter,
     effectiveStatusFilter,
@@ -324,43 +328,41 @@ export function useRawMaterialsManagement({ currentUser }) {
 
   const handleSearchChange = useCallback((value) => {
     setSearchInput(value)
-    setCurrentPage(1)
   }, [])
 
   const handleCategoryFilterChange = useCallback((nextCategory) => {
-    setCategoryFilter(nextCategory || 'all')
-    setCurrentPage(1)
-  }, [])
+    setValue('category', nextCategory || 'all', { resetPage: true })
+  }, [setValue])
 
   const handleStatusFilterChange = useCallback(
     (nextStatus) => {
       if (!adminAccess) {
         return
       }
-      setStatusFilter(nextStatus || 'all')
-      setCurrentPage(1)
+      setValue('status', nextStatus || 'all', { resetPage: true })
     },
-    [adminAccess],
+    [adminAccess, setValue],
   )
 
   const handleApplyFilters = useCallback(
     (nextStatus, nextCategory) => {
-      if (adminAccess) {
-        setStatusFilter(nextStatus || 'all')
+      const updates = {
+        category: nextCategory || 'all',
+        page: 1,
       }
-      setCategoryFilter(nextCategory || 'all')
-      setCurrentPage(1)
+      if (adminAccess) {
+        updates.status = nextStatus || 'all'
+      }
+      setValues(updates)
     },
-    [adminAccess],
+    [adminAccess, setValues],
   )
 
   const resetFilters = useCallback(() => {
     setSearchInput('')
     setDebouncedSearch('')
-    setCategoryFilter('all')
-    setStatusFilter('all')
-    setCurrentPage(1)
-  }, [])
+    resetAll()
+  }, [resetAll])
 
   const hasActiveFilters = useMemo(() => {
     const hasSearch = Boolean(searchInput.trim())
@@ -370,8 +372,21 @@ export function useRawMaterialsManagement({ currentUser }) {
   }, [searchInput, categoryFilter, adminAccess, statusFilter])
 
   const rangeStart =
-    totalMaterials === 0 ? 0 : (currentPage - 1) * DEFAULT_PAGE_SIZE + 1
-  const rangeEnd = Math.min(currentPage * DEFAULT_PAGE_SIZE, totalMaterials)
+    totalMaterials === 0 ? 0 : (currentPage - 1) * pageSize + 1
+  const rangeEnd = Math.min(currentPage * pageSize, totalMaterials)
+
+  const handlePageSizeChange = useCallback(
+    (nextLimit) => {
+      const newPage = calculatePreservedPage(
+        currentPage,
+        pageSize,
+        nextLimit,
+        totalMaterials,
+      )
+      setValues({ page: newPage, limit: nextLimit })
+    },
+    [currentPage, pageSize, totalMaterials, setValues],
+  )
 
   const openCreateModal = useCallback(() => {
     if (!adminAccess) {

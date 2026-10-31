@@ -19,17 +19,25 @@ export function PurchasesTable({
       <table className="pv-table">
         <thead>
           <tr>
-            <th scope="col">Voucher No</th>
-            <th scope="col">Purchase Date</th>
-            <th scope="col">Supplier</th>
-            <th scope="col">Project</th>
-            <th scope="col" className="pv-table__num-col">
+            <th scope="col" className="pv-table__th-voucher">
+              Voucher No
+            </th>
+            <th scope="col" className="pv-table__th-date">
+              Purchase Date
+            </th>
+            <th scope="col" className="pv-table__th-supplier">
+              Supplier
+            </th>
+            <th scope="col" className="pv-table__th-project">
+              Project
+            </th>
+            <th scope="col" className="pv-table__th-total">
               Total Amount
             </th>
-            <th scope="col">Bill</th>
-            <th scope="col">Created By</th>
-            <th scope="col">Status</th>
-            <th scope="col" className="pv-table__actions-col">
+            <th scope="col" className="pv-table__th-status">
+              Status
+            </th>
+            <th scope="col" className="pv-table__th-actions">
               Actions
             </th>
           </tr>
@@ -37,41 +45,55 @@ export function PurchasesTable({
         <tbody>
           {vouchers.map((voucher) => {
             const isCancelled = voucher.status === 'cancelled'
+            const itemCount = voucher.lineItems?.length || 0
+
             return (
               <tr
                 key={voucher.id}
                 className={isCancelled ? 'pv-table__row--cancelled' : ''}
               >
-                <td className="pv-table__code-cell">
-                  <button
-                    type="button"
-                    className="pv-code-link"
-                    onClick={() => onViewVoucher(voucher.id)}
-                  >
-                    {voucher.voucherNumber}
-                  </button>
-                </td>
-                <td className="pv-table__date-cell">
-                  {formatPurchaseDate(voucher.purchaseDate)}
-                </td>
-                <td>
-                  <div className="pv-supplier-cell">
-                    <span className="pv-supplier-cell__name">
-                      {voucher.supplierName}
-                    </span>
+                {/* 1. Voucher No: Primary code + invoice/items subline */}
+                <td className="pv-table__td-voucher">
+                  <div className="pv-voucher-cell">
+                    <button
+                      type="button"
+                      className="pv-code-link"
+                      onClick={() => onViewVoucher(voucher.id)}
+                      title={`View voucher ${voucher.voucherNumber}`}
+                    >
+                      {voucher.voucherNumber}
+                    </button>
                     {voucher.supplierInvoiceNumber ? (
-                      <span className="pv-supplier-cell__inv">
+                      <span
+                        className="pv-voucher-sub"
+                        title={`Supplier Invoice #${voucher.supplierInvoiceNumber}`}
+                      >
                         Inv #{voucher.supplierInvoiceNumber}
                       </span>
                     ) : (
-                      <span className="pv-supplier-cell__inv pv-supplier-cell__inv--muted">
-                        {voucher.lineItems.length}{' '}
-                        {voucher.lineItems.length === 1 ? 'material' : 'materials'}
+                      <span className="pv-voucher-sub pv-voucher-sub--muted">
+                        {itemCount} {itemCount === 1 ? 'material' : 'materials'}
                       </span>
                     )}
                   </div>
                 </td>
-                <td>
+
+                {/* 2. Purchase Date */}
+                <td className="pv-table__td-date">
+                  <span className="pv-date-val">
+                    {formatPurchaseDate(voucher.purchaseDate)}
+                  </span>
+                </td>
+
+                {/* 3. Supplier Name */}
+                <td className="pv-table__td-supplier">
+                  <span className="pv-supplier-name" title={voucher.supplierName}>
+                    {voucher.supplierName}
+                  </span>
+                </td>
+
+                {/* 4. Project or General Stock */}
+                <td className="pv-table__td-project">
                   {voucher.projectCode ? (
                     <button
                       type="button"
@@ -96,36 +118,47 @@ export function PurchasesTable({
                     <span className="pv-unassigned-label">General Stock</span>
                   )}
                 </td>
-                <td className="pv-table__num-col pv-table__total-cell">
-                  {formatInrCurrency(voucher.finalTotal)}
-                </td>
-                <td>
-                  <PurchaseAttachmentIndicator
-                    count={voucher.attachmentCount}
-                  />
-                </td>
-                <td>
-                  <span className="pv-creator-name">
-                    {voucher.createdByName || '—'}
+
+                {/* 5. Total Amount */}
+                <td className="pv-table__td-total">
+                  <span
+                    className={`pv-total-amount${
+                      isCancelled ? ' pv-total-amount--cancelled' : ''
+                    }`}
+                  >
+                    {formatInrCurrency(voucher.finalTotal)}
                   </span>
                 </td>
-                <td>
-                  <PurchaseStatusBadge status={voucher.status} />
+
+                {/* 6. Status & Attachments Cluster */}
+                <td className="pv-table__td-status">
+                  <div className="pv-status-cluster">
+                    <PurchaseStatusBadge status={voucher.status} />
+                    {voucher.attachmentCount > 0 ? (
+                      <PurchaseAttachmentIndicator
+                        count={voucher.attachmentCount}
+                      />
+                    ) : null}
+                  </div>
                 </td>
-                <td className="pv-table__actions-cell">
+
+                {/* 7. Action: Compact View & optional Edit */}
+                <td className="pv-table__td-actions">
                   <div className="pv-row-actions">
                     <button
                       type="button"
-                      className="pv-action-btn"
+                      className="pv-btn-view"
                       onClick={() => onViewVoucher(voucher.id)}
+                      title={`View purchase voucher ${voucher.voucherNumber}`}
                     >
-                      View
+                      View <span aria-hidden="true">&rarr;</span>
                     </button>
                     {!isCancelled && canEditVoucher ? (
                       <button
                         type="button"
-                        className="pv-action-btn pv-action-btn--edit"
+                        className="pv-btn-edit-compact"
                         onClick={() => onEditVoucher(voucher.id)}
+                        title={`Edit voucher ${voucher.voucherNumber}`}
                       >
                         Edit
                       </button>

@@ -1,45 +1,28 @@
+import React from 'react'
+import { Pagination } from '../../../components/common/Pagination'
+
 export function PurchasesPagination({
   activePage,
   totalPages,
   totalMatching,
-  rangeStart,
-  rangeEnd,
+  pageSize = 10,
+  pageSizeOptions = [10, 20, 50],
   onPageChange,
+  onPageSizeChange,
 }) {
-  if (totalMatching <= 0) {
-    return null
-  }
-
   return (
-    <div className="pv-pagination">
-      <span className="pv-pagination__summary">
-        Showing <strong>{rangeStart}</strong>–<strong>{rangeEnd}</strong> of{' '}
-        <strong>{totalMatching}</strong>
-      </span>
-
-      {totalPages > 1 ? (
-        <div className="pv-pagination__controls">
-          <button
-            type="button"
-            className="admin-btn admin-btn--secondary pv-pagination__btn"
-            disabled={activePage <= 1}
-            onClick={() => onPageChange(activePage - 1)}
-          >
-            Previous
-          </button>
-          <span className="pv-pagination__page-indicator">
-            Page {activePage} of {totalPages}
-          </span>
-          <button
-            type="button"
-            className="admin-btn admin-btn--secondary pv-pagination__btn"
-            disabled={activePage >= totalPages}
-            onClick={() => onPageChange(activePage + 1)}
-          >
-            Next
-          </button>
-        </div>
-      ) : null}
-    </div>
+    <Pagination
+      page={activePage}
+      totalPages={totalPages}
+      totalItems={totalMatching}
+      pageSize={pageSize}
+      pageSizeOptions={pageSizeOptions}
+      onPageChange={onPageChange}
+      onPageSizeChange={onPageSizeChange}
+      itemName="purchase voucher"
+      itemsName="purchase vouchers"
+    />
   )
 }
+
+export default PurchasesPagination

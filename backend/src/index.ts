@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors, { CorsOptions } from 'cors';
 import { env } from './config/env';
 import { connectDB } from './config/db';
+import { validateCloudinaryConfig } from './config/cloudinary';
 import helmet from 'helmet';
 import authRouter from './modules/auth';
 import userRouter from './modules/users';
@@ -14,7 +15,6 @@ import reportRoutes from './routes/reportRoutes';
 import activityRoutes from './routes/activityRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import permissionRoutes from './routes/permissionRoutes';
-import settingsRoutes from './routes/settingsRoutes';
 
 const app = express();
 const PORT = env.PORT;
@@ -28,6 +28,7 @@ app.use(
 );
 
 connectDB();
+validateCloudinaryConfig(false);
 
 const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
@@ -88,7 +89,6 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/activities', activityRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/permissions', permissionRoutes);
-app.use('/api/settings', settingsRoutes);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({

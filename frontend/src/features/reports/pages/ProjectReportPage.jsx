@@ -428,13 +428,6 @@ export function ProjectReportPage({ projectId, currentUser, onNavigate }) {
               </div>
 
               <div>
-                <span className="rep-info-item__label">Site Location</span>
-                <div className="rep-info-item__val">
-                  {project.siteLocation || '—'}
-                </div>
-              </div>
-
-              <div>
                 <span className="rep-info-item__label">Created / Start Date</span>
                 <div className="rep-info-item__val">
                   {formatReportDate(project.createdAt)}

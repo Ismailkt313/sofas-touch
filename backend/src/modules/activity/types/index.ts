@@ -107,6 +107,13 @@ export interface ActivityActorOptionDto {
   actorName: string;
 }
 
+export interface ActivitySummaryMetricsDto {
+  total: number;
+  today: number;
+  projects: number;
+  financial: number;
+}
+
 export interface PaginatedActivitiesResponseDto {
   items: ActivityResponseDto[];
   total: number;
@@ -114,6 +121,7 @@ export interface PaginatedActivitiesResponseDto {
   limit: number;
   totalPages: number;
   scope: 'all' | 'own';
+  summary: ActivitySummaryMetricsDto;
   filterOptions: {
     actors: ActivityActorOptionDto[];
     actionTypes: ActivityActionType[];

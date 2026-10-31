@@ -7,6 +7,7 @@ import {
 } from '../models/activity.model';
 import {
   ActivityActorOptionDto,
+  ActivitySummaryMetricsDto,
   ListActivitiesQueryDto,
 } from '../types';
 
@@ -164,6 +165,7 @@ export class ActivityRepository {
   }): Promise<{
     items: IActivity[];
     total: number;
+    summary?: ActivitySummaryMetricsDto;
     actors: ActivityActorOptionDto[];
   }> {
     const { query, includeAdminOnly, restrictToActorId, assignedProjectIds } =
@@ -253,7 +255,10 @@ export class ActivityRepository {
         actorScopeFilter.actorId = restrictToActorId;
       }
 
-      const [docs, total, actorAgg] = await Promise.all([
+      const startOfToday = new Date();
+      startOfToday.setUTCHours(0, 0, 0, 0);
+
+      const [docs, total, actorAgg, todayCount, projectCount, financialCount] = await Promise.all([
         this.model
           .find(filter)
           .sort({ timestamp: -1, _id: -1 })
@@ -275,11 +280,20 @@ export class ActivityRepository {
             { $limit: 100 },
           ])
           .exec(),
+        this.model.countDocuments({ ...actorScopeFilter, timestamp: { $gte: startOfToday } }).exec(),
+        this.model.countDocuments({ ...actorScopeFilter, entityType: 'project' }).exec(),
+        this.model.countDocuments({ ...actorScopeFilter, entityType: { $in: ['purchase', 'expense'] } }).exec(),
       ]);
 
       return {
         items: docs as unknown as IActivity[],
         total,
+        summary: {
+          total,
+          today: todayCount,
+          projects: projectCount,
+          financial: financialCount,
+        },
         actors: actorAgg
           .filter((a) => Boolean(a._id))
           .map((a) => ({
@@ -385,6 +399,21 @@ export class ActivityRepository {
     const total = filtered.length;
     const items = filtered.slice(skip, skip + query.limit);
 
-    return { items, total, actors };
+    const startOfTodayMs = new Date().setUTCHours(0, 0, 0, 0);
+    const todayCount = scopedItems.filter((i) => new Date(i.timestamp).getTime() >= startOfTodayMs).length;
+    const projectCount = scopedItems.filter((i) => i.entityType === 'project').length;
+    const financialCount = scopedItems.filter((i) => i.entityType === 'purchase' || i.entityType === 'expense').length;
+
+    return {
+      items,
+      total,
+      summary: {
+        total,
+        today: todayCount,
+        projects: projectCount,
+        financial: financialCount,
+      },
+      actors,
+    };
   }
 }

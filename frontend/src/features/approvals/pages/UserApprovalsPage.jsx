@@ -1,5 +1,6 @@
 import { useListingState } from '../../../services/navigationState'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Toast } from '../../../components/common'
 import { ApprovalDetailsModal } from '../components/ApprovalDetailsModal'
 import { ApprovalFiltersBar } from '../components/ApprovalFiltersBar'
 import { ApprovalsMobileList } from '../components/ApprovalsMobileList'
@@ -243,45 +244,11 @@ export function UserApprovalsPage({ currentUser, onNavigate }) {
       </header>
 
       {feedbackBanner ? (
-        <div
-          className="approvals-feedback approvals-feedback--success"
-          role="status"
-        >
-          <div className="approvals-feedback__content">
-            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <circle
-                cx="10"
-                cy="10"
-                r="7.5"
-                stroke="currentColor"
-                strokeWidth="1.6"
-              />
-              <path
-                d="M6.75 10.25L9 12.5L13.5 7.75"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <span>{feedbackBanner.message}</span>
-          </div>
-          <button
-            type="button"
-            className="approvals-feedback__dismiss"
-            onClick={() => setFeedbackBanner(null)}
-            aria-label="Dismiss message"
-          >
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M4.5 4.5L11.5 11.5M11.5 4.5L4.5 11.5"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </div>
+        <Toast
+          message={feedbackBanner.message || feedbackBanner.text || feedbackBanner}
+          tone={feedbackBanner.type || feedbackBanner.tone || 'success'}
+          onClose={() => setFeedbackBanner(null)}
+        />
       ) : null}
 
       <ApprovalSummaryBar

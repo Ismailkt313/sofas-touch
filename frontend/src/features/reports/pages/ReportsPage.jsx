@@ -1,8 +1,9 @@
 import { useListingState } from '../../../services/navigationState'
+import { calculatePreservedPage } from '../../../components/common/paginationUtils'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ReportsFiltersBar } from '../components/ReportsFiltersBar'
 import { ReportsMobileList } from '../components/ReportsMobileList'
-import { ReportsPagination } from '../components/ReportsPagination'
+import { Pagination } from '../../../components/common/Pagination'
 import { ReportsSummaryCards } from '../components/ReportsSummaryCards'
 import { ReportsTable } from '../components/ReportsTable'
 import { hasAllPermissions } from '../../permissions/constants/permissionsCatalog'
@@ -21,6 +22,7 @@ import {
 const PAGE_LIMIT = 10
 const REPORTS_LISTING_SCHEMA = {
   page: { type: 'number', default: 1, min: 1 },
+  limit: { type: 'number', default: 10, min: 1 },
   search: { type: 'string', default: '' },
   status: { type: 'string', default: 'all' },
   fromDate: { type: 'string', default: '' },
@@ -68,7 +70,7 @@ export function ReportsPage({ currentUser, onNavigate }) {
     totalPages: 1,
   })
 
-  const { values, setValue, resetAll, clampPage } = useListingState(REPORTS_LISTING_SCHEMA, {
+  const { values, setValue, setValues, resetAll, clampPage } = useListingState(REPORTS_LISTING_SCHEMA, {
     routeKey: 'reports',
   })
 
@@ -78,6 +80,7 @@ export function ReportsPage({ currentUser, onNavigate }) {
   const toDate = values.toDate
   const sortBy = values.sortBy
   const sortOrder = values.sortOrder
+  const pageSize = values.limit || PAGE_LIMIT
 
   const setCurrentPage = useCallback(
     (pageNumber) => setValue('page', pageNumber, { push: true }),
@@ -111,22 +114,29 @@ export function ReportsPage({ currentUser, onNavigate }) {
       sortOrder !== 'desc',
   )
 
+  const handleApplySearch = useCallback(() => {
+    const next = searchInput.trim()
+    setAppliedSearch(next)
+    setValue('search', next, { resetPage: true })
+    if (hasLoadedOnceRef.current) setIsRefreshing(true)
+  }, [searchInput, setValue])
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      const next = searchInput.trim()
       setAppliedSearch((prev) => {
-        const next = searchInput.trim()
         if (prev !== next) {
-          setCurrentPage(1)
+          setValue('search', next, { resetPage: true })
           if (hasLoadedOnceRef.current) {
             setIsRefreshing(true)
           }
         }
         return next
       })
-    }, 260)
+    }, 280)
 
     return () => window.clearTimeout(timer)
-  }, [searchInput])
+  }, [searchInput, setValue])
 
   useEffect(() => {
     if (!hasActiveAuthToken() || !adminAccess || dateRangeError) {
@@ -137,7 +147,7 @@ export function ReportsPage({ currentUser, onNavigate }) {
 
     fetchProjectReports({
       page: currentPage,
-      limit: PAGE_LIMIT,
+      limit: pageSize,
       search: appliedSearch,
       status: statusFilter,
       fromDate,
@@ -160,7 +170,7 @@ export function ReportsPage({ currentUser, onNavigate }) {
         )
         setPagination({
           page: Number(result.page ?? currentPage),
-          limit: Number(result.limit ?? PAGE_LIMIT),
+          limit: Number(result.limit ?? pageSize),
           totalItems: Number(result.total ?? 0),
           totalPages: Math.max(1, Number(result.totalPages ?? 1)),
         })
@@ -192,6 +202,7 @@ export function ReportsPage({ currentUser, onNavigate }) {
     adminAccess,
     appliedSearch,
     currentPage,
+    pageSize,
     dateRangeError,
     fromDate,
     reloadTick,
@@ -210,47 +221,69 @@ export function ReportsPage({ currentUser, onNavigate }) {
     setReloadTick((prev) => prev + 1)
   }, [])
 
-  const handleStatusChange = useCallback((nextStatus) => {
-    setStatusFilter(nextStatus)
-    setCurrentPage(1)
-    if (hasLoadedOnceRef.current) setIsRefreshing(true)
-  }, [])
+  const handleStatusChange = useCallback(
+    (nextStatus) => {
+      setValue('status', nextStatus, { resetPage: true })
+      if (hasLoadedOnceRef.current) setIsRefreshing(true)
+    },
+    [setValue],
+  )
 
-  const handleFromDateChange = useCallback((nextFrom) => {
-    setFromDate(nextFrom)
-    setCurrentPage(1)
-    if (hasLoadedOnceRef.current) setIsRefreshing(true)
-  }, [])
+  const handleFromDateChange = useCallback(
+    (nextFrom) => {
+      setValue('fromDate', nextFrom || '', { resetPage: true })
+      if (hasLoadedOnceRef.current) setIsRefreshing(true)
+    },
+    [setValue],
+  )
 
-  const handleToDateChange = useCallback((nextTo) => {
-    setToDate(nextTo)
-    setCurrentPage(1)
-    if (hasLoadedOnceRef.current) setIsRefreshing(true)
-  }, [])
+  const handleToDateChange = useCallback(
+    (nextTo) => {
+      setValue('toDate', nextTo || '', { resetPage: true })
+      if (hasLoadedOnceRef.current) setIsRefreshing(true)
+    },
+    [setValue],
+  )
 
-  const handleSortChange = useCallback((nextSortBy, nextSortOrder) => {
-    setSortBy(nextSortBy)
-    setSortOrder(nextSortOrder)
-    setCurrentPage(1)
-    if (hasLoadedOnceRef.current) setIsRefreshing(true)
-  }, [])
+  const handleSortChange = useCallback(
+    (nextSortBy, nextSortOrder) => {
+      setValues(
+        { sortBy: nextSortBy, sortOrder: nextSortOrder },
+        { resetPage: true },
+      )
+      if (hasLoadedOnceRef.current) setIsRefreshing(true)
+    },
+    [setValues],
+  )
 
-  const handlePageChange = useCallback((nextPage) => {
-    setCurrentPage(nextPage)
-    if (hasLoadedOnceRef.current) setIsRefreshing(true)
-  }, [])
+  const handlePageChange = useCallback(
+    (nextPage) => {
+      setCurrentPage(nextPage)
+      if (hasLoadedOnceRef.current) setIsRefreshing(true)
+    },
+    [setCurrentPage],
+  )
+
+  const handlePageSizeChange = useCallback(
+    (nextLimit) => {
+      const newPage = calculatePreservedPage(
+        pagination.page,
+        pagination.limit || pageSize,
+        nextLimit,
+        pagination.totalItems,
+      )
+      setValues({ page: newPage, limit: nextLimit })
+      if (hasLoadedOnceRef.current) setIsRefreshing(true)
+    },
+    [pagination.limit, pagination.page, pagination.totalItems, pageSize, setValues],
+  )
 
   const handleResetFilters = useCallback(() => {
     setSearchInput('')
     setAppliedSearch('')
-    setStatusFilter('all')
-    setFromDate('')
-    setToDate('')
-    setSortBy('createdAt')
-    setSortOrder('desc')
-    setCurrentPage(1)
+    resetAll()
     if (hasLoadedOnceRef.current) setIsRefreshing(true)
-  }, [])
+  }, [resetAll])
 
   const handleOpenProjectReport = useCallback(
     (projectCode) => {
@@ -426,7 +459,7 @@ export function ReportsPage({ currentUser, onNavigate }) {
         onFromDateChange={handleFromDateChange}
         onToDateChange={handleToDateChange}
         onSortChange={handleSortChange}
-        onApplySearch={() => setAppliedSearch(searchInput.trim())}
+        onApplySearch={handleApplySearch}
         onResetFilters={handleResetFilters}
       />
 
@@ -491,12 +524,16 @@ export function ReportsPage({ currentUser, onNavigate }) {
               period={period}
               onOpenProjectReport={handleOpenProjectReport}
             />
-            <ReportsPagination
+            <Pagination
               page={pagination.page}
               totalPages={pagination.totalPages}
               totalItems={pagination.totalItems}
-              limit={pagination.limit}
+              pageSize={pagination.limit || pageSize}
+              pageSizeOptions={[10, 20, 50]}
               onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              itemName="project report"
+              itemsName="project reports"
             />
           </>
         )}

@@ -94,8 +94,8 @@ export function restoreScrollPosition(pathWithQuery) {
 }
 
 /**
- * Navigates back in browser history if user arrived from within the app,
- * otherwise safely falls back to the specified fallback path.
+ * Navigates back in browser history if user arrived from within the app matching the fallback section,
+ * otherwise safely falls back to the stored section origin or specified fallback path.
  */
 export function navigateBackOrFallback(onNavigate, fallbackPath = '/') {
   if (typeof window === 'undefined') {
@@ -103,41 +103,58 @@ export function navigateBackOrFallback(onNavigate, fallbackPath = '/') {
     return
   }
 
-  // Check state.from or sessionStorage last origin
   const fromState = window.history.state?.from
+  const section = fallbackPath.replace(/^\//, '').split(/[/?#]/)[0]
+  const fallbackBasePath = fallbackPath.split(/[?#]/)[0]
   let storedOrigin = null
   try {
-    const section = fallbackPath.replace(/^\//, '').split('/')[0]
     storedOrigin = sessionStorage.getItem(`sts:origin:${section}`)
   } catch {}
 
+  const isFromMatching =
+    typeof fromState === 'string' &&
+    (fromState.startsWith(fallbackBasePath) ||
+      (section && fromState.startsWith(`/${section}`)))
+
   const canGoBack =
     window.history.length > 1 &&
-    (fromState || storedOrigin || (document.referrer && document.referrer.includes(window.location.host)))
+    Boolean(isFromMatching || (window.history.state && window.history.state.from))
 
-  if (canGoBack) {
+  if (canGoBack && isFromMatching) {
     window.history.back()
-  } else if (fromState) {
+    return
+  }
+
+  if (isFromMatching) {
     if (typeof onNavigate === 'function') {
       onNavigate(fromState)
     } else {
       window.history.pushState({}, '', fromState)
       window.dispatchEvent(new Event(ROUTE_CHANGE_EVENT))
     }
-  } else if (storedOrigin) {
+    return
+  }
+
+  const isOriginMatching =
+    typeof storedOrigin === 'string' &&
+    (storedOrigin.startsWith(fallbackBasePath) ||
+      (section && storedOrigin.startsWith(`/${section}`)))
+
+  if (isOriginMatching) {
     if (typeof onNavigate === 'function') {
       onNavigate(storedOrigin)
     } else {
       window.history.pushState({}, '', storedOrigin)
       window.dispatchEvent(new Event(ROUTE_CHANGE_EVENT))
     }
+    return
+  }
+
+  if (typeof onNavigate === 'function') {
+    onNavigate(fallbackPath)
   } else {
-    if (typeof onNavigate === 'function') {
-      onNavigate(fallbackPath)
-    } else {
-      window.history.pushState({}, '', fallbackPath)
-      window.dispatchEvent(new Event(ROUTE_CHANGE_EVENT))
-    }
+    window.history.pushState({}, '', fallbackPath)
+    window.dispatchEvent(new Event(ROUTE_CHANGE_EVENT))
   }
 }
 
@@ -182,22 +199,32 @@ export function useListingState(schema, { routeKey = '' } = {}) {
     }
   }, [])
 
-  // Listen to popstate (browser back/forward button clicks)
+  // Listen to popstate and route changes
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const handlePopState = () => {
+    const handleRouteChange = () => {
       const parsed = parseUrlParams(schemaRef.current, window.location.search)
-      setState(parsed)
-      // Attempt scroll restoration on popstate
+      setState((prev) => {
+        let changed = false
+        for (const [key, val] of Object.entries(parsed)) {
+          if (prev[key] !== val) {
+            changed = true
+            break
+          }
+        }
+        return changed ? parsed : prev
+      })
       setTimeout(() => {
         restoreScrollPosition(`${window.location.pathname}${window.location.search}`)
       }, 50)
     }
 
-    window.addEventListener('popstate', handlePopState)
+    window.addEventListener('popstate', handleRouteChange)
+    window.addEventListener(ROUTE_CHANGE_EVENT, handleRouteChange)
     return () => {
-      window.removeEventListener('popstate', handlePopState)
+      window.removeEventListener('popstate', handleRouteChange)
+      window.removeEventListener(ROUTE_CHANGE_EVENT, handleRouteChange)
     }
   }, [])
 
@@ -205,7 +232,8 @@ export function useListingState(schema, { routeKey = '' } = {}) {
   const setValue = useCallback(
     (key, val, { resetPage = false, push = false } = {}) => {
       setState((prev) => {
-        const next = { ...prev, [key]: val }
+        const resolvedVal = typeof val === 'function' ? val(prev[key]) : val
+        const next = { ...prev, [key]: resolvedVal }
         if (resetPage && 'page' in schemaRef.current) {
           next.page = schemaRef.current.page.default ?? 1
         }

@@ -24,7 +24,6 @@ export const PERMISSION_KEYS = [
   'activity.viewOwn',
   'activity.viewAll',
   'permissions.manage',
-  'settings.manage',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -43,7 +42,6 @@ export const ADMIN_RESERVED_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
   'users.manage',
   'users.approve',
   'permissions.manage',
-  'settings.manage',
 ]);
 
 export const DEFAULT_DATA_ENTRY_PERMISSIONS: readonly PermissionKey[] =
@@ -336,22 +334,15 @@ export const PERMISSION_MATRIX_MODULES: readonly PermissionModuleGroupMeta[] =
     },
     {
       moduleId: 'administration',
-      moduleLabel: 'Permissions & System Settings',
+      moduleLabel: 'Role Access & Permissions',
       description:
-        'Role permission configuration and global application settings.',
+        'Role permission configuration and individual operator permissions.',
       navPath: '/permissions',
       permissions: [
         {
           key: 'permissions.manage',
           label: 'Manage Role & Permissions',
           description: 'Configure role baselines and per-operator overrides.',
-          category: 'special',
-          adminOnly: true,
-        },
-        {
-          key: 'settings.manage',
-          label: 'Manage Application Settings',
-          description: 'Update workspace preferences and alert thresholds.',
           category: 'special',
           adminOnly: true,
         },

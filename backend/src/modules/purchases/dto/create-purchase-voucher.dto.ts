@@ -468,9 +468,7 @@ export function validateCreatePurchaseVoucherDto(
   }
 
   const purchaseDate = parsePurchaseDateInput(raw.purchaseDate);
-  if (!purchaseDate) {
-    errors.purchaseDate = 'A valid purchase date is required.';
-  }
+
 
   let supplierName = '';
   if (typeof raw.supplierName !== 'string' || !raw.supplierName.trim()) {
