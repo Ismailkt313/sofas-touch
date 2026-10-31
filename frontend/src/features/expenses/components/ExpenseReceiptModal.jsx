@@ -54,7 +54,9 @@ export function ExpenseReceiptModal({
     fetchAuthorizedReceiptBlobUrl(remoteViewUrl)
       .then((res) => {
         if (cancelled) {
-          URL.revokeObjectURL(res.blobUrl)
+          if (res.blobUrl && res.blobUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(res.blobUrl)
+          }
           return
         }
         generatedBlobUrl = res.blobUrl
@@ -77,7 +79,7 @@ export function ExpenseReceiptModal({
 
     return () => {
       cancelled = true
-      if (generatedBlobUrl) {
+      if (generatedBlobUrl && generatedBlobUrl.startsWith('blob:')) {
         URL.revokeObjectURL(generatedBlobUrl)
       }
     }

@@ -42,7 +42,7 @@ export function BillAttachmentCard({
 
     return () => {
       cancelled = true
-      if (generatedBlobUrl) {
+      if (generatedBlobUrl && generatedBlobUrl.startsWith('blob:')) {
         URL.revokeObjectURL(generatedBlobUrl)
       }
     }

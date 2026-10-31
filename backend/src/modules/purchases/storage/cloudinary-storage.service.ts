@@ -56,35 +56,65 @@ export class CloudinaryBillAttachmentStorageService
   async readBillBuffer(
     storageKey: string,
   ): Promise<{ buffer: Buffer; sizeBytes: number }> {
-    return new Promise((resolve, reject) => {
-      const secureUrl = cloudinaryService.getSecureUrl(storageKey);
-      const client = secureUrl.startsWith('https') ? https : http;
+    const initialUrl =
+      storageKey.startsWith('http://') || storageKey.startsWith('https://')
+        ? storageKey
+        : cloudinaryService.getSecureUrl(storageKey);
 
-      client
-        .get(secureUrl, (res) => {
-          if (res.statusCode && res.statusCode >= 400) {
-            reject(
-              new Error(
-                `Failed to fetch file from Cloudinary (HTTP ${res.statusCode})`,
-              ),
-            );
-            return;
-          }
+    const fetchWithRedirects = (
+      currentUrl: string,
+      depth = 0,
+    ): Promise<{ buffer: Buffer; sizeBytes: number }> => {
+      if (depth > 5) {
+        return Promise.reject(
+          new Error('Too many redirects while reading file from Cloudinary'),
+        );
+      }
 
-          const chunks: Buffer[] = [];
-          res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-          res.on('end', () => {
-            const buffer = Buffer.concat(chunks);
-            resolve({
-              buffer,
-              sizeBytes: buffer.length,
+      return new Promise((resolve, reject) => {
+        const client = currentUrl.startsWith('https') ? https : http;
+
+        client
+          .get(currentUrl, (res) => {
+            if (
+              res.statusCode &&
+              [301, 302, 303, 307, 308].includes(res.statusCode) &&
+              res.headers.location
+            ) {
+              const redirectUrl = new URL(
+                res.headers.location,
+                currentUrl,
+              ).toString();
+              resolve(fetchWithRedirects(redirectUrl, depth + 1));
+              return;
+            }
+
+            if (res.statusCode && res.statusCode >= 400) {
+              reject(
+                new Error(
+                  `Failed to fetch file from Cloudinary (HTTP ${res.statusCode})`,
+                ),
+              );
+              return;
+            }
+
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+            res.on('end', () => {
+              const buffer = Buffer.concat(chunks);
+              resolve({
+                buffer,
+                sizeBytes: buffer.length,
+              });
             });
+          })
+          .on('error', (err) => {
+            reject(err);
           });
-        })
-        .on('error', (err) => {
-          reject(err);
-        });
-    });
+      });
+    };
+
+    return fetchWithRedirects(initialUrl);
   }
 
   async deleteBillFile(storageKey: string): Promise<void> {

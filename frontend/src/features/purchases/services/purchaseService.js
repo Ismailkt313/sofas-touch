@@ -495,6 +495,12 @@ export async function fetchAuthorizedAttachmentBlobUrl(viewUrl) {
   if (!viewUrl) {
     throw new Error('Attachment URL is missing.')
   }
+
+  // Direct Cloudinary or external HTTPS URLs can be used directly without CORS/auth token header issues
+  if (/^https?:\/\//i.test(viewUrl)) {
+    return viewUrl
+  }
+
   try {
     const response = await api.get(viewUrl, {
       responseType: 'blob',
@@ -517,6 +523,38 @@ export async function downloadAuthorizedAttachment(
   if (!downloadUrl) {
     throw new Error('Attachment download URL is missing.')
   }
+
+  if (/^https?:\/\//i.test(downloadUrl)) {
+    try {
+      const response = await fetch(downloadUrl, { mode: 'cors' })
+      if (response.ok) {
+        const blob = await response.blob()
+        const blobUrl = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = blobUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.setTimeout(() => {
+          URL.revokeObjectURL(blobUrl)
+        }, 5000)
+        return
+      }
+    } catch {
+      // Fallback if fetch is restricted
+    }
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.target = '_blank'
+    link.rel = 'noopener noreferrer'
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    return
+  }
+
   try {
     const response = await api.get(downloadUrl, {
       responseType: 'blob',

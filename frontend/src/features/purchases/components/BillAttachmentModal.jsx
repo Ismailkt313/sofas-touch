@@ -74,7 +74,7 @@ export function BillAttachmentModal({
       window.cancelAnimationFrame(focusTimer)
       document.body.style.overflow = prevOverflow
       document.removeEventListener('keydown', handleKeyDown)
-      if (activeBlobUrl) {
+      if (activeBlobUrl && activeBlobUrl.startsWith('blob:')) {
         URL.revokeObjectURL(activeBlobUrl)
       }
     }

@@ -19,7 +19,7 @@ import permissionRoutes from './routes/permissionRoutes';
 const app = express();
 const PORT = env.PORT;
 
-app.use(
+app.use( 
   helmet({
     frameguard: false,
     contentSecurityPolicy: false,

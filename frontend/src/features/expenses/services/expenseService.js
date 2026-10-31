@@ -268,6 +268,18 @@ export async function cancelExpense(identifier, reason = '') {
 }
 
 export async function fetchAuthorizedReceiptBlobUrl(viewUrl) {
+  if (!viewUrl) {
+    throw new Error('Receipt view URL is missing.')
+  }
+
+  // Direct Cloudinary or external HTTPS URLs can be used directly without CORS/auth token header issues
+  if (/^https?:\/\//i.test(viewUrl)) {
+    return {
+      blobUrl: viewUrl,
+      mimeType: '',
+    }
+  }
+
   try {
     const response = await api.get(viewUrl, {
       responseType: 'blob',
@@ -288,6 +300,39 @@ export async function fetchAuthorizedReceiptBlobUrl(viewUrl) {
 }
 
 export async function downloadAuthorizedReceipt(downloadUrl, fileName) {
+  if (!downloadUrl) {
+    throw new Error('Receipt download URL is missing.')
+  }
+
+  if (/^https?:\/\//i.test(downloadUrl)) {
+    try {
+      const response = await fetch(downloadUrl, { mode: 'cors' })
+      if (response.ok) {
+        const blob = await response.blob()
+        const blobUrl = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = blobUrl
+        anchor.download = fileName || 'expense-receipt'
+        document.body.appendChild(anchor)
+        anchor.click()
+        document.body.removeChild(anchor)
+        window.setTimeout(() => URL.revokeObjectURL(blobUrl), 5000)
+        return
+      }
+    } catch {
+      // Fallback if fetch is restricted
+    }
+    const anchor = document.createElement('a')
+    anchor.href = downloadUrl
+    anchor.target = '_blank'
+    anchor.rel = 'noopener noreferrer'
+    anchor.download = fileName || 'expense-receipt'
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    return
+  }
+
   try {
     const response = await api.get(downloadUrl, {
       responseType: 'blob',
